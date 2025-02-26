@@ -4,6 +4,10 @@ using System.Reactive.Subjects;
 using System.Threading;
 using System.Threading.Tasks;
 
+// This implementation uses a combination of FileSystemWatcher and asynchronous file reading to monitor a file for changes,
+// and it leverages Reactive Extensions (Rx.NET) to expose an observable stream of new log lines. You can later subscribe
+// to this stream (e.g., in your ViewModel) to update the UI in real time.
+
 namespace Logonaut.LogTailing
 {
     /// <summary>
