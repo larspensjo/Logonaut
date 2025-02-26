@@ -6,7 +6,7 @@
             "type": "coreclr",
             "request": "launch",
             "preLaunchTask": "build",
-            "program": "${workspaceFolder}/src/Logonaut.UI/bin/Debug/net6.0-windows/Logonaut.UI.exe",
+            "program": "${workspaceFolder}/src/Logonaut.UI/bin/Debug/net8.0-windows/Logonaut.UI.exe",
             "args": [],
             "cwd": "${workspaceFolder}",
             "stopAtEntry": false,
