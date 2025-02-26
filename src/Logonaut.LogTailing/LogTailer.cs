@@ -17,7 +17,7 @@ namespace Logonaut.LogTailing
     {
         private readonly string _filePath;
         private readonly Subject<string> _logLinesSubject = new Subject<string>();
-        private FileSystemWatcher _watcher;
+        private FileSystemWatcher? _watcher;
         private long _lastPosition;
         private readonly CancellationTokenSource _cts = new CancellationTokenSource();
 
@@ -51,6 +51,9 @@ namespace Logonaut.LogTailing
             // Configure the file system watcher.
             var directory = Path.GetDirectoryName(_filePath);
             var fileName = Path.GetFileName(_filePath);
+            if (directory == null)
+                throw new InvalidOperationException("Directory path cannot be null.");
+
             _watcher = new FileSystemWatcher(directory, fileName)
             {
                 NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size
@@ -85,7 +88,7 @@ namespace Logonaut.LogTailing
 
                     using (var reader = new StreamReader(stream))
                     {
-                        string line;
+                        string? line;
                         // Read lines until the end of the file.
                         while (!reader.EndOfStream && !token.IsCancellationRequested)
                         {
