@@ -25,7 +25,6 @@ I have the following requirements:
 * Many log files have a prefix in the format of a date or time. It shall be possible to detect this prefix and visibly mark it, making it easy for the user to see.
 * The application shall optionally support both a dark theme.
 * The application display shall be in a nice and pleasingly contemporary way. Make this flexible, to enable future style changes without having to manually edit every layout detail.
-
-Suggest an architecture that supports this application, as well as in general what technique to use and what libraries can help.
-
-Suggest a name for this application. Not just a boring name with "log" in it, but something more fun.
+* The application shall use a configuration that is loaded at startup, and saved at shutdown. The configuration shall be used to remember user settings.
+* It shall be possible to also save one or more filter settings with the configuration. Each such filter tree shall have a name, making it easy for the user to browse.
+* The application shall have a menu where I can select what log file to monitor.
