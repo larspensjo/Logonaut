@@ -4,7 +4,7 @@ namespace Logonaut.UI.Services
 {
     public class FileDialogService : IFileDialogService
     {
-        public string OpenFile(string title, string filter)
+        public string? OpenFile(string title, string filter)
         {
             OpenFileDialog dialog = new OpenFileDialog
             {
