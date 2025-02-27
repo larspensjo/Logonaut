@@ -6,10 +6,10 @@ namespace Logonaut.LogTailing
 {
     public class LogTailerManager : IDisposable
     {
-        private static LogTailerManager _instance;
+        private static LogTailerManager? _instance = null;
         public static LogTailerManager Instance => _instance ??= new LogTailerManager();
 
-        private LogTailer _currentTailer;
+        private LogTailer? _currentTailer;
         private readonly Subject<string> _logLinesSubject = new Subject<string>();
 
         public IObservable<string> LogLines => _logLinesSubject.AsObservable();

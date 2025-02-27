@@ -2,6 +2,16 @@
     "version": "2.0.0",
     "tasks": [
         {
+            "label": "Clean Build",
+            "command": "dotnet",
+            "args": ["clean", "${workspaceFolder}/Logonaut.sln"],
+            "problemMatcher": [],
+            "group": {
+              "kind": "build",
+              "isDefault": false
+            }
+        },
+        {
             "label": "build",
             "command": "dotnet",
             "type": "process",

@@ -9,14 +9,14 @@ namespace Logonaut.UI.ViewModels
 {
     public class MainViewModel : ViewModelBase
     {
-        private string _logText;
+        private string _logText = "";
         public string LogText
         {
             get => _logText;
             set => Set(ref _logText, value);
         }
 
-        private string _searchText;
+        private string _searchText = "";
         public string SearchText
         {
             get => _searchText;
@@ -29,8 +29,8 @@ namespace Logonaut.UI.ViewModels
             }
         }
 
-        private string _currentLogFilePath;
-        public string CurrentLogFilePath
+        private string? _currentLogFilePath;
+        public string? CurrentLogFilePath
         {
             get => _currentLogFilePath;
             set => Set(ref _currentLogFilePath, value);
@@ -47,7 +47,7 @@ namespace Logonaut.UI.ViewModels
 
         private readonly IFileDialogService _fileDialogService;
 
-        public MainViewModel(IFileDialogService fileDialogService = null)
+        public MainViewModel(IFileDialogService? fileDialogService = null)
         {
             FilterProfiles = new ObservableCollection<string>();
             LogText = "Welcome to Logonaut!\n";
