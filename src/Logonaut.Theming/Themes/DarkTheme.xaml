@@ -34,4 +34,26 @@
         <Setter Property="Background" Value="{StaticResource ControlBackgroundBrush}"/>
         <Setter Property="Foreground" Value="{StaticResource TextForegroundBrush}"/>
     </Style>
+
+    <Style TargetType="TextBlock">
+        <Setter Property="Background" Value="{StaticResource ControlBackgroundBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource TextForegroundBrush}"/>
+    </Style>
+
+    <Style TargetType="{x:Type ScrollBar}">
+        <Setter Property="Background" Value="{StaticResource ControlBackgroundBrush}" />
+        <Setter Property="Foreground" Value="{StaticResource TextForegroundBrush}" />
+    </Style>
+
+    <Style TargetType="{x:Type ScrollViewer}">
+        <Setter Property="Background" Value="{StaticResource WindowBackgroundBrush}" />
+    </Style>
+
+    <Style TargetType="StackPanel">
+        <Setter Property="Background" Value="{StaticResource WindowBackgroundBrush}" />
+    </Style>
+
+    <Style TargetType="Grid">
+        <Setter Property="Background" Value="{StaticResource WindowBackgroundBrush}" />
+    </Style>
 </ResourceDictionary>
