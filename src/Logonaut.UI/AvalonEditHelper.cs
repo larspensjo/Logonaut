@@ -72,7 +72,7 @@ namespace Logonaut.UI.Helpers
             }
         }
 
-        private static void Editor_TextChanged(object sender, EventArgs e)
+        private static void Editor_TextChanged(object? sender, EventArgs e)
         {
             if (sender is TextEditor editor)
             {
