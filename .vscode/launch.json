@@ -10,6 +10,7 @@
             "args": [],
             "cwd": "${workspaceFolder}",
             "stopAtEntry": false,
+            "logging": { "moduleLoad": false },
             "console": "internalConsole"
         }
     ]
