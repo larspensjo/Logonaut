@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Logonaut.LogTailing\Logonaut.LogTailing.csproj" />
+    <ProjectReference Include="..\Logonaut.Theming\Logonaut.Theming.csproj" />
   </ItemGroup>
 
 </Project>

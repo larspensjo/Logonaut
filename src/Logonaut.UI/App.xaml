@@ -4,6 +4,6 @@
              xmlns:local="clr-namespace:Logonaut.UI"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
-         
+        <!-- Default theme will be loaded by ThemeManager at startup -->
     </Application.Resources>
 </Application>

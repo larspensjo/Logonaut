@@ -1,5 +1,6 @@
-﻿using System.Windows;
-using Logonaut.UI.ViewModels;
+﻿using Logonaut.Theming;
+using System;
+using System.Windows;
 
 namespace Logonaut.UI
 {
@@ -8,8 +9,18 @@ namespace Logonaut.UI
         public MainWindow()
         {
             InitializeComponent();
-            // Ideally, use dependency injection to resolve the view model.
-            DataContext = new MainViewModel();
+        }
+
+        private void OnSwitchToDarkTheme(object sender, RoutedEventArgs e)
+        {
+            var themeManager = new ThemeManager();
+            themeManager.ApplyTheme(ThemeType.Dark);
+        }
+
+        private void OnSwitchToLightTheme(object sender, RoutedEventArgs e)
+        {
+            var themeManager = new ThemeManager();
+            themeManager.ApplyTheme(ThemeType.Light);
         }
     }
 }

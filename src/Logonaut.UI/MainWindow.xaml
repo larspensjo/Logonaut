@@ -4,11 +4,25 @@
         xmlns:avalonEdit="http://icsharpcode.net/sharpdevelop/avalonedit"
         xmlns:helpers="clr-namespace:Logonaut.UI.Helpers"
         Title="Logonaut" Height="600" Width="800">
+    
+    <!-- Merge the theme at the application level -->
+    <!-- Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/Themes/DarkTheme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources -->
+
     <DockPanel>
         <!-- Menu at the top -->
         <Menu DockPanel.Dock="Top">
             <MenuItem Header="_File">
                 <MenuItem Header="Open Log File" Command="{Binding OpenLogFileCommand}" />
+            </MenuItem>
+            <MenuItem Header="_Theme">
+                <MenuItem Header="Dark Mode" Click="OnSwitchToDarkTheme"/>
+                <MenuItem Header="Light Mode" Click="OnSwitchToLightTheme"/>
             </MenuItem>
         </Menu>
         <!-- Main content -->
@@ -35,7 +49,9 @@
                                        ShowLineNumbers="True"
                                        helpers:AvalonEditHelper.BindableText="{Binding LogText, Mode=OneWay}"
                                        IsReadOnly="True" 
-                                       FontFamily="Consolas"/>
+                                       FontFamily="Consolas"
+                                       Background="{DynamicResource WindowBackgroundBrush}" 
+                                       Foreground="{DynamicResource TextForegroundBrush}"/>
                 <!-- Search Panel -->
                 <StackPanel Orientation="Horizontal" Grid.Row="1" HorizontalAlignment="Center" Margin="5">
                     <Button Content="Previous" Command="{Binding PreviousSearchCommand}" Margin="5"/>
