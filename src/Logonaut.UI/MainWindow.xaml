@@ -4,16 +4,6 @@
         xmlns:avalonEdit="http://icsharpcode.net/sharpdevelop/avalonedit"
         xmlns:helpers="clr-namespace:Logonaut.UI.Helpers"
         Title="Logonaut" Height="600" Width="800">
-    
-    <!-- Merge the theme at the application level -->
-    <!-- Window.Resources>
-        <ResourceDictionary>
-            <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="pack://application:,,,/Themes/DarkTheme.xaml"/>
-            </ResourceDictionary.MergedDictionaries>
-        </ResourceDictionary>
-    </Window.Resources -->
-
     <DockPanel>
         <!-- Menu at the top -->
         <Menu DockPanel.Dock="Top">
@@ -21,8 +11,8 @@
                 <MenuItem Header="Open Log File" Command="{Binding OpenLogFileCommand}" />
             </MenuItem>
             <MenuItem Header="_Theme">
-                <MenuItem Header="Dark Mode" Click="OnSwitchToDarkTheme"/>
-                <MenuItem Header="Light Mode" Click="OnSwitchToLightTheme"/>
+                <MenuItem Header="Dark Mode" Command="{Binding Theme.SwitchToDarkCommand}" />
+                <MenuItem Header="Light Mode" Command="{Binding Theme.SwitchToLightCommand}" />
             </MenuItem>
         </Menu>
         <!-- Main content -->

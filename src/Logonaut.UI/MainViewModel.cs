@@ -1,78 +1,50 @@
-using System;
 using System.Collections.ObjectModel;
-using GalaSoft.MvvmLight;
-using GalaSoft.MvvmLight.Command;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Logonaut.UI.Services;
 using Logonaut.LogTailing;
 
 namespace Logonaut.UI.ViewModels
 {
-    public class MainViewModel : ViewModelBase
+    public partial class MainViewModel : ObservableObject
     {
-        private string _logText = "";
-        public string LogText
-        {
-            get => _logText;
-            set => Set(ref _logText, value);
-        }
+        // Add a property to hold the ThemeViewModel.
+        public ThemeViewModel Theme { get; } = new ThemeViewModel();
+ 
+        // Automatically generates public LogText { get; set; } with INotifyPropertyChanged support.
+        [ObservableProperty]
+        private string logText = "Welcome to Logonaut!\n";
 
-        private string _searchText = "";
-        public string SearchText
-        {
-            get => _searchText;
-            set 
-            { 
-                Set(ref _searchText, value);
-                // When search text changes, update command states.
-                PreviousSearchCommand.RaiseCanExecuteChanged();
-                NextSearchCommand.RaiseCanExecuteChanged();
-            }
-        }
+        [ObservableProperty]
+        private string searchText = "";
 
-        private string? _currentLogFilePath;
-        public string? CurrentLogFilePath
-        {
-            get => _currentLogFilePath;
-            set => Set(ref _currentLogFilePath, value);
-        }
+        [ObservableProperty]
+        private string? currentLogFilePath;
 
-        // Collection of filter profiles (saved filter trees, etc.)
-        public ObservableCollection<string> FilterProfiles { get; set; }
-
-        public RelayCommand AddFilterCommand { get; private set; }
-        public RelayCommand RemoveFilterCommand { get; private set; }
-        public RelayCommand PreviousSearchCommand { get; private set; }
-        public RelayCommand NextSearchCommand { get; private set; }
-        public RelayCommand OpenLogFileCommand { get; private set; }
+        public ObservableCollection<string> FilterProfiles { get; } = new ObservableCollection<string>();
 
         private readonly IFileDialogService _fileDialogService;
 
         public MainViewModel(IFileDialogService? fileDialogService = null)
         {
-            FilterProfiles = new ObservableCollection<string>();
-            LogText = "Welcome to Logonaut!\n";
             _fileDialogService = fileDialogService ?? new FileDialogService();
-
-            AddFilterCommand = new RelayCommand(AddFilter);
-            RemoveFilterCommand = new RelayCommand(RemoveFilter, CanRemoveFilter);
-            PreviousSearchCommand = new RelayCommand(PreviousSearch, CanSearch);
-            NextSearchCommand = new RelayCommand(NextSearch, CanSearch);
-            OpenLogFileCommand = new RelayCommand(OpenLogFile);
 
             // Subscribe to log lines from the tailer manager.
             LogTailerManager.Instance.LogLines.Subscribe(line =>
             {
-                // Append new log lines (consider marshaling to the UI thread if necessary)
+                // Consider marshaling to the UI thread if necessary.
                 LogText += line + "\n";
             });
         }
 
+        // Generates AddFilterCommand automatically.
+        [RelayCommand]
         private void AddFilter()
         {
-            // In a real implementation, this might open a dialog or add a new filter object.
             FilterProfiles.Add("Filter " + (FilterProfiles.Count + 1));
         }
 
+        [RelayCommand(CanExecute = nameof(CanRemoveFilter))]
         private void RemoveFilter()
         {
             if (FilterProfiles.Count > 0)
@@ -83,13 +55,13 @@ namespace Logonaut.UI.ViewModels
 
         private bool CanRemoveFilter() => FilterProfiles.Count > 0;
 
+        [RelayCommand(CanExecute = nameof(CanSearch))]
         private void PreviousSearch()
         {
-            // Implement logic to navigate to the previous search match.
-            // For now, we just append a message.
             LogText += "Previous search executed.\n";
         }
 
+        [RelayCommand(CanExecute = nameof(CanSearch))]
         private void NextSearch()
         {
             LogText += "Next search executed.\n";
@@ -97,14 +69,13 @@ namespace Logonaut.UI.ViewModels
 
         private bool CanSearch() => !string.IsNullOrWhiteSpace(SearchText);
 
+        [RelayCommand]
         private void OpenLogFile()
         {
-            // Use the file dialog service to let the user select a log file.
             var selectedFile = _fileDialogService.OpenFile("Select a log file", "Log Files|*.log;*.txt|All Files|*.*");
             if (!string.IsNullOrEmpty(selectedFile))
             {
                 CurrentLogFilePath = selectedFile;
-                // Reinitialize the log tailer with the selected file.
                 LogTailerManager.Instance.ChangeFile(selectedFile);
                 LogText += $"Now monitoring: {selectedFile}\n";
             }
