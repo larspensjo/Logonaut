@@ -19,7 +19,7 @@ namespace Logonaut.UI
             this.SourceInitialized += MainWindow_SourceInitialized;
         }
 
-        private void MainWindow_SourceInitialized(object sender, EventArgs e)
+        private void MainWindow_SourceInitialized(object? sender, EventArgs e)
         {
             var hwnd = new WindowInteropHelper(this).Handle;
             int useImmersiveDarkMode = 1; // 1 to enable dark mode
