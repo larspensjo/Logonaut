@@ -15,8 +15,6 @@ namespace Logonaut.UI
         {
             InitializeComponent();
             this.SourceInitialized += MainWindow_SourceInitialized;
-
-            // Assume MainViewModel is set as DataContext, e.g.:
             DataContext = new ViewModels.MainViewModel();
         }
 
