@@ -4,44 +4,72 @@
         xmlns:avalonEdit="http://icsharpcode.net/sharpdevelop/avalonedit"
         xmlns:helpers="clr-namespace:Logonaut.UI.Helpers"
         Title="Logonaut" Height="600" Width="800">
-    <DockPanel>
+    <!-- Main Layout: A Grid with three rows: Menu, Stats Panel, and Main Content -->
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>  <!-- Menu row -->
+            <RowDefinition Height="Auto"/>  <!-- Stats bar row -->
+            <RowDefinition Height="*"/>     <!-- Main content row -->
+        </Grid.RowDefinitions>
+
         <!-- Menu at the top -->
-        <Menu DockPanel.Dock="Top">
-            <MenuItem Header="_File">
-                <MenuItem Header="Open Log File" Command="{Binding OpenLogFileCommand}" />
+        <Menu Grid.Row="0" Style="{StaticResource CustomMenuStyle}">
+            <MenuItem Header="_File" Style="{StaticResource CustomTopLevelMenuItemStyle}">
+                <MenuItem Header="Open Log File" Command="{Binding OpenLogFileCommand}" 
+                          Style="{StaticResource CustomSubMenuItemStyle}"/>
             </MenuItem>
-            <MenuItem Header="_Theme">
-                <MenuItem Header="Dark Mode" Command="{Binding Theme.SwitchToDarkCommand}" />
-                <MenuItem Header="Light Mode" Command="{Binding Theme.SwitchToLightCommand}" />
+            <MenuItem Header="_Theme" Style="{StaticResource CustomTopLevelMenuItemStyle}">
+                <MenuItem Header="Dark Mode" Command="{Binding Theme.SwitchToDarkCommand}" 
+                          Style="{StaticResource CustomSubMenuItemStyle}"/>
+                <MenuItem Header="Light Mode" Command="{Binding Theme.SwitchToLightCommand}" 
+                          Style="{StaticResource CustomSubMenuItemStyle}"/>
             </MenuItem>
         </Menu>
+
+        <!-- Stats Bar in Grid.Row="1" -->
+        <Border Grid.Row="1" Style="{StaticResource CardPanelStyle}">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="Log Stats: " Margin="0,0,10,0" />
+                <TextBlock Text="Errors: 10" Margin="0,0,10,0" />
+                <TextBlock Text="Warnings: 5" Margin="0,0,10,0" />
+                <TextBlock Text="Info: 20" Margin="0,0,10,0" />
+            </StackPanel>
+        </Border>
+
         <!-- Main content -->
-        <Grid>
+        <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="250"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
+
             <!-- Left Panel: Filter Management -->
-            <StackPanel Grid.Column="0" Margin="5">
-                <TextBlock Text="Filters" FontWeight="Bold" Margin="0,0,0,5"/>
-                <TreeView ItemsSource="{Binding FilterProfiles}" Margin="0,0,0,5"/>
-                <Button Content="Add Filter" Command="{Binding AddFilterCommand}" Margin="0,0,0,5"/>
-                <Button Content="Remove Filter" Command="{Binding RemoveFilterCommand}" Margin="0,0,0,5"/>
-            </StackPanel>
+            <Border Style="{StaticResource CardPanelStyle}">
+                <StackPanel>
+                    <TextBlock Text="Filters" FontWeight="Bold" Margin="0,0,0,5"/>
+                    <TreeView ItemsSource="{Binding FilterProfiles}" Margin="0,0,0,5"/>
+                    <Button Content="Add Filter" Command="{Binding AddFilterCommand}" Margin="0,0,0,5"/>
+                    <Button Content="Remove Filter" Command="{Binding RemoveFilterCommand}" Margin="0,0,0,5"/>
+                </StackPanel>
+            </Border>
+
             <!-- Right Panel: Log Display and Search -->
             <Grid Grid.Column="1">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
-                <!-- Log Display using AvalonEdit with attached BindableText property -->
-                <avalonEdit:TextEditor Grid.Row="0" 
-                                       ShowLineNumbers="True"
-                                       helpers:AvalonEditHelper.BindableText="{Binding LogText, Mode=OneWay}"
-                                       IsReadOnly="True" 
-                                       FontFamily="Consolas"
-                                       Background="{DynamicResource WindowBackgroundBrush}" 
-                                       Foreground="{DynamicResource TextForegroundBrush}"/>
+
+                <!-- Log Display (AvalonEdit) -->
+                <Border Style="{StaticResource CardPanelStyle}">
+                    <avalonEdit:TextEditor Grid.Row="0"
+                                           ShowLineNumbers="True"
+                                           helpers:AvalonEditHelper.BindableText="{Binding LogText, Mode=OneWay}"
+                                           IsReadOnly="True"
+                                           FontFamily="Consolas"
+                                           Background="{DynamicResource WindowBackgroundBrush}"
+                                           Foreground="{DynamicResource TextForegroundBrush}"/>
+                </Border>
                 <!-- Search Panel -->
                 <StackPanel Orientation="Horizontal" Grid.Row="1" HorizontalAlignment="Center" Margin="5">
                     <Button Content="Previous" Command="{Binding PreviousSearchCommand}" Margin="5"/>
@@ -50,5 +78,5 @@
                 </StackPanel>
             </Grid>
         </Grid>
-    </DockPanel>
+    </Grid>
 </Window>
