@@ -1,6 +1,4 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
+using Newtonsoft.Json;
 
 namespace Logonaut.Filters
 {
@@ -37,12 +35,12 @@ namespace Logonaut.Filters
     /// </summary>
     public abstract class CompositeFilterBase : FilterBase
     {
+        // Use a private list, but expose it as a public read‑only property.
         protected readonly List<IFilter> Filters = new List<IFilter>();
 
-        /// <summary>
-        /// Adds a sub-filter to the composite.
-        /// </summary>
-        /// <param name="filter">The filter to add.</param>
+        [JsonProperty] // Ensure these get serialized.
+        public List<IFilter> SubFilters => Filters;
+
         public void Add(IFilter filter)
         {
             if (filter == null)
@@ -51,11 +49,6 @@ namespace Logonaut.Filters
             Filters.Add(filter);
         }
 
-        /// <summary>
-        /// Removes a sub-filter from the composite.
-        /// </summary>
-        /// <param name="filter">The filter to remove.</param>
-        /// <returns>True if the filter was removed; otherwise, false.</returns>
         public bool Remove(IFilter filter)
         {
             return Filters.Remove(filter);
