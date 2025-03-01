@@ -23,7 +23,7 @@ I have the following requirements:
 * The filters shall support negations. That is, lines not having a text.
 * The filters shall support AND+OR combinations. That is, you shall be able to say I want all lines with A and B, or I want all lines with A or B.
 * The filters shall be organized in a hierarchy, to make it possible to have conditions like (A or (B and not C)).
-* It shall be possible to set a line number context (default 0). For example, five lines before and after every match.
+* It shall be possible to set a line number context (default 0). For example, five lines before and after every match. There is only one such number, common for all matches.
 * The text used for filtering shall be marked visibly in the output. Maybe as a colored background or a changed font. Any common procedure is fine.
 * Every filter shall be possible to enable and disable. That way, you don't need to remove filters you temporarily don't need.
 * The filter output shall update in real-time. Maybe some proper poll period is good, no need to update too frequently.
