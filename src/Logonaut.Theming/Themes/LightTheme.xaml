@@ -25,40 +25,64 @@
         <Setter Property="Foreground" Value="{StaticResource TextForegroundBrush}"/>
     </Style>
 
+    <!-- Button Style with Rounded Corners & Accent Border -->
     <Style TargetType="Button">
-        <Setter Property="Background" Value="#DDDDDD" />
-        <Setter Property="Foreground" Value="#000000" />
+        <Setter Property="Background" Value="{StaticResource ButtonBackgroundBrush}" />
+        <Setter Property="Foreground" Value="{StaticResource ButtonForegroundBrush}" />
         <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Padding" Value="10,5" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
+                    <!-- Outer border with drop shadow -->
                     <Border x:Name="ButtonBorder"
                             CornerRadius="8"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}">
+                        
+                        <!-- Example: Simple gradient background to accentuate 3D effect -->
                         <Border.Background>
                             <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                                <GradientStop Offset="0.0" Color="#FFF0F0F0" />
+                                <GradientStop Offset="0.0" Color="#FF444444" />
                                 <GradientStop Offset="1.0" Color="{TemplateBinding Background}" />
                             </LinearGradientBrush>
                         </Border.Background>
-                        <Border.Effect>
-                            <DropShadowEffect Color="#000000"
-                                            BlurRadius="8"
-                                            ShadowDepth="3"
-                                            Opacity="0.15" />
-                        </Border.Effect>
-                        <ContentPresenter HorizontalAlignment="Center"
-                                        VerticalAlignment="Center"
-                                        RecognizesAccessKey="True" />
-                    </Border>
-                    <!-- Optional triggers for hover, press, etc. -->
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
-    </Style>
+
+	                    <!-- Subtle DropShadowEffect for a light 3D look -->
+	                    <Border.Effect>
+	                        <DropShadowEffect Color="#888888"
+	                                          BlurRadius="8"
+	                                          ShadowDepth="3"
+	                                          Opacity="0.2" />
+	                    </Border.Effect>
+
+	                    <ContentPresenter HorizontalAlignment="Center"
+	                                      VerticalAlignment="Center"
+	                                      RecognizesAccessKey="True" />
+	                </Border>
+	                <!-- Triggers for hover and pressed states -->
+	                <ControlTemplate.Triggers>
+	                    <Trigger Property="IsMouseOver" Value="True">
+	                        <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+	                        <Setter TargetName="ButtonBorder" Property="Cursor" Value="Hand" />
+	                    </Trigger>
+	                    <Trigger Property="IsPressed" Value="True">
+	                        <Setter TargetName="ButtonBorder" Property="Background" Value="#FFE0E0E0" />
+	                        <Setter TargetName="ButtonBorder" Property="Effect">
+	                            <Setter.Value>
+	                                <DropShadowEffect Color="#888888"
+	                                                  BlurRadius="10"
+	                                                  ShadowDepth="1"
+	                                                  Opacity="0.3" />
+	                            </Setter.Value>
+	                        </Setter>
+	                    </Trigger>
+	                </ControlTemplate.Triggers>
+	            </ControlTemplate>
+	        </Setter.Value>
+	    </Setter>
+	</Style>
 
     <!-- A style for group containers (e.g., Border) that should appear as a 3D “card.” -->
     <Style x:Key="CardPanelStyle" TargetType="Border">
