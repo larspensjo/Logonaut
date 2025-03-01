@@ -41,19 +41,23 @@ namespace Logonaut.Filters.Tests
             // Verify the root filter type.
             Assert.IsInstanceOfType(deserializedConfig.RootFilter, typeof(AndFilter), "Root filter should be an AndFilter.");
             var deserializedAndFilter = deserializedConfig.RootFilter as AndFilter;
+            Assert.IsNotNull(deserializedAndFilter, "Filter expected.");
             Assert.AreEqual(2, deserializedAndFilter.SubFilters.Count, "AndFilter should contain 2 sub-filters.");
 
             // Validate the first sub-filter is a SubstringFilter with the expected value.
             Assert.IsInstanceOfType(deserializedAndFilter.SubFilters[0], typeof(SubstringFilter), "First sub-filter should be a SubstringFilter.");
             var substringFilter = deserializedAndFilter.SubFilters[0] as SubstringFilter;
+            Assert.IsNotNull(substringFilter, "Filter expected.");
             Assert.AreEqual("A", substringFilter.Substring, "Substring value should be 'A'.");
 
             // Validate the second sub-filter is a NegationFilter wrapping a SubstringFilter with value "B".
             Assert.IsInstanceOfType(deserializedAndFilter.SubFilters[1], typeof(NegationFilter), "Second sub-filter should be a NegationFilter.");
             var negationFilter = deserializedAndFilter.SubFilters[1] as NegationFilter;
+            Assert.IsNotNull(negationFilter, "Filter expected.");
             Assert.IsNotNull(negationFilter.InnerFilter, "NegationFilter should contain an inner filter.");
             Assert.IsInstanceOfType(negationFilter.InnerFilter, typeof(SubstringFilter), "Inner filter should be a SubstringFilter.");
             var innerSubstring = negationFilter.InnerFilter as SubstringFilter;
+            Assert.IsNotNull(innerSubstring, "Filter expected.");
             Assert.AreEqual("B", innerSubstring.Substring, "Inner substring value should be 'B'.");
         }
     }

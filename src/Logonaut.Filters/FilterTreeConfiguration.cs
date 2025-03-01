@@ -13,7 +13,7 @@ namespace Logonaut.Filters
         /// <summary>
         /// A name for this filter configuration.
         /// </summary>
-        public string Name { get; set; }
+        public string? Name { get; set; }
 
         /// <summary>
         /// The number of context lines to display before and after each matching line.
@@ -23,6 +23,6 @@ namespace Logonaut.Filters
         /// <summary>
         /// The root filter of the filter tree.
         /// </summary>
-        public IFilter RootFilter { get; set; }
+        public IFilter? RootFilter { get; set; }
     }
 }
