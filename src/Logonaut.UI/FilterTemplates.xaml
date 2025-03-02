@@ -1,0 +1,38 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:filters="clr-namespace:Logonaut.Filters;assembly=Logonaut.Filters"
+                    xmlns:vm="clr-namespace:Logonaut.UI.ViewModels">
+
+    <!-- Default template for FilterViewModel -->
+    <DataTemplate DataType="{x:Type vm:FilterViewModel}">
+        <TextBlock Text="{Binding DisplayText}" />
+    </DataTemplate>
+
+    <!-- Optionally, override templates per filter type using DataTriggers or separate templates.
+         For example, for SubstringFilter: -->
+    <DataTemplate x:Key="SubstringFilterTemplate" DataType="{x:Type filters:SubstringFilter}">
+        <TextBlock Text="Substring: {Binding Substring}" Foreground="DarkBlue"/>
+    </DataTemplate>
+    
+    <!-- Similarly, for AndFilter: -->
+    <DataTemplate x:Key="AndFilterTemplate" DataType="{x:Type filters:AndFilter}">
+        <StackPanel Orientation="Horizontal">
+            <TextBlock Text="AND" FontWeight="Bold" Foreground="DarkGreen" />
+        </StackPanel>
+    </DataTemplate>
+    
+    <!-- And for OrFilter: -->
+    <DataTemplate x:Key="OrFilterTemplate" DataType="{x:Type filters:OrFilter}">
+        <StackPanel Orientation="Horizontal">
+            <TextBlock Text="OR" FontWeight="Bold" Foreground="DarkGreen" />
+        </StackPanel>
+    </DataTemplate>
+    
+    <!-- And for NegationFilter: -->
+    <DataTemplate x:Key="NegationFilterTemplate" DataType="{x:Type filters:NegationFilter}">
+        <StackPanel Orientation="Horizontal">
+            <TextBlock Text="NOT" FontWeight="Bold" Foreground="DarkRed" />
+        </StackPanel>
+    </DataTemplate>
+
+</ResourceDictionary>

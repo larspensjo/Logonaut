@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:avalonEdit="http://icsharpcode.net/sharpdevelop/avalonedit"
         xmlns:helpers="clr-namespace:Logonaut.UI.Helpers"
+        xmlns:vm="clr-namespace:Logonaut.UI.ViewModels"
         Title="Logonaut" Height="600" Width="800">
     <!-- Main Layout: A Grid with three rows: Menu, Stats Panel, and Main Content -->
     <Grid>
@@ -47,9 +48,18 @@
             <Border Style="{StaticResource CardPanelStyle}">
                 <StackPanel>
                     <TextBlock Text="Filters" FontWeight="Bold" Margin="0,0,0,5"/>
-                    <TreeView ItemsSource="{Binding FilterProfiles}" Margin="0,0,0,5"/>
-                    <Button Content="Add Filter" Command="{Binding AddFilterCommand}" Margin="0,0,0,5"/>
-                    <Button Content="Remove Filter" Command="{Binding RemoveFilterCommand}" Margin="0,0,0,5"/>
+                    <TreeView ItemsSource="{Binding FilterProfiles}" Margin="0,0,0,5">
+                        <TreeView.ItemTemplate>
+                            <!-- Hierarchical template: child filters are bound to Children -->
+                            <HierarchicalDataTemplate DataType="{x:Type vm:FilterViewModel}" ItemsSource="{Binding Children}">
+                                <TextBlock Text="{Binding DisplayText}" />
+                            </HierarchicalDataTemplate>
+                        </TreeView.ItemTemplate>
+                    </TreeView>
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="Add Filter" Command="{Binding AddFilterCommand}" Margin="0,0,5,0"/>
+                        <Button Content="Remove Filter" Command="{Binding RemoveFilterCommand}" />
+                    </StackPanel>
                 </StackPanel>
             </Border>
 

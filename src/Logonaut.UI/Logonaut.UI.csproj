@@ -17,6 +17,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Logonaut.LogTailing\Logonaut.LogTailing.csproj" />
     <ProjectReference Include="..\Logonaut.Theming\Logonaut.Theming.csproj" />
+    <ProjectReference Include="..\Logonaut.Filters\Logonaut.Filters.csproj" />
   </ItemGroup>
 
 </Project>
