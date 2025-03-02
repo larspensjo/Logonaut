@@ -1,9 +1,11 @@
-using System;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 
 namespace Logonaut.LogTailing
 {
+    // LogTailerManager centralizes log file monitoring, ensuring efficient tailing, resource management, 
+    // and UI decoupling. It provides a consistent stream of log updates, handles file switches, prevents 
+    // resource leaks, and simplifies maintenance and testing.
     public class LogTailerManager : IDisposable
     {
         private static LogTailerManager? _instance = null;
