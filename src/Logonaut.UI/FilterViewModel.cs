@@ -9,38 +9,51 @@ namespace Logonaut.UI.ViewModels
     {
         // The underlying filter model from Logonaut.Filters.
         public IFilter FilterModel { get; }
-
-        // A collection of child view models, used if this filter is composite.
+        
+        // Optional parent reference for non-root filters.
+        public FilterViewModel? Parent { get; }
+        
+        // Child view models for composite filters.
         public ObservableCollection<FilterViewModel> Children { get; } = new();
 
         [ObservableProperty]
         private bool isSelected;
 
-        public FilterViewModel(IFilter filter)
+        public FilterViewModel(IFilter filter, FilterViewModel? parent = null)
         {
             FilterModel = filter;
-            // If the filter is composite, wrap its children.
+            Parent = parent;
             if (filter is CompositeFilterBase composite)
             {
                 foreach (var child in composite.SubFilters)
                 {
-                    Children.Add(new FilterViewModel(child));
+                    Children.Add(new FilterViewModel(child, this));
                 }
             }
         }
 
-        // Command to add a child filter (only applicable if this filter is composite).
+        // Command to add a child filter.
         [RelayCommand]
         public void AddChildFilter(IFilter childFilter)
         {
             if (FilterModel is CompositeFilterBase composite)
             {
                 composite.Add(childFilter);
-                Children.Add(new FilterViewModel(childFilter));
+                Children.Add(new FilterViewModel(childFilter, this));
             }
         }
 
-        // A read-only property for display purposes.
+        // Removes a child filter from the composite.
+        public void RemoveChild(FilterViewModel child)
+        {
+            if (FilterModel is CompositeFilterBase composite)
+            {
+                composite.Remove(child.FilterModel);
+                Children.Remove(child);
+            }
+        }
+
+        // Read-only display text.
         public string DisplayText => FilterModel switch
         {
             SubstringFilter s => $"Substring: {s.Substring}",

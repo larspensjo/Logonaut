@@ -24,5 +24,12 @@ namespace Logonaut.UI
             int useImmersiveDarkMode = 1; // 1 to enable dark mode
             DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref useImmersiveDarkMode, sizeof(int));
         }
+        private void TreeView_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        {
+            if (DataContext is ViewModels.MainViewModel viewModel)
+            {
+                viewModel.SelectedFilter = e.NewValue as ViewModels.FilterViewModel;
+            }
+        }
     }
 }

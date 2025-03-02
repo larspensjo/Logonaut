@@ -3,14 +3,14 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Logonaut.UI.Services;
 using Logonaut.LogTailing;
+using Logonaut.Filters;
 
 namespace Logonaut.UI.ViewModels
 {
     public partial class MainViewModel : ObservableObject
     {
-        // Add a property to hold the ThemeViewModel.
         public ThemeViewModel Theme { get; } = new ThemeViewModel();
- 
+
         // Automatically generates public LogText { get; set; } with INotifyPropertyChanged support.
         [ObservableProperty]
         private string logText = "";
@@ -21,7 +21,12 @@ namespace Logonaut.UI.ViewModels
         [ObservableProperty]
         private string? currentLogFilePath;
 
-        public ObservableCollection<string> FilterProfiles { get; } = new ObservableCollection<string>();
+        // Now a collection of FilterViewModel.
+        public ObservableCollection<FilterViewModel> FilterProfiles { get; } = new();
+
+        // The currently selected filter in the tree.
+        [ObservableProperty]
+        private FilterViewModel? selectedFilter;
 
         private readonly IFileDialogService _fileDialogService;
 
@@ -32,7 +37,6 @@ namespace Logonaut.UI.ViewModels
             // Subscribe to log lines from the tailer manager.
             LogTailerManager.Instance.LogLines.Subscribe(line =>
             {
-                // Consider marshaling to the UI thread if necessary.
                 LogText += line + "\n";
             });
         }
@@ -41,31 +45,52 @@ namespace Logonaut.UI.ViewModels
         [RelayCommand]
         private void AddFilter()
         {
-            FilterProfiles.Add("Filter " + (FilterProfiles.Count + 1));
+            if (FilterProfiles.Count == 0)
+            {
+                // Create a new filter as the root.
+                var newFilterModel = new SubstringFilter("New Filter");
+                var newFilterVM = new FilterViewModel(newFilterModel);
+                FilterProfiles.Add(newFilterVM);
+                SelectedFilter = newFilterVM;
+            }
+            else if (SelectedFilter != null)
+            {
+                // Add a new child filter to the selected filter (if composite).
+                if (SelectedFilter.FilterModel is CompositeFilterBase)
+                {
+                    var childFilterModel = new SubstringFilter("New Child Filter");
+                    SelectedFilter.AddChildFilter(childFilterModel);
+                }
+                // Optionally, handle the case where the selected filter is not composite.
+            }
         }
 
         [RelayCommand(CanExecute = nameof(CanRemoveFilter))]
         private void RemoveFilter()
         {
-            if (FilterProfiles.Count > 0)
+            if (SelectedFilter != null)
             {
-                FilterProfiles.RemoveAt(FilterProfiles.Count - 1);
+                if (FilterProfiles.Contains(SelectedFilter))
+                {
+                    // Removing a root filter.
+                    FilterProfiles.Remove(SelectedFilter);
+                    SelectedFilter = null;
+                }
+                else if (SelectedFilter.Parent != null)
+                {
+                    // Removing a child filter.
+                    SelectedFilter.Parent.RemoveChild(SelectedFilter);
+                }
             }
         }
 
-        private bool CanRemoveFilter() => FilterProfiles.Count > 0;
+        private bool CanRemoveFilter() => SelectedFilter != null;
 
         [RelayCommand(CanExecute = nameof(CanSearch))]
-        private void PreviousSearch()
-        {
-            LogText += "Previous search executed.\n";
-        }
+        private void PreviousSearch() => LogText += "Previous search executed.\n";
 
         [RelayCommand(CanExecute = nameof(CanSearch))]
-        private void NextSearch()
-        {
-            LogText += "Next search executed.\n";
-        }
+        private void NextSearch() => LogText += "Next search executed.\n";
 
         private bool CanSearch() => !string.IsNullOrWhiteSpace(SearchText);
 
@@ -77,7 +102,6 @@ namespace Logonaut.UI.ViewModels
                 return;
             CurrentLogFilePath = selectedFile;
             LogTailerManager.Instance.ChangeFile(selectedFile);
-            // LogText += $"Now monitoring: {selectedFile}\n";
         }
     }
 }
