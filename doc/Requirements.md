@@ -29,6 +29,7 @@ I have the following requirements:
 * The filter output shall update in real-time. Maybe some proper poll period is good, no need to update too frequently.
 * Whenever the filters are changed, the filtered output shall update dynamically.
 * It shall be possible to also save one or more filter settings with the configuration. Each such filter tree shall have a name, making it easy for the user to browse.
+* The log file can be very big, 100 of Megabytes. Updating text and applying filters must be effective.
 
 ### Filter controls
 * The application shall organize the filters in a tree-like view, making it easy to expand and navigate for the user.
@@ -40,3 +41,4 @@ I have the following requirements:
 * If there is a filter shown in the tree view, the user needs to click on the filter that will be modified.
 * When a filter is added and the current filter isn't empty, the new filter shall be added to the selected filter. For example, add another sub-filter to an AndFilter.
 * When the user clicks on "Remove filter", the currently selected filter shall be removed. This can leave the top filter empty.
+* I want several buttons to add filters. One button for each filter type: SubString, AndFilter, OrFilter, NegationFilter.
