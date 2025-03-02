@@ -5,7 +5,7 @@
     <Color x:Key="BackgroundColor">#1E1E1E</Color>  <!-- Dark Gray -->
     <Color x:Key="ForegroundColor">#FFFFFF</Color>  <!-- White Text -->
     <Color x:Key="ControlBackground">#252526</Color> <!-- Slightly lighter dark -->
-    <Color x:Key="PanelBackgroundColor">#2A2A2A</Color> <!-- Panel background -->
+    <Color x:Key="PanelBackgroundColor">#C0C0C0</Color> <!-- Panel background -->
     <Color x:Key="ButtonBackground">#333333</Color>  <!-- Darker buttons -->
     <Color x:Key="ButtonForeground">#FFFFFF</Color>  <!-- White text on buttons -->
     <Color x:Key="AccentColor">#FF007ACC</Color>     <!-- Example accent color -->
@@ -95,9 +95,9 @@
         <Setter Property="Effect">
             <Setter.Value>
                 <DropShadowEffect Color="#000000"
-                                BlurRadius="10"
-                                ShadowDepth="4"
-                                Opacity="0.4" />
+                                    BlurRadius="10"
+                                    ShadowDepth="4"
+                                    Opacity="0.5" />
             </Setter.Value>
         </Setter>
     </Style>
