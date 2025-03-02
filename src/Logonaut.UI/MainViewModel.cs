@@ -73,22 +73,27 @@ namespace Logonaut.UI.ViewModels
         [RelayCommand(CanExecute = nameof(CanRemoveFilter))]
         private void RemoveFilter()
         {
-            if (SelectedFilter != null)
+            if (SelectedFilter == null)
+                throw new InvalidOperationException("No filter is selected.");
+
+            if (FilterProfiles.Contains(SelectedFilter))
             {
-                if (FilterProfiles.Contains(SelectedFilter))
-                {
-                    // Removing a root filter.
-                    FilterProfiles.Remove(SelectedFilter);
-                    SelectedFilter = null;
-                }
-                else if (SelectedFilter.Parent != null)
-                {
-                    // Removing a child filter.
-                    SelectedFilter.Parent.RemoveChild(SelectedFilter);
-                }
+                // Removing a root filter.
+                FilterProfiles.Remove(SelectedFilter);
+                SelectedFilter = null;
+            }
+            else if (SelectedFilter.Parent != null)
+            {
+                // Removing a child filter.
+                SelectedFilter.Parent.RemoveChild(SelectedFilter);
             }
         }
-
+        
+        // This is a hack to force 'CanExecute' to be run again.
+        partial void OnSelectedFilterChanged(FilterViewModel? value)
+        {
+            RemoveFilterCommand.NotifyCanExecuteChanged();
+        }
         private bool CanRemoveFilter() => SelectedFilter != null;
 
         [RelayCommand(CanExecute = nameof(CanSearch))]
@@ -97,6 +102,12 @@ namespace Logonaut.UI.ViewModels
         [RelayCommand(CanExecute = nameof(CanSearch))]
         private void NextSearch() => LogText += "Next search executed.\n";
 
+        // This is a hack to force 'CanExecute' to be run again.
+        partial void OnSearchTextChanged(string value)
+        {
+            PreviousSearchCommand.NotifyCanExecuteChanged();
+            NextSearchCommand.NotifyCanExecuteChanged();
+        }
         private bool CanSearch() => !string.IsNullOrWhiteSpace(SearchText);
 
         [RelayCommand]
