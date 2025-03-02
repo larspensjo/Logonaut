@@ -53,7 +53,8 @@ namespace Logonaut.UI.Tests.ViewModels
             Assert.AreEqual(initialCount + 1, parentVM.Children.Count);
             // Verify that the last child's FilterModel is a SubstringFilter with the expected value.
             Assert.IsInstanceOfType(parentVM.Children[parentVM.Children.Count - 1].FilterModel, typeof(SubstringFilter));
-            var substringFilter = parentVM.Children[parentVM.Children.Count - 1].FilterModel as SubstringFilter;
+            SubstringFilter? substringFilter = parentVM.Children[parentVM.Children.Count - 1].FilterModel as SubstringFilter;
+            Assert.IsNotNull(substringFilter);
             Assert.AreEqual("child", substringFilter.Substring);
         }
 
