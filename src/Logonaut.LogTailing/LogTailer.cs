@@ -46,7 +46,7 @@ namespace Logonaut.LogTailing
         public void Start()
         {
             // Initialize the last read position to the current file length.
-            _lastPosition = new FileInfo(_filePath).Length;
+            _lastPosition = 0;
 
             // Configure the file system watcher.
             var directory = Path.GetDirectoryName(_filePath);

@@ -13,7 +13,7 @@ namespace Logonaut.UI.ViewModels
  
         // Automatically generates public LogText { get; set; } with INotifyPropertyChanged support.
         [ObservableProperty]
-        private string logText = "Welcome to Logonaut!\n";
+        private string logText = "";
 
         [ObservableProperty]
         private string searchText = "";
@@ -72,13 +72,12 @@ namespace Logonaut.UI.ViewModels
         [RelayCommand]
         private void OpenLogFile()
         {
-            var selectedFile = _fileDialogService.OpenFile("Select a log file", "Log Files|*.log;*.txt|All Files|*.*");
-            if (!string.IsNullOrEmpty(selectedFile))
-            {
-                CurrentLogFilePath = selectedFile;
-                LogTailerManager.Instance.ChangeFile(selectedFile);
-                LogText += $"Now monitoring: {selectedFile}\n";
-            }
+            string? selectedFile = _fileDialogService.OpenFile("Select a log file", "Log Files|*.log;*.txt|All Files|*.*");
+            if (string.IsNullOrEmpty(selectedFile))
+                return;
+            CurrentLogFilePath = selectedFile;
+            LogTailerManager.Instance.ChangeFile(selectedFile);
+            // LogText += $"Now monitoring: {selectedFile}\n";
         }
     }
 }
