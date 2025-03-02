@@ -55,11 +55,16 @@ namespace Logonaut.UI.ViewModels
             }
             else if (SelectedFilter != null)
             {
-                // Add a new child filter to the selected filter (if composite).
-                if (SelectedFilter.FilterModel is CompositeFilterBase)
+                // TODO: If the selected filter isn't composite, we should disable the AddFilter button.
+                if (SelectedFilter.FilterModel is CompositeFilterBase compositeFilter)
                 {
                     var childFilterModel = new SubstringFilter("New Child Filter");
                     SelectedFilter.AddChildFilter(childFilterModel);
+                }
+                else
+                {
+                    // Popup an error message
+                    System.Windows.MessageBox.Show("Selected filter is not a composite filter.", "Error", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
                 }
                 // Optionally, handle the case where the selected filter is not composite.
             }
