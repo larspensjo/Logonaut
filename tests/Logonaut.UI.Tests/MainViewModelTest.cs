@@ -9,7 +9,7 @@ namespace Logonaut.UI.Tests.ViewModels
     [TestClass]
     public class MainViewModelTests
     {
-        // A simple fake IFileDialogService that always returns a preset file name.
+        // A simple mock of IFileDialogService that always returns a preset file name.
         private class MockFileDialogService : IFileDialogService
         {
             public string FileToReturn { get; set; } = "C:\\fake\\log.txt";
@@ -17,56 +17,96 @@ namespace Logonaut.UI.Tests.ViewModels
         }
 
         [TestMethod]
-        public void AddFilter_NoExistingFilter_ShouldCreateRootFilter()
+        public void AddSubstringFilter_NoExistingFilter_ShouldCreateRootFilter()
         {
             // Arrange
-            var fakeService = new MockFileDialogService();
-            var viewModel = new MainViewModel(fakeService);
+            var viewModel = new MainViewModel();
 
-            // Ensure FilterProfiles is empty.
-            Assert.AreEqual(0, viewModel.FilterProfiles.Count);
+            // Act
+            viewModel.AddSubstringFilterCommand.Execute(null);
 
-            // Act: Execute the AddFilter command.
-            viewModel.AddFilterCommand.Execute(null);
-
-            // Assert: A root filter should have been created and selected.
+            // Assert
             Assert.AreEqual(1, viewModel.FilterProfiles.Count, "A root filter should be added.");
             Assert.IsNotNull(viewModel.SelectedFilter, "SelectedFilter should be set.");
-            Assert.IsTrue(viewModel.SelectedFilter.DisplayText.StartsWith("Substring:"), "Root filter should be a substring filter.");
+            Assert.IsInstanceOfType(viewModel.SelectedFilter.FilterModel, typeof(SubstringFilter), "Root filter should be a SubstringFilter.");
+        }
+
+        [TestMethod]
+        public void AddAndFilter_NoExistingFilter_ShouldCreateRootFilter()
+        {
+            // Arrange
+            var viewModel = new MainViewModel();
+
+            // Act
+            viewModel.AddAndFilterCommand.Execute(null);
+
+            // Assert
+            Assert.AreEqual(1, viewModel.FilterProfiles.Count, "A root AND filter should be added.");
+            Assert.IsNotNull(viewModel.SelectedFilter, "SelectedFilter should be set.");
+            Assert.IsInstanceOfType(viewModel.SelectedFilter.FilterModel, typeof(AndFilter), "Root filter should be an AndFilter.");
+        }
+
+        [TestMethod]
+        public void AddOrFilter_NoExistingFilter_ShouldCreateRootFilter()
+        {
+            // Arrange
+            var viewModel = new MainViewModel();
+
+            // Act
+            viewModel.AddOrFilterCommand.Execute(null);
+
+            // Assert
+            Assert.AreEqual(1, viewModel.FilterProfiles.Count, "A root OR filter should be added.");
+            Assert.IsNotNull(viewModel.SelectedFilter, "SelectedFilter should be set.");
+            Assert.IsInstanceOfType(viewModel.SelectedFilter.FilterModel, typeof(OrFilter), "Root filter should be an OrFilter.");
+        }
+
+        [TestMethod]
+        public void AddNegationFilter_NoExistingFilter_ShouldCreateRootFilter()
+        {
+            // Arrange
+            var viewModel = new MainViewModel();
+
+            // Act
+            viewModel.AddNegationFilterCommand.Execute(null);
+
+            // Assert
+            Assert.AreEqual(1, viewModel.FilterProfiles.Count, "A root NOT filter should be added.");
+            Assert.IsNotNull(viewModel.SelectedFilter, "SelectedFilter should be set.");
+            Assert.IsInstanceOfType(viewModel.SelectedFilter.FilterModel, typeof(NegationFilter), "Root filter should be a NegationFilter.");
         }
 
         [TestMethod]
         public void AddFilter_WithExistingCompositeFilter_ShouldAddChildFilter()
         {
-            // Arrange: Create a composite filter (AndFilter) as the root.
+            // Arrange
             var compositeModel = new AndFilter();
             var rootVM = new FilterViewModel(compositeModel);
             var viewModel = new MainViewModel();
             viewModel.FilterProfiles.Add(rootVM);
             viewModel.SelectedFilter = rootVM;
 
-            // Act: Execute AddFilter command.
-            viewModel.AddFilterCommand.Execute(null);
+            // Act
+            viewModel.AddSubstringFilterCommand.Execute(null);
 
-            // Assert: A child filter should be added to the selected composite filter.
-            Assert.IsTrue(rootVM.Children.Count > 0, "Composite filter should have a child after adding filter.");
-            var child = rootVM.Children[0];
-            Assert.IsTrue(child.DisplayText.StartsWith("Substring:"), "Child filter should be a substring filter.");
+            // Assert
+            Assert.AreEqual(1, rootVM.Children.Count, "A child filter should be added to the AND filter.");
+            Assert.IsInstanceOfType(rootVM.Children[0].FilterModel, typeof(SubstringFilter), "Child filter should be a SubstringFilter.");
         }
 
         [TestMethod]
         public void RemoveFilter_RootFilter_ShouldRemoveItAndClearSelection()
         {
-            // Arrange: Create a root filter.
+            // Arrange
             var rootVM = new FilterViewModel(new SubstringFilter("Test"));
             var viewModel = new MainViewModel();
             viewModel.FilterProfiles.Add(rootVM);
             viewModel.SelectedFilter = rootVM;
 
-            // Act: Execute RemoveFilter command.
+            // Act
             viewModel.RemoveFilterCommand.Execute(null);
 
-            // Assert: The root filter should be removed and selection cleared.
+            // Assert
             Assert.AreEqual(0, viewModel.FilterProfiles.Count, "Root filter should be removed.");
             Assert.IsNull(viewModel.SelectedFilter, "SelectedFilter should be cleared.");
         }
@@ -74,22 +114,20 @@ namespace Logonaut.UI.Tests.ViewModels
         [TestMethod]
         public void RemoveFilter_ChildFilter_ShouldRemoveItFromParent()
         {
-            // Arrange: Create a composite filter with one child.
+            // Arrange
             var compositeModel = new AndFilter();
             var rootVM = new FilterViewModel(compositeModel);
             var childModel = new SubstringFilter("Child");
             rootVM.AddChildFilter(childModel);
-            Assert.AreEqual(1, rootVM.Children.Count, "Child filter should be added.");
-            // Set up MainViewModel with the composite as root.
             var viewModel = new MainViewModel();
             viewModel.FilterProfiles.Add(rootVM);
             viewModel.SelectedFilter = rootVM.Children[0];
 
-            // Act: Execute RemoveFilter command.
+            // Act
             viewModel.RemoveFilterCommand.Execute(null);
 
-            // Assert: The child filter should be removed.
-            Assert.AreEqual(0, rootVM.Children.Count, "Child filter should be removed from composite.");
+            // Assert
+            Assert.AreEqual(0, rootVM.Children.Count, "Child filter should be removed from parent.");
         }
 
         [TestMethod]
@@ -98,7 +136,6 @@ namespace Logonaut.UI.Tests.ViewModels
             // Arrange
             var viewModel = new MainViewModel();
             viewModel.SearchText = "test";
-            string initialLog = viewModel.LogText;
 
             // Act
             viewModel.PreviousSearchCommand.Execute(null);
@@ -113,7 +150,6 @@ namespace Logonaut.UI.Tests.ViewModels
             // Arrange
             var viewModel = new MainViewModel();
             viewModel.SearchText = "test";
-            string initialLog = viewModel.LogText;
 
             // Act
             viewModel.NextSearchCommand.Execute(null);
@@ -122,7 +158,8 @@ namespace Logonaut.UI.Tests.ViewModels
             StringAssert.Contains(viewModel.LogText, "Next search executed.", "LogText should contain the next search message.");
         }
 
-        /* TODO: Probably need to mock the LogManager to test this.
+#if false
+        // TODO: Need a mock for ThemeViewModel
         [TestMethod]
         public void OpenLogFile_ShouldSetCurrentLogFilePath()
         {
@@ -136,6 +173,6 @@ namespace Logonaut.UI.Tests.ViewModels
             // Assert
             Assert.AreEqual("C:\\fake\\log.txt", viewModel.CurrentLogFilePath, "CurrentLogFilePath should be updated.");
         }
-        */
+#endif
     }
 }

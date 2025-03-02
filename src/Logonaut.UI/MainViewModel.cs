@@ -21,7 +21,6 @@ namespace Logonaut.UI.ViewModels
         [ObservableProperty]
         private string? currentLogFilePath;
 
-        // Now a collection of FilterViewModel.
         public ObservableCollection<FilterViewModel> FilterProfiles { get; } = new();
 
         // The currently selected filter in the tree.
@@ -41,32 +40,54 @@ namespace Logonaut.UI.ViewModels
             });
         }
 
-        // Generates AddFilterCommand automatically.
+        // Separate commands for adding different types of filters.
         [RelayCommand]
-        private void AddFilter()
+        private void AddSubstringFilter()
         {
+            AddFilter(new SubstringFilter("New Substring Filter"));
+        }
+
+        [RelayCommand]
+        private void AddAndFilter()
+        {
+            AddFilter(new AndFilter());
+        }
+
+        [RelayCommand]
+        private void AddOrFilter()
+        {
+            AddFilter(new OrFilter());
+        }
+
+        [RelayCommand]
+        private void AddNegationFilter()
+        {
+            AddFilter(new NegationFilter(new SubstringFilter("Not this")));
+        }
+
+        private void AddFilter(IFilter filter)
+        {
+            var newFilterVM = new FilterViewModel(filter);
+
             if (FilterProfiles.Count == 0)
             {
-                // Create a new filter as the root.
-                var newFilterModel = new SubstringFilter("New Filter");
-                var newFilterVM = new FilterViewModel(newFilterModel);
+                // If no filter exists, make this the root.
                 FilterProfiles.Add(newFilterVM);
                 SelectedFilter = newFilterVM;
             }
             else if (SelectedFilter != null)
             {
-                // TODO: If the selected filter isn't composite, we should disable the AddFilter button.
+                // Add to the currently selected composite filter.
                 if (SelectedFilter.FilterModel is CompositeFilterBase compositeFilter)
                 {
-                    var childFilterModel = new SubstringFilter("New Child Filter");
-                    SelectedFilter.AddChildFilter(childFilterModel);
+                    SelectedFilter.AddChildFilter(filter);
                 }
                 else
                 {
                     // Popup an error message
                     System.Windows.MessageBox.Show("Selected filter is not a composite filter.", "Error", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
                 }
-                // Optionally, handle the case where the selected filter is not composite.
+                // TODO: handle cases where the selected filter isn't composite.
             }
         }
 
@@ -88,7 +109,7 @@ namespace Logonaut.UI.ViewModels
                 SelectedFilter.Parent.RemoveChild(SelectedFilter);
             }
         }
-        
+
         // This is a hack to force 'CanExecute' to be run again.
         partial void OnSelectedFilterChanged(FilterViewModel? value)
         {
