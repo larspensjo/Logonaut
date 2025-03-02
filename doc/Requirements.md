@@ -32,5 +32,11 @@ I have the following requirements:
 
 ### Filter controls
 * The application shall organize the filters in a tree-like view, making it easy to expand and navigate for the user.
-* I suppose the filter control would be in a panel of its own. Maybe to the left side of the application, while the right side shows the log output.
+* The filter control would be in a panel of its own. Maybe to the left side of the application, while the right side shows the log output.
 * When working with the filters, the application shall show the tree-like view of them and provide controls to easily manipulate the tree. To add and remove items, move items within the tree.
+* You start with no filters. There can only be one filter at the top.
+* When a filter is added, the user shall select what type of filter to use.
+* If the current filter is empty, a new filter will become the current filter.
+* If there is a filter shown in the tree view, the user needs to click on the filter that will be modified.
+* When a filter is added and the current filter isn't empty, the new filter shall be added to the selected filter. For example, add another sub-filter to an AndFilter.
+* When the user clicks on "Remove filter", the currently selected filter shall be removed. This can leave the top filter empty.
