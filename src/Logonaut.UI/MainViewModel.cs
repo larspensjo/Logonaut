@@ -5,6 +5,7 @@ using Logonaut.UI.Services;
 using Logonaut.LogTailing;
 using Logonaut.Filters;
 using Logonaut.Common;
+using Logonaut.Core;
 
 namespace Logonaut.UI.ViewModels
 {
@@ -32,6 +33,9 @@ namespace Logonaut.UI.ViewModels
 
         private readonly IFileDialogService _fileDialogService;
 
+        // signal cancellation requests for the background filtering task
+        private CancellationTokenSource? _cts;
+
         public MainViewModel(IFileDialogService? fileDialogService = null)
         {
             _fileDialogService = fileDialogService ?? new FileDialogService();
@@ -41,13 +45,14 @@ namespace Logonaut.UI.ViewModels
             {
                 LogDoc.AppendLine(line);
             });
+            StartBackgroundFiltering();
         }
 
         // Separate commands for adding different types of filters.
         [RelayCommand]
         private void AddSubstringFilter()
         {
-            AddFilter(new SubstringFilter("New Substring Filter"));
+            AddFilter(new SubstringFilter(""));
         }
 
         [RelayCommand]
@@ -143,5 +148,50 @@ namespace Logonaut.UI.ViewModels
             CurrentLogFilePath = selectedFile;
             LogTailerManager.Instance.ChangeFile(selectedFile);
         }
+
+        private void StartBackgroundFiltering()
+        {
+            _cts = new CancellationTokenSource();
+            // Run the filtering loop on a background thread.
+            Task.Run(async () =>
+            {
+                while (!_cts.Token.IsCancellationRequested)
+                {
+                    IFilter currentFilter;
+                    if (FilterProfiles.Count == 0)
+                        currentFilter = new NeutralFilter();
+                    else
+                        currentFilter = FilterProfiles.First().FilterModel;
+
+                    // Apply filtering. You might include a contextLines parameter.
+                    var newFilteredLines = FilterEngine.ApplyFilters(LogDoc, currentFilter, contextLines: 1);
+
+                    // Update the VisibleLogLines on the UI thread.
+                    App.Current.Dispatcher.Invoke(() =>
+                    {
+                        VisibleLogLines.Clear();
+                        foreach (var line in newFilteredLines)
+                        {
+                            VisibleLogLines.Add(line);
+                        }
+                    });
+
+                    // Wait a bit before next update (throttling)
+                    await Task.Delay(250, _cts.Token);
+                }
+            }, _cts.Token);
+        }
+
+        public void StopBackgroundFiltering()
+        {
+            _cts?.Cancel();
+        }
+    }
+
+    // A neutral filter that always returns true.
+    public class NeutralFilter : IFilter
+    {
+        public bool Enabled { get; set; } = true;
+        public bool IsMatch(string line) => true;
     }
 }
