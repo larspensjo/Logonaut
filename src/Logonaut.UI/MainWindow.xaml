@@ -78,16 +78,24 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <!-- Log Display (AvalonEdit) -->
+                <!-- Log Display using ListView with virtualization -->
                 <Border Style="{StaticResource CardPanelStyle}">
-                    <avalonEdit:TextEditor Grid.Row="0"
-                                           ShowLineNumbers="True"
-                                           helpers:AvalonEditHelper.BindableText="{Binding LogText, Mode=OneWay}"
-                                           IsReadOnly="True"
-                                           FontFamily="Consolas"
-                                           Background="{DynamicResource WindowBackgroundBrush}"
-                                           Foreground="{DynamicResource TextForegroundBrush}"/>
+                    <ListView Grid.Row="0"
+                            ItemsSource="{Binding VisibleLogLines}"
+                            Background="{DynamicResource WindowBackgroundBrush}"
+                            Foreground="{DynamicResource TextForegroundBrush}"
+                            FontFamily="Consolas"
+                            VirtualizingPanel.IsVirtualizing="True"
+                            VirtualizingPanel.VirtualizationMode="Recycling">
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem">
+                                <Setter Property="Padding" Value="2"/>
+                                <Setter Property="Margin" Value="0"/>
+                            </Style>
+                        </ListView.ItemContainerStyle>
+                    </ListView>
                 </Border>
+
                 <!-- Search Panel -->
                 <StackPanel Orientation="Horizontal" Grid.Row="1" HorizontalAlignment="Center" Margin="5">
                     <Button Content="Previous" Command="{Binding PreviousSearchCommand}" Margin="5"/>

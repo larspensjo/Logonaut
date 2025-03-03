@@ -20,4 +20,10 @@
     <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Logonaut.Common\Logonaut.Common.csproj" />
+    <ProjectReference Include="..\..\src\Logonaut.Filters\Logonaut.Filters.csproj" />
+    <ProjectReference Include="..\..\src\Logonaut.Core\Logonaut.Core.csproj" />
+  </ItemGroup>
+
 </Project>

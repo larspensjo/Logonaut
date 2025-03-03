@@ -4,16 +4,19 @@ using CommunityToolkit.Mvvm.Input;
 using Logonaut.UI.Services;
 using Logonaut.LogTailing;
 using Logonaut.Filters;
+using Logonaut.Common;
 
 namespace Logonaut.UI.ViewModels
 {
     public partial class MainViewModel : ObservableObject
     {
-        public ThemeViewModel Theme { get; } = new ThemeViewModel();
+        public ThemeViewModel Theme { get; } = new();
 
-        // Automatically generates public LogText { get; set; } with INotifyPropertyChanged support.
-        [ObservableProperty]
-        private string logText = "";
+        // The complete log text.
+        public LogDocument LogDoc { get; } = new();
+
+        // The visible log text, filtered by the selected filters.
+        public ObservableCollection<string> VisibleLogLines { get; } = new();
 
         [ObservableProperty]
         private string searchText = "";
@@ -36,7 +39,7 @@ namespace Logonaut.UI.ViewModels
             // Subscribe to log lines from the tailer manager.
             LogTailerManager.Instance.LogLines.Subscribe(line =>
             {
-                LogText += line + "\n";
+                LogDoc.AppendLine(line);
             });
         }
 
@@ -118,10 +121,10 @@ namespace Logonaut.UI.ViewModels
         private bool CanRemoveFilter() => SelectedFilter != null;
 
         [RelayCommand(CanExecute = nameof(CanSearch))]
-        private void PreviousSearch() => LogText += "Previous search executed.\n";
+        private void PreviousSearch() => LogDoc.AppendLine("Previous search executed.\n");
 
         [RelayCommand(CanExecute = nameof(CanSearch))]
-        private void NextSearch() => LogText += "Next search executed.\n";
+        private void NextSearch() => LogDoc.AppendLine("Next search executed.\n");
 
         // This is a hack to force 'CanExecute' to be run again.
         partial void OnSearchTextChanged(string value)

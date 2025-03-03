@@ -5,6 +5,7 @@ using Logonaut.Filters;
 
 namespace Logonaut.UI.ViewModels
 {
+    // There will be one instance of this for every filter.
     public partial class FilterViewModel : ObservableObject
     {
         // The underlying filter model from Logonaut.Filters.
