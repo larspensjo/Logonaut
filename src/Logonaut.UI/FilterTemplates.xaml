@@ -1,17 +1,37 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:filters="clr-namespace:Logonaut.Filters;assembly=Logonaut.Filters"
-                    xmlns:vm="clr-namespace:Logonaut.UI.ViewModels">
+                    xmlns:vm="clr-namespace:Logonaut.UI.ViewModels"
+                    xmlns:i="http://schemas.microsoft.com/xaml/behaviors">
 
-    <!-- Default template for FilterViewModel -->
-    <DataTemplate DataType="{x:Type vm:FilterViewModel}">
-        <TextBlock Text="{Binding DisplayText}" />
-    </DataTemplate>
-
+    <!-- This should be moved to a shared resource dictionary to reuse it across multiple dictionaries or controls -->
+    <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
     <!-- Optionally, override templates per filter type using DataTriggers or separate templates.
          For example, for SubstringFilter: -->
-    <DataTemplate x:Key="SubstringFilterTemplate" DataType="{x:Type filters:SubstringFilter}">
-        <TextBlock Text="Substring: {Binding Substring}" Foreground="DarkBlue"/>
+    <DataTemplate DataType="{x:Type vm:FilterViewModel}">
+        <Grid>
+            <!-- When not editing, show a TextBlock -->
+            <TextBlock Text="{Binding DisplayText}"
+                    Background="Transparent"
+                    Visibility="{Binding IsEditing, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=False}">
+                <i:Interaction.Triggers>
+                    <!-- On double-click, trigger BeginEditCommand -->
+                    <i:EventTrigger EventName="MouseDoubleClick">
+                        <i:InvokeCommandAction Command="{Binding BeginEditCommand}" />
+                    </i:EventTrigger>
+                </i:Interaction.Triggers>
+            </TextBlock>
+            <!-- When editing, show a TextBox -->
+            <TextBox Text="{Binding FilterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                    Visibility="{Binding IsEditing, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <i:Interaction.Triggers>
+                    <!-- When the TextBox loses focus, trigger EndEditCommand -->
+                    <i:EventTrigger EventName="LostFocus">
+                        <i:InvokeCommandAction Command="{Binding EndEditCommand}" />
+                    </i:EventTrigger>
+                </i:Interaction.Triggers>
+            </TextBox>
+        </Grid>
     </DataTemplate>
     
     <!-- Similarly, for AndFilter: -->

@@ -50,12 +50,6 @@
                     <TextBlock Text="Filters" FontWeight="Bold" Margin="0,0,0,5"/>
                     <TreeView ItemsSource="{Binding FilterProfiles}" Margin="0,0,0,5"
                             SelectedItemChanged="TreeView_SelectedItemChanged">
-                        <TreeView.ItemTemplate>
-                            <!-- Hierarchical template: child filters are bound to Children -->
-                            <HierarchicalDataTemplate DataType="{x:Type vm:FilterViewModel}" ItemsSource="{Binding Children}">
-                                <TextBlock Text="{Binding DisplayText}" />
-                            </HierarchicalDataTemplate>
-                        </TreeView.ItemTemplate>
                     </TreeView>
                     
                     <!-- Buttons for adding specific filters -->
