@@ -20,15 +20,21 @@ namespace Logonaut.Theming
                 var path = GetDictionaryPath(theme);
                 Uri themeDictUri = new Uri($"/Logonaut.Theming;component/Themes/{path}", UriKind.Relative);
                 ResourceDictionary newTheme = (ResourceDictionary)Application.LoadComponent(themeDictUri);
+                newTheme.Source = themeDictUri;
 
-                // Application.Current.Resources.MergedDictionaries.Clear();
+                // Add the new theme dictionary.
                 var mergedDictionaries = Application.Current.Resources.MergedDictionaries;
                 mergedDictionaries.Add(newTheme);
 
-                // Remove the old theme AFTER the new one is added
-                if (mergedDictionaries.Count > 1)
+                // Remove any old theme dictionaries (those with a Source that contains "/Themes/")
+                // Exclude the new one we just added.
+                for (int i = mergedDictionaries.Count - 2; i >= 0; i--)
                 {
-                    mergedDictionaries.RemoveAt(0);
+                    var dict = mergedDictionaries[i];
+                    if (dict.Source != null && dict.Source.OriginalString.Contains("/Themes/"))
+                    {
+                        mergedDictionaries.RemoveAt(i);
+                    }
                 }
             }
             catch (Exception ex)
