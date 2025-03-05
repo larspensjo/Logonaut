@@ -160,6 +160,37 @@ namespace Logonaut.UI.Tests.ViewModels
             StringAssert.Contains(combined, "Next search executed.", "VisibleLogLines should contain the next search message.");
         }
 
+        [TestMethod]
+        public void BeginEditCommand_ShouldSetIsEditingToTrue()
+        {
+            // Arrange
+            var filter = new SubstringFilter("Test");
+            var viewModel = new FilterViewModel(filter);
+
+            // Act
+            viewModel.BeginEditCommand.Execute(null);
+
+            // Assert
+            Assert.IsTrue(viewModel.IsEditing, "IsEditing should be true after BeginEditCommand is executed.");
+            Assert.IsFalse(viewModel.IsNotEditing, "IsNotEditing should be false after BeginEditCommand is executed.");
+        }
+
+        [TestMethod]
+        public void EndEditCommand_ShouldSetIsEditingToFalse()
+        {
+            // Arrange
+            var filter = new SubstringFilter("Test");
+            var viewModel = new FilterViewModel(filter);
+            viewModel.BeginEditCommand.Execute(null); // Ensure it is in editing mode
+
+            // Act
+            viewModel.EndEditCommand.Execute(null);
+
+            // Assert
+            Assert.IsFalse(viewModel.IsEditing, "IsEditing should be false after EndEditCommand is executed.");
+            Assert.IsTrue(viewModel.IsNotEditing, "IsNotEditing should be true after EndEditCommand is executed.");
+        }
+
 #if false
         // TODO: Need a mock for ThemeViewModel
         [TestMethod]
