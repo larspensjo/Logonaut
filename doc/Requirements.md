@@ -42,3 +42,4 @@ I have the following requirements:
 * When a filter is added and the current filter isn't empty, the new filter shall be added to the selected filter. For example, add another sub-filter to an AndFilter.
 * When the user clicks on "Remove filter", the currently selected filter shall be removed. This can leave the top filter empty.
 * I want several buttons to add filters. One button for each filter type: SubString, AndFilter, OrFilter, NegationFilter.
+* When a SubstringFilter is added, it shall automatically receive input focus.
