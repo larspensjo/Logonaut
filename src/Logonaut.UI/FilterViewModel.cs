@@ -21,7 +21,10 @@ namespace Logonaut.UI.ViewModels
         private bool isSelected;
 
         [ObservableProperty]
-        private bool isEditing = true;
+        private bool isEditing = false;
+
+        [ObservableProperty]
+        private bool isNotEditing = true;
 
         public FilterViewModel(IFilter filter, FilterViewModel? parent = null)
         {
@@ -33,6 +36,12 @@ namespace Logonaut.UI.ViewModels
                 {
                     Children.Add(new FilterViewModel(child, this));
                 }
+            }
+
+            if (filter is SubstringFilter)
+            {
+                IsEditing = true;
+                IsNotEditing = false;
             }
         }
 
@@ -74,10 +83,10 @@ namespace Logonaut.UI.ViewModels
         // Read-only display text. See also FilterText, used when editing.
         public string DisplayText => FilterModel switch
         {
-            SubstringFilter s => $"Substring: {s.Substring}",
-            AndFilter _ => "AND",
-            OrFilter _ => "OR",
-            NegationFilter _ => "NOT",
+            SubstringFilter s => $"\"{s.Substring}\"",
+            AndFilter _ => "&&",
+            OrFilter _ => "||",
+            NegationFilter _ => "!",
             _ => "Filter"
         };
 
@@ -102,6 +111,7 @@ namespace Logonaut.UI.ViewModels
         private void BeginEdit()
         {
             IsEditing = true;
+            IsNotEditing = false;
         }
 
         // Command to end inline editing.
@@ -109,6 +119,7 @@ namespace Logonaut.UI.ViewModels
         private void EndEdit()
         {
             IsEditing = false;
+            IsNotEditing = true;
         }
     }
 }

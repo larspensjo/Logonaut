@@ -12,8 +12,8 @@
         <Grid>
             <!-- When not editing, show a TextBlock -->
             <TextBlock Text="{Binding DisplayText}"
-                    Background="Transparent"
-                    Visibility="{Binding IsEditing, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=False}">
+                    Background="red"
+                    Visibility="{Binding IsNotEditing, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <i:Interaction.Triggers>
                     <!-- On double-click, trigger BeginEditCommand -->
                     <i:EventTrigger EventName="MouseDoubleClick">
@@ -23,6 +23,7 @@
             </TextBlock>
             <!-- When editing, show a TextBox -->
             <TextBox Text="{Binding FilterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                    Background="yellow"
                     Visibility="{Binding IsEditing, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <i:Interaction.Triggers>
                     <!-- When the TextBox loses focus, trigger EndEditCommand -->
@@ -33,7 +34,7 @@
             </TextBox>
         </Grid>
     </DataTemplate>
-    
+
     <!-- Similarly, for AndFilter: -->
     <DataTemplate x:Key="AndFilterTemplate" DataType="{x:Type filters:AndFilter}">
         <StackPanel Orientation="Horizontal">
