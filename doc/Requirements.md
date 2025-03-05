@@ -26,7 +26,7 @@ Logonaut is a Windows application written in C#. It functions as a log viewer, r
 ### 3.1 Theming & Appearance
 - The application shall support an optional dark theme.
 - The display shall have a modern, visually appealing style.
-- The UI shall be designed in a flexible manner, allowing future style changes without requiring manual layout modifications.
+- The UI shall also be designed flexibly, allowing future style changes with minimal manual adjustments.
 
 ### 3.2 Window Management
 - The application shall support dynamic window resizing by the user.
@@ -38,10 +38,10 @@ Logonaut is a Windows application written in C#. It functions as a log viewer, r
 - Filters shall support negation (excluding lines that contain certain text).
 - Filters shall support AND and OR combinations (e.g., find all lines containing A and B, or all lines containing A or B).
 - Filters shall be structured hierarchically to allow complex conditions (e.g., (A or (B and not C))).
-- It shall be possible to set a line number context (default: 0), allowing display of a specified number of lines before and after each match.
+- Users shall be able to set a global line number context (default: 0) to include a specified number of lines before and after each match.
 - The text used for filtering shall be visibly marked in the output, such as with a colored background or changed font.
 - Each filter shall be individually enabled or disabled without needing to be removed.
-- Filtered output shall update dynamically and in real-time, but with an optimized polling interval to prevent excessive updates.
+- Filtered output shall update dynamically. To avoid excessive updates, an adjustable polling period shall be used when necessary.
 - Whenever filters are changed, the filtered output shall update automatically.
 - The user shall be able to save filter settings with the configuration, storing them under named filter trees for easy retrieval.
 
