@@ -16,8 +16,8 @@
                     Background="red"
                     Visibility="{Binding IsNotEditing, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <i:Interaction.Triggers>
-                    <!-- Should be double-click, trigger BeginEditCommand -->
-                    <i:EventTrigger EventName="MouseLeftButtonDown">
+                    <!-- Change to MouseLeftButtonUp to prevent immediate focus loss -->
+                    <i:EventTrigger EventName="MouseLeftButtonUp">
                         <i:InvokeCommandAction Command="{Binding BeginEditCommand}" />
                     </i:EventTrigger>
                 </i:Interaction.Triggers>
