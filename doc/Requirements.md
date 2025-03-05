@@ -7,20 +7,25 @@ Logonaut is a Windows application written in C#. It functions as a log viewer, r
 - The log file is a continuous process, which may go on for hours.
 - The application shall use a configuration that is loaded at startup and saved at shutdown to remember user settings.
 - The log file can be very large (hundreds of megabytes), so text updating and filtering must be efficient.
+- If the log file becomes unavailable, the application shall handle it gracefully.
 
 ## 2. Core Functionality
 ### 2.1 Log File Handling
 - The application shall provide a menu where the user can select which log file to monitor.
 - It shall be possible to scroll up and down the filtered output.
+- If a log file is reset, the application shall notify the user and start a new tab.
 
 ### 2.2 Display Requirements
 - The log output shall be continuously updated in real-time.
 - There shall be some kind of indication showing how much of the log output is currently included in the display.
 - Many log files have a prefix in the format of a date or time. The application shall detect this prefix and visibly mark it for better readability.
+- The user shall be able to adjust the font size and color scheme for better readability.
 
 ### 2.3 User Interaction
 - The application shall support a free-text search function where the user enters a string, which is then highlighted in the output.
 - There shall be buttons to navigate up and down through the search results.
+- The user shall be able to jump to a specific line number within the log file.
+- The application shall support keyboard shortcuts for common actions (e.g., Ctrl+F for search, PgUp/PgDn for scrolling, Ctrl+G for jumping to a specific line).
 
 ## 3. User Interface & Experience
 ### 3.1 Theming & Appearance
@@ -30,6 +35,7 @@ Logonaut is a Windows application written in C#. It functions as a log viewer, r
 
 ### 3.2 Window Management
 - The application shall support dynamic window resizing by the user.
+- The application shall support opening multiple log files in separate tabs or windows.
 
 ## 4. Filtering System
 ### 4.1 Filter Functionality
@@ -44,9 +50,11 @@ Logonaut is a Windows application written in C#. It functions as a log viewer, r
 - Filtered output shall update dynamically. To avoid excessive updates, an adjustable polling period shall be used when necessary.
 - Whenever filters are changed, the filtered output shall update automatically.
 - The user shall be able to save filter settings with the configuration, storing them under named filter trees for easy retrieval.
+- The user shall be able to filter logs based on timestamps (e.g., show logs between 12:00-14:00 or last 10 minutes).
 
 ### 4.2 Filter Performance
 - Filtering must be efficient, given that log files can be very large.
+- If filtering is slow on large files, the application shall provide a progress indicator. The progress indicator should be the mouse pointer itself, but rather some live updated spinning wheel in the application window.
 
 ## 5. Filter Controls & UI
 ### 5.1 Filter Tree View
@@ -67,7 +75,18 @@ Logonaut is a Windows application written in C#. It functions as a log viewer, r
   - NegationFilter
 - When a SubstringFilter is added, it shall automatically receive input focus.
 
-## 6. Configuration & Persistence
+## 6. Advanced Search & Exporting
+- The user shall be able to save frequently used search queries.
+- The application shall maintain a search history for quick re-use.
+- The filtered log output shall be exportable to a new file in multiple formats (plain text, JSON, CSV).
+
+## 7. Performance & Optimization
+- The application shall use multi-threading for reading log files and applying filters to maintain UI responsiveness.
+- Search performance shall be optimized by indexing large log files in memory where feasible.
+- The application shall allow adjusting update frequency for performance tuning.
+
+## 9. Configuration & Persistence
 - The application shall load user settings from a configuration file at startup.
 - Configuration shall include saved filter trees with unique names.
 - Settings shall be saved when the application shuts down.
+- The last viewed position in the log file shall be saved so that the user can resume from where they left off.
