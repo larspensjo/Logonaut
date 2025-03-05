@@ -79,22 +79,22 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <!-- Log Display using ListView with virtualization -->
+                <!-- Log Display using AvalonEdit with syntax highlighting -->
                 <Border Style="{StaticResource CardPanelStyle}">
-                    <ListView Grid.Row="0"
-                            ItemsSource="{Binding VisibleLogLines}"
-                            Background="{DynamicResource WindowBackgroundBrush}"
-                            Foreground="{DynamicResource TextForegroundBrush}"
-                            FontFamily="Consolas"
-                            VirtualizingPanel.IsVirtualizing="True"
-                            VirtualizingPanel.VirtualizationMode="Recycling">
-                        <ListView.ItemContainerStyle>
-                            <Style TargetType="ListViewItem">
-                                <Setter Property="Padding" Value="2"/>
-                                <Setter Property="Margin" Value="0"/>
-                            </Style>
-                        </ListView.ItemContainerStyle>
-                    </ListView>
+                    <avalonEdit:TextEditor 
+                        Grid.Row="0"
+                        Name="LogTextEditor"
+                        FontFamily="Consolas"
+                        FontSize="12"
+                        SyntaxHighlighting="Log"
+                        ShowLineNumbers="True"
+                        IsReadOnly="True"
+                        WordWrap="True"
+                        Background="{DynamicResource WindowBackgroundBrush}"
+                        Foreground="{DynamicResource TextForegroundBrush}"
+                        helpers:AvalonEditHelper.BindableText="{Binding LogText}"
+                        helpers:AvalonEditHelper.EnableTextBinding="True">
+                    </avalonEdit:TextEditor>
                 </Border>
 
                 <!-- Search Panel -->

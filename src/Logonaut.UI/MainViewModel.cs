@@ -13,11 +13,16 @@ namespace Logonaut.UI.ViewModels
     {
         public ThemeViewModel Theme { get; } = new();
 
-        // The complete log text.
+        // The complete log text. This will only be used as an input to the filter task.
         public LogDocument LogDoc { get; } = new();
 
-        // The visible log text, filtered by the selected filters.
+        // The filtered text. It will be used as an input to the LogText, used by Avalon.
+        // TODO: Rename VisibleLogLines to FilteredLogLines.
         public ObservableCollection<string> VisibleLogLines { get; } = new();
+
+        // Property for binding to AvalonEdit
+        [ObservableProperty]
+        private string logText = string.Empty;
 
         [ObservableProperty]
         private string searchText = "";
@@ -44,8 +49,16 @@ namespace Logonaut.UI.ViewModels
             LogTailerManager.Instance.LogLines.Subscribe(line =>
             {
                 LogDoc.AppendLine(line);
+                // No need to update LogText here, it will be updated by the background filtering task
             });
             StartBackgroundFiltering();
+        }
+
+        // Method to update the LogText property from the filtered log lines
+        private void UpdateLogText()
+        {
+            // Always use the filtered content from VisibleLogLines
+            LogText = string.Join(Environment.NewLine, VisibleLogLines);
         }
 
         // Separate commands for adding different types of filters.
@@ -188,6 +201,9 @@ namespace Logonaut.UI.ViewModels
                         {
                             VisibleLogLines.Add(line);
                         }
+                        
+                        // Update the LogText property after filtering
+                        UpdateLogText();
                     });
 
                     // Wait a bit before next update (throttling)
