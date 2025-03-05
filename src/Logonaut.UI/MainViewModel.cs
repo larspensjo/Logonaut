@@ -117,6 +117,20 @@ namespace Logonaut.UI.ViewModels
                 SelectedFilter.Parent.RemoveChild(SelectedFilter);
             }
         }
+        private bool CanToggleEdit() => SelectedFilter != null && SelectedFilter.IsEditable;
+
+        // TODO: Use CanToggleEdit conditionally to enable/disable the button.
+        [RelayCommand]
+        private void ToggleEdit()
+        {
+            if (SelectedFilter != null && SelectedFilter.IsEditable)
+            {
+                if (SelectedFilter.IsNotEditing)
+                    SelectedFilter.BeginEdit();
+                else
+                    SelectedFilter.EndEdit();
+            }
+        }
 
         // This is a hack to force 'CanExecute' to be run again.
         partial void OnSelectedFilterChanged(FilterViewModel? value)

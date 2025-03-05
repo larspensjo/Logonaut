@@ -26,6 +26,9 @@ namespace Logonaut.UI.ViewModels
         [ObservableProperty]
         private bool isNotEditing = true;
 
+         // Indicates whether this filter is editable (only SubstringFilter is editable).
+        public bool IsEditable => FilterModel is SubstringFilter;
+
         public FilterViewModel(IFilter filter, FilterViewModel? parent = null)
         {
             FilterModel = filter;
@@ -40,8 +43,7 @@ namespace Logonaut.UI.ViewModels
 
             if (filter is SubstringFilter)
             {
-                IsEditing = true;
-                IsNotEditing = false;
+                BeginEdit();
             }
         }
 
@@ -108,7 +110,7 @@ namespace Logonaut.UI.ViewModels
 
         // Command to begin inline editing.
         [RelayCommand]
-        private void BeginEdit()
+        public void BeginEdit()
         {
             IsEditing = true;
             IsNotEditing = false;
@@ -116,7 +118,7 @@ namespace Logonaut.UI.ViewModels
 
         // Command to end inline editing.
         [RelayCommand]
-        private void EndEdit()
+        public void EndEdit()
         {
             IsEditing = false;
             IsNotEditing = true;

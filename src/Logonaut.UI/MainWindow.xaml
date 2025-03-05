@@ -61,6 +61,7 @@
                     </StackPanel>
 
                     <!-- Button for removing the selected filter -->
+                    <Button Content="Edit" Command="{Binding ToggleEditCommand}" Margin="0,10,0,0"/>
                     <Button Content="Remove" Command="{Binding RemoveFilterCommand}" Margin="0,10,0,0"/>
                 </StackPanel>
             </Border>
