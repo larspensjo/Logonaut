@@ -16,7 +16,7 @@
                     Background="red"
                     Visibility="{Binding IsNotEditing, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <i:Interaction.Triggers>
-                    <!-- Change to MouseLeftButtonUp to prevent immediate focus loss -->
+                    <!-- Should be double-click, trigger BeginEditCommand -->
                     <i:EventTrigger EventName="MouseLeftButtonUp">
                         <i:InvokeCommandAction Command="{Binding BeginEditCommand}" />
                     </i:EventTrigger>
@@ -33,6 +33,10 @@
                         <i:InvokeCommandAction Command="{Binding EndEditCommand}" />
                     </i:EventTrigger>
                 </i:Interaction.Triggers>
+                <TextBox.InputBindings>
+                    <!-- Bind Enter key to EndEditCommand -->
+                    <KeyBinding Key="Enter" Command="{Binding EndEditCommand}" />
+                </TextBox.InputBindings>
             </TextBox>
         </Grid>
     </DataTemplate>
