@@ -216,6 +216,10 @@ namespace Logonaut.UI.ViewModels
         {
             _cts?.Cancel();
         }
+
+        [ObservableProperty]
+        private bool showLineNumbers = true;
+
     }
 
     // A neutral filter that always returns true.

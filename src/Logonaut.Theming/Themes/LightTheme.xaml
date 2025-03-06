@@ -236,4 +236,18 @@
         <Setter Property="Background" Value="{StaticResource WindowBackgroundBrush}"/>
         <Setter Property="Foreground" Value="{StaticResource TextForegroundBrush}"/>
     </Style>
+
+    <Style x:Key="ToggleButtonStyle" TargetType="ToggleButton">
+        <Setter Property="Padding" Value="8,4"/>
+        <Setter Property="Margin" Value="3"/>
+        <Setter Property="Background" Value="{StaticResource ButtonBackgroundBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource ButtonForegroundBrush}"/>
+        <Style.Triggers>
+            <Trigger Property="IsChecked" Value="True">
+                <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+                <Setter Property="Foreground" Value="White"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
 </ResourceDictionary>
