@@ -136,9 +136,9 @@ namespace Logonaut.UI.Helpers
             definition.AddCommonTimestampPatterns();
 
             // Add custom patterns for log levels
-            definition.AddRule(@"\bERROR\b|\bFAILED\b|\bEXCEPTION\b", "error");
-            definition.AddRule(@"\bWARN\b|\bWARNING\b", "warning");
-            definition.AddRule(@"\bINFO\b|\bINFORMATION\b", "info");
+            definition.AddRule(@"\bERROR\b|\bFAILED\b|\bEXCEPTION\b", "error", true);
+            definition.AddRule(@"\bWARN\b|\bWARNING\b", "warning", true);
+            definition.AddRule(@"\bINFO\b|\bINFORMATION\b", "info", true);
 
             _timestampHighlightingDefinition = definition;
             
