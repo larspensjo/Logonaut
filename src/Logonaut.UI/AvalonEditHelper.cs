@@ -128,42 +128,9 @@ namespace Logonaut.UI.Helpers
             }
         }
         private static IHighlightingDefinition? _timestampHighlightingDefinition;
-        private static IHighlightingDefinition LoadHighlightingDefinitionFromResource(string resourcePath)
-        {
-            var filePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "TimestampHighlighting.xshd");
-            if (!File.Exists(filePath))
-                throw new FileNotFoundException($"Highlighting file not found: {filePath}");
-
-            using (Stream s = File.OpenRead(filePath))
-            {
-                using (XmlReader reader = new XmlTextReader(s))
-                {
-                    // First load the XSHD document
-                    var xshd = HighlightingLoader.LoadXshd(reader);
-                    
-                    // Then convert it to a highlighting definition
-                    var highlighting = HighlightingLoader.Load(xshd, HighlightingManager.Instance);
-                    return highlighting;
-                }
-            }
-        }
 
         private static void ApplyTimestampHighlighting(TextEditor editor)
         {
-            // Load the highlighting definition from resource if not already loaded
-            if (_timestampHighlightingDefinition == null)
-            {
-                try
-                {
-                    _timestampHighlightingDefinition = LoadHighlightingDefinitionFromResource("Resources/TimestampHighlighting.xshd");
-                }
-                catch (Exception ex)
-                {
-                    // TODO: Log or handle the exception as appropriate for your application
-                    Console.WriteLine($"Failed to load timestamp highlighting: {ex.Message}");
-                    return;
-                }
-            }
             // Create a simple highlighting definition programmatically
             IHighlightingDefinition definition = new CustomHighlightingDefinition();
             
@@ -192,22 +159,124 @@ namespace Logonaut.UI.Helpers
 
     public class CustomHighlightingDefinition : IHighlightingDefinition
     {
-        public string Name => "TimestampHighlighting";
-        public HighlightingRuleSet MainRuleSet { get; } = new HighlightingRuleSet();
+        public string Name => "DynamicHighlighting";
+        public HighlightingRuleSet MainRuleSet { get; } = new();
         
+        // Default text color if no highlighting is applied
         public HighlightingColor DefaultTextColor { get; set; } = new HighlightingColor 
         { 
-            Foreground = new SimpleHighlightingBrush(Colors.Red) 
+            Foreground = new SimpleHighlightingBrush(Colors.Black) 
         };
 
-        public IEnumerable<HighlightingColor> NamedHighlightingColors => 
-            new[] { DefaultTextColor };
+        // Collection of named colors that can be referenced
+        private Dictionary<string, HighlightingColor> _namedColors = new();
+        
+        // Properties dictionary for additional configuration
+        private Dictionary<string, string> _properties = new();
 
-        public IDictionary<string, string> Properties => 
-            new Dictionary<string, string>();
+        public IEnumerable<HighlightingColor> NamedHighlightingColors => _namedColors.Values;
 
+        public IDictionary<string, string> Properties => _properties;
+
+        public CustomHighlightingDefinition()
+        {
+            // Initialize with some default named colors
+            _namedColors["timestamp"] = new HighlightingColor 
+            { 
+                Foreground = new SimpleHighlightingBrush(Colors.DarkBlue),
+                FontWeight = FontWeights.Bold
+            };
+            
+            _namedColors["error"] = new HighlightingColor 
+            { 
+                Foreground = new SimpleHighlightingBrush(Colors.Red),
+                FontWeight = FontWeights.Bold
+            };
+            
+            _namedColors["warning"] = new HighlightingColor 
+            { 
+                Foreground = new SimpleHighlightingBrush(Colors.Orange)
+            };
+            
+            _namedColors["info"] = new HighlightingColor 
+            { 
+                Foreground = new SimpleHighlightingBrush(Colors.Green)
+            };
+        }
+
+        // Add a highlighting rule with a specific pattern and color
+        public void AddRule(string pattern, string colorName, bool isCaseSensitive = false)
+        {
+            if (!_namedColors.ContainsKey(colorName))
+                throw new ArgumentException($"Color name '{colorName}' is not defined");
+
+            var rule = new HighlightingRule
+            {
+                Color = _namedColors[colorName],
+                Regex = new Regex(pattern, isCaseSensitive ? RegexOptions.None : RegexOptions.IgnoreCase)
+            };
+            
+            MainRuleSet.Rules.Add(rule);
+        }
+
+        // Add a timestamp pattern with the timestamp color
+        public void AddTimestampPattern(string pattern)
+        {
+            AddRule(pattern, "timestamp");
+        }
+
+        // Add common timestamp patterns
+        public void AddCommonTimestampPatterns()
+        {
+            // ISO 8601 date/time format: 2023-10-15T14:30:15
+            AddTimestampPattern(@"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}");
+            
+            // Common log timestamp: [2023-10-15 14:30:15]
+            AddTimestampPattern(@"^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\]");
+            
+            // Simple time format: 14:30:15
+            AddTimestampPattern(@"^\d{2}:\d{2}:\d{2}");
+            
+            // Date with time: 2023/10/15 14:30:15
+            AddTimestampPattern(@"^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}");
+        }
+
+        // Add a custom color definition
+        public void AddNamedColor(string name, Color foreground, Color? background = null, 
+                                FontWeight? fontWeight = null, FontStyle? fontStyle = null)
+        {
+            var color = new HighlightingColor
+            {
+                Foreground = new SimpleHighlightingBrush(foreground)
+            };
+            
+            if (background.HasValue)
+                color.Background = new SimpleHighlightingBrush(background.Value);
+                
+            if (fontWeight.HasValue)
+                color.FontWeight = fontWeight.Value;
+                
+            if (fontStyle.HasValue)
+                color.FontStyle = fontStyle.Value;
+                
+            _namedColors[name] = color;
+        }
+
+        // Clear all rules
+        public void ClearRules()
+        {
+            MainRuleSet.Rules.Clear();
+        }
+
+        // Implementation of IHighlightingDefinition interface methods
         public HighlightingRuleSet? GetNamedRuleSet(string name) => null;
-        public HighlightingColor? GetNamedColor(string name) => null;
+        
+        public HighlightingColor? GetNamedColor(string name)
+        {
+            if (_namedColors.TryGetValue(name, out var color))
+                return color;
+            return null;
+        }
     }
 
 }

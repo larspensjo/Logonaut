@@ -23,9 +23,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="Resources/TimestampHighlighting.xshd">
+    <!--None Update="Resources/TimestampHighlighting.xshd">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
+    </None-->
   </ItemGroup>
 
 </Project>

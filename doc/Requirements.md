@@ -27,6 +27,15 @@ Logonaut is a Windows application written in C#. It functions as a log viewer, r
 - The user shall be able to jump to a specific line number within the log file.
 - The application shall support keyboard shortcuts for common actions (e.g., Ctrl+F for search, PgUp/PgDn for scrolling, Ctrl+G for jumping to a specific line).
 
+### 2.4 Syntax Highlighting
+- The application shall support customizable syntax highlighting for log files.
+- Users shall be able to define patterns for timestamps, error messages, warnings, and other log elements.
+- Each pattern shall be associated with a specific color, font weight, and style.
+- The application shall provide a UI for users to add, edit, and remove highlighting rules.
+- Highlighting configurations shall be saved with the application settings.
+- The application shall include predefined highlighting configurations for common log formats.
+- Highlighting shall update in real-time as configurations change.
+
 ## 3. User Interface & Experience
 ### 3.1 Theming & Appearance
 - The application shall support an optional dark theme.
