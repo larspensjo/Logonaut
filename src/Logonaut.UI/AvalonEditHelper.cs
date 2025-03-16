@@ -132,18 +132,15 @@ namespace Logonaut.UI.Helpers
         private static void ApplyTimestampHighlighting(TextEditor editor)
         {
             // Create a simple highlighting definition programmatically
-            IHighlightingDefinition definition = new CustomHighlightingDefinition();
-            
-            // Add a simple rule
-            HighlightingRule rule = new HighlightingRule();
-            rule.Color = new HighlightingColor { Foreground = new SimpleHighlightingBrush(Colors.Red) };
-            rule.Regex = new Regex(".+"); // Match everything
-            
-            definition.MainRuleSet.Rules.Add(rule);
-#if true
-            // Overwrite with a debug highlighter.
+            CustomHighlightingDefinition definition = new();
+            definition.AddCommonTimestampPatterns();
+
+            // Add custom patterns for log levels
+            definition.AddRule(@"\bERROR\b|\bFAILED\b|\bEXCEPTION\b", "error");
+            definition.AddRule(@"\bWARN\b|\bWARNING\b", "warning");
+            definition.AddRule(@"\bINFO\b|\bINFORMATION\b", "info");
+
             _timestampHighlightingDefinition = definition;
-#endif
             
             // Apply the highlighting definition to the editor
             editor.SyntaxHighlighting = _timestampHighlightingDefinition;
