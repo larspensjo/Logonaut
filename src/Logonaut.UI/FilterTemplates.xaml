@@ -5,7 +5,7 @@
                     xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
                     xmlns:helpers="clr-namespace:Logonaut.UI.Helpers">
 
-    <!-- This should be moved to a shared resource dictionary to reuse it across multiple dictionaries or controls -->
+    <!-- TODO: This should be moved to the Resources folder -->
     <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
     <!-- Optionally, override templates per filter type using DataTriggers or separate templates.
          For example, for SubstringFilter: -->

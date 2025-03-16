@@ -1,4 +1,4 @@
-<Window x:Class="Logonaut.UI.MainWindow"
+﻿<Window x:Class="Logonaut.UI.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:avalonEdit="http://icsharpcode.net/sharpdevelop/avalonedit"
@@ -87,6 +87,10 @@
                                 IsChecked="{Binding ShowLineNumbers}" 
                                 Style="{StaticResource ToggleButtonStyle}"
                                 ToolTip="Show or hide line numbers"/>
+                    <ToggleButton Content="Highlight Timestamps" 
+                                IsChecked="{Binding HighlightTimestamps}" 
+                                Style="{StaticResource ToggleButtonStyle}"
+                                ToolTip="Highlight timestamp patterns in log entries"/>
                 </StackPanel>
 
                 <!-- Log Display using AvalonEdit with syntax highlighting -->

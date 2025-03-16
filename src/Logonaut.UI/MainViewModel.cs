@@ -220,6 +220,8 @@ namespace Logonaut.UI.ViewModels
         [ObservableProperty]
         private bool showLineNumbers = true;
 
+        [ObservableProperty]
+        private bool highlightTimestamps = true;
     }
 
     // A neutral filter that always returns true.

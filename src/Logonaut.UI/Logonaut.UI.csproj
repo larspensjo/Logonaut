@@ -22,4 +22,10 @@
     <ProjectReference Include="..\Logonaut.Core\Logonaut.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="Resources/TimestampHighlighting.xshd">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>
