@@ -104,7 +104,21 @@ namespace Logonaut.UI.ViewModels
                     s.Substring = value;
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(DisplayText));
+                    // Notify that filter text has changed to update highlighting
+                    NotifyFilterTextChanged();
                 }
+            }
+        }
+
+        // Method to propagate filter text changes up to MainViewModel
+        private void NotifyFilterTextChanged()
+        {
+            // Find the root MainViewModel
+            if (App.Current.MainWindow?.DataContext is MainViewModel mainViewModel)
+            {
+                // Update filter substrings for highlighting
+                // Use the command property instead of the method
+                mainViewModel.UpdateFilterSubstringsCommand.Execute(null);
             }
         }
 
@@ -122,6 +136,9 @@ namespace Logonaut.UI.ViewModels
         {
             IsEditing = false;
             IsNotEditing = true;
+    
+            // Notify that filter text has changed to update highlighting
+            NotifyFilterTextChanged();
         }
     }
 }
