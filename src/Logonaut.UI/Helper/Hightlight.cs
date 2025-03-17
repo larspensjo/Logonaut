@@ -28,6 +28,9 @@ namespace Logonaut.UI.Helpers
         
         // Properties dictionary for additional configuration
         private Dictionary<string, string> _properties = new();
+        
+        // Track filter-based highlighting rules separately
+        private List<HighlightingRule> _filterHighlightingRules = new();
 
         public IEnumerable<HighlightingColor> NamedHighlightingColors => _namedColors.Values;
 
@@ -56,6 +59,13 @@ namespace Logonaut.UI.Helpers
             _namedColors["info"] = new HighlightingColor 
             { 
                 Foreground = new SimpleHighlightingBrush(Colors.Green)
+            };
+            
+            // Add a special color for filter matches
+            _namedColors["filter"] = new HighlightingColor 
+            { 
+                Background = new SimpleHighlightingBrush(Colors.Yellow),
+                Foreground = new SimpleHighlightingBrush(Colors.Black)
             };
         }
 
@@ -122,6 +132,40 @@ namespace Logonaut.UI.Helpers
         {
             MainRuleSet.Rules.Clear();
         }
+        
+        // Update filter-based highlighting with a new set of substrings
+        // TODO: Instead of clearing old rules, make new ones. This function isn't needed.
+        public void UpdateFilterHighlighting(IEnumerable<string> filterSubstrings)
+        {
+            // Remove all existing filter highlighting rules
+            foreach (var rule in _filterHighlightingRules)
+            {
+                MainRuleSet.Rules.Remove(rule);
+            }
+            _filterHighlightingRules.Clear();
+            
+            // Add new rules for each filter substring
+            foreach (var substring in filterSubstrings)
+            {
+                AddFilterSubstringHighlighting(substring);
+            }
+        
+            // Add highlighting for a filter substring
+            void AddFilterSubstringHighlighting(string substring)
+            {
+                // Escape special regex characters in the substring
+                string escapedSubstring = Regex.Escape(substring);
+                
+                var rule = new HighlightingRule
+                {
+                    Color = _namedColors["filter"],
+                    Regex = new Regex(escapedSubstring, RegexOptions.IgnoreCase)
+                };
+                
+                _filterHighlightingRules.Add(rule);
+                MainRuleSet.Rules.Add(rule);
+            }
+        }
 
         // Implementation of IHighlightingDefinition interface methods
         public HighlightingRuleSet? GetNamedRuleSet(string name) => null;
@@ -133,5 +177,4 @@ namespace Logonaut.UI.Helpers
             return null;
         }
     }
-
 }
