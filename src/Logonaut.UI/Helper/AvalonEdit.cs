@@ -12,11 +12,13 @@ using System.Xml;
 
 namespace Logonaut.UI.Helpers
 {
+    // The binding in MainWindow.xaml connects the view model to the AvalonEditHelper
+    
     public static class AvalonEditHelper
     {
         public static readonly DependencyProperty BindableTextProperty =
             DependencyProperty.RegisterAttached(
-                "BindableText",
+                "BindableText", // Connected through XAML helpers:AvalonEditHelper.BindableText
                 typeof(string),
                 typeof(AvalonEditHelper),
                 new FrameworkPropertyMetadata(string.Empty, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault, OnBindableTextChanged));
@@ -47,7 +49,7 @@ namespace Logonaut.UI.Helpers
         // Optional: If you want two-way binding, subscribe to the TextChanged event.
         public static readonly DependencyProperty EnableTextBindingProperty =
             DependencyProperty.RegisterAttached(
-                "EnableTextBinding",
+                "EnableTextBinding", // Connected through XAML helpers:AvalonEditHelper.EnableTextBinding
                 typeof(bool),
                 typeof(AvalonEditHelper),
                 new PropertyMetadata(false, OnEnableTextBindingChanged));
@@ -85,12 +87,41 @@ namespace Logonaut.UI.Helpers
                 SetBindableText(editor, editor.Text);
             }
         }
+
+        // Support filter strings for log highlighting
+        // ===========================================
+        public static readonly DependencyProperty FilterSubstringsProperty =
+            DependencyProperty.RegisterAttached(
+                "FilterSubstrings", // Connected through XAML helpers:AvalonEditHelper.FilterSubstrings
+                typeof(IEnumerable<string>),
+                typeof(AvalonEditHelper),
+                new PropertyMetadata(null, OnFilterSubstringsChanged));
+
+        public static IEnumerable<string> GetFilterSubstrings(DependencyObject obj)
+        {
+            return (IEnumerable<string>)obj.GetValue(FilterSubstringsProperty);
+        }
+
+        public static void SetFilterSubstrings(DependencyObject obj, IEnumerable<string> value)
+        {
+            obj.SetValue(FilterSubstringsProperty, value);
+        }
+
+        private static void OnFilterSubstringsChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (d is TextEditor editor && _timestampHighlightingDefinition is CustomHighlightingDefinition customDef)
+            {
+                var substrings = e.NewValue as IEnumerable<string> ?? Array.Empty<string>();
+                customDef.UpdateFilterHighlighting(substrings);
+                editor.TextArea.TextView.Redraw();
+            }
+        }
         
         // Support Timestamp Highlighting
         // ==============================
         public static readonly DependencyProperty HighlightTimestampsProperty =
             DependencyProperty.RegisterAttached(
-                "HighlightTimestamps",
+                "HighlightTimestamps", // Connected through XAML helpers:AvalonEditHelper.HighlightTimestamps
                 typeof(bool),
                 typeof(AvalonEditHelper),
                 new PropertyMetadata(false, OnHighlightTimestampsChanged));
@@ -116,7 +147,7 @@ namespace Logonaut.UI.Helpers
                 {
                     // Apply custom highlighting for timestamps
                     editor.IsReadOnly = false;
-                    ApplyTimestampHighlighting(editor);
+                    ApplyAllHighlighting(editor);
                     editor.TextArea.TextView.Redraw(); // Force redraw to apply highlighting
                 }
                 else
@@ -129,7 +160,7 @@ namespace Logonaut.UI.Helpers
         }
         private static IHighlightingDefinition? _timestampHighlightingDefinition;
 
-        private static void ApplyTimestampHighlighting(TextEditor editor)
+        private static void ApplyAllHighlighting(TextEditor editor)
         {
             // Create a simple highlighting definition programmatically
             CustomHighlightingDefinition definition = new();
@@ -139,6 +170,13 @@ namespace Logonaut.UI.Helpers
             definition.AddRule(@"\bERROR\b|\bFAILED\b|\bEXCEPTION\b", "error", true);
             definition.AddRule(@"\bWARN\b|\bWARNING\b", "warning", true);
             definition.AddRule(@"\bINFO\b|\bINFORMATION\b", "info", true);
+
+            // Apply any existing filter substrings
+            var substrings = GetFilterSubstrings(editor);
+            if (substrings != null)
+            {
+                definition.UpdateFilterHighlighting(substrings);
+            }
 
             _timestampHighlightingDefinition = definition;
             
