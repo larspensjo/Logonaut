@@ -107,6 +107,7 @@
                         Foreground="{DynamicResource TextForegroundBrush}"
                         helpers:AvalonEditHelper.BindableText="{Binding LogText}"
                         helpers:AvalonEditHelper.EnableTextBinding="True"
+                        helpers:AvalonEditHelper.FilterSubstrings="{Binding FilterSubstrings}"
                         helpers:AvalonEditHelper.HighlightTimestamps="{Binding HighlightTimestamps}">
                     </avalonEdit:TextEditor>
                 </Border>
