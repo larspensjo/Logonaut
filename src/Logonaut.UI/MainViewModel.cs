@@ -108,7 +108,6 @@ namespace Logonaut.UI.ViewModels
                     // Popup an error message
                     System.Windows.MessageBox.Show("Selected filter is not a composite filter.", "Error", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
                 }
-                // TODO: handle cases where the selected filter isn't composite.
             }
         }
 
@@ -129,6 +128,7 @@ namespace Logonaut.UI.ViewModels
                 // Removing a child filter.
                 SelectedFilter.Parent.RemoveChild(SelectedFilter);
             }
+            UpdateFilterSubstrings();
         }
         private bool CanToggleEdit() => SelectedFilter != null && SelectedFilter.IsEditable;
 
@@ -222,6 +222,42 @@ namespace Logonaut.UI.ViewModels
 
         [ObservableProperty]
         private bool highlightTimestamps = true;
+        
+        [RelayCommand]
+        private void UpdateFilterSubstrings()
+        {
+            // Create a new collection instead of clearing the existing one
+            var newFilterSubstrings = new ObservableCollection<string>();
+
+            // Traverse the filter tree and collect substrings
+            if (FilterProfiles.Count > 0)
+            {
+                TraverseFilterTree(FilterProfiles[0]);
+            }
+
+            // Set the property to the new collection to trigger the dependency property change
+            FilterSubstrings = newFilterSubstrings;
+
+            void TraverseFilterTree(FilterViewModel filterViewModel)
+            {
+                if (filterViewModel.FilterModel is SubstringFilter substringFilter)
+                {
+                    newFilterSubstrings.Add(substringFilter.Substring);
+                }
+
+                foreach (var childFilter in filterViewModel.Children)
+                {
+                    TraverseFilterTree(childFilter);
+                }
+            }
+        }
+
+        private ObservableCollection<string> _filterSubstrings = new();
+        public ObservableCollection<string> FilterSubstrings
+        {
+            get => _filterSubstrings;
+            set => SetProperty(ref _filterSubstrings, value);
+        }
     }
 
     // A neutral filter that always returns true.
