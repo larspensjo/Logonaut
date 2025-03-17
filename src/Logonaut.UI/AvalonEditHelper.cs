@@ -236,6 +236,9 @@ namespace Logonaut.UI.Helpers
             
             // Date with time: 2023/10/15 14:30:15
             AddTimestampPattern(@"^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}");
+            
+            // Date with time: 2025-02-25 06:15:23
+            AddTimestampPattern(@"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}");
         }
 
         // Add a custom color definition
