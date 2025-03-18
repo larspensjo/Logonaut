@@ -86,9 +86,9 @@ namespace Logonaut.UI.ViewModels
         public string DisplayText => FilterModel switch
         {
             SubstringFilter s => $"\"{s.Substring}\"",
-            AndFilter _ => "&&",
-            OrFilter _ => "||",
-            NegationFilter _ => "!",
+            AndFilter _ => "∧",
+            OrFilter _ => "∨",
+            NegationFilter _ => "¬",
             _ => "Filter"
         };
 
