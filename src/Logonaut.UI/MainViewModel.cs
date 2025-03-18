@@ -242,7 +242,9 @@ namespace Logonaut.UI.ViewModels
             {
                 if (filterViewModel.FilterModel is SubstringFilter substringFilter)
                 {
-                    newFilterSubstrings.Add(substringFilter.Substring);
+                    // Ignore empty strings, they can't be used for highlighting
+                    if (substringFilter.Substring != "")
+                        newFilterSubstrings.Add(substringFilter.Substring);
                 }
 
                 foreach (var childFilter in filterViewModel.Children)
