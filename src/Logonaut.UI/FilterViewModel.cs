@@ -6,6 +6,7 @@ using Logonaut.Filters;
 namespace Logonaut.UI.ViewModels
 {
     // There will be one instance of this for every filter.
+    // TODO: Remove all hard coded dependency of filter type. Instead, ask the filter itself.
     public partial class FilterViewModel : ObservableObject
     {
         // The underlying filter model from Logonaut.Filters.
@@ -26,8 +27,9 @@ namespace Logonaut.UI.ViewModels
         [ObservableProperty]
         private bool isNotEditing = true;
 
-         // Indicates whether this filter is editable (only SubstringFilter is editable).
-        public bool IsEditable => FilterModel is SubstringFilter;
+        // Indicates whether this filter is editable (only SubstringFilter is editable).
+        // TODO: Ask the class instead.
+        public bool IsEditable => FilterModel is SubstringFilter || FilterModel is RegexFilter;
 
         public FilterViewModel(IFilter filter, FilterViewModel? parent = null)
         {
@@ -83,20 +85,39 @@ namespace Logonaut.UI.ViewModels
         }
 
         // Read-only display text. See also FilterText, used when editing.
+        // TODO: Ask the class itself
         public string DisplayText => FilterModel switch
         {
             SubstringFilter s => $"\"{s.Substring}\"",
+            RegexFilter r => $"/{r.Pattern}/",
             AndFilter _ => "∧",
             OrFilter _ => "∨",
             NegationFilter _ => "¬",
             _ => "Filter"
         };
 
+        // This is used by FilterTemplates.xaml.
+        // TODO: Ask the class itself
+        public string FilterType => FilterModel switch
+        {
+            SubstringFilter _ => "Substring",
+            RegexFilter _ => "Regex",
+            AndFilter _ => "AND",
+            OrFilter _ => "OR",
+            NegationFilter _ => "NOT",
+            _ => "Unknown"
+        };
+
         // A property that gets/sets the substring when the FilterModel is a SubstringFilter.
         // See also DisplayText, used when displaying the filter.
         public string FilterText
         {
-            get => FilterModel is SubstringFilter s ? s.Substring : string.Empty;
+            get => FilterModel switch
+            {
+                SubstringFilter s => s.Substring,
+                RegexFilter r => r.Pattern,
+                _ => string.Empty // TODO: This is shown when clicking on a composite filter. Should be fixed.
+            };
             set
             {
                 if (FilterModel is SubstringFilter s && s.Substring != value)
@@ -104,7 +125,13 @@ namespace Logonaut.UI.ViewModels
                     s.Substring = value;
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(DisplayText));
-                    // Notify that filter text has changed to update highlighting
+                    NotifyFilterTextChanged();
+                }
+                else if (FilterModel is RegexFilter r && r.Pattern != value)
+                {
+                    r.Pattern = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(DisplayText));
                     NotifyFilterTextChanged();
                 }
             }
