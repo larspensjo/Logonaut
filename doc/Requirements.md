@@ -49,7 +49,9 @@ Logonaut is a Windows application written in C#. It functions as a log viewer, r
 ## 4. Filtering System
 ### 4.1 Filter Functionality
 - The log viewer shall support filters that can be added or removed while the application is running.
-- Filters shall be based on substring text matching (not regex), tested against all positions in each line.
+- Filters shall support two types of text matching:
+  - Exact substring matching (testing against all positions in each line)
+  - Regular expression pattern matching for more complex filtering needs
 - Filters shall support negation (excluding lines that contain certain text).
 - Filters shall support AND and OR combinations (e.g., find all lines containing A and B, or all lines containing A or B).
 - Filters shall be structured hierarchically to allow complex conditions (e.g., (A or (B and not C))).
@@ -69,6 +71,7 @@ Logonaut is a Windows application written in C#. It functions as a log viewer, r
 ### 5.1 Filter Tree View
 - Filters shall be presented in a tree-like structure, making it easy for users to expand, collapse, and navigate.
 - The filter control shall be located in a separate panel, possibly on the left side, with log output on the right.
+- Different filter types shall be visually distinguishable (e.g., using different colors or icons).
 
 ### 5.2 Filter Operations
 - The application shall provide controls to add, remove, and rearrange filters within the tree structure.
@@ -78,11 +81,13 @@ Logonaut is a Windows application written in C#. It functions as a log viewer, r
 - If filters already exist, the user must select where the new filter should be placed in the hierarchy.
 - If a filter is removed, its children are also removed unless rearranged.
 - Several buttons shall be available for adding specific filter types: 
-  - SubstringFilter
+  - SubstringFilter (for exact text matching)
+  - RegexFilter (for regular expression pattern matching)
   - AndFilter
   - OrFilter
   - NegationFilter
-- When a SubstringFilter is added, it shall automatically receive input focus.
+- When a SubstringFilter or RegexFilter is added, it shall automatically receive input focus.
+- The UI shall provide visual cues to distinguish between substring filters and regex filters.
 
 ## 6. Advanced Search & Exporting
 - The user shall be able to save frequently used search queries.
