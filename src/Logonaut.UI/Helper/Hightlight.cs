@@ -152,21 +152,28 @@ namespace Logonaut.UI.Helpers
             {
                 AddFilterSubstringHighlighting(substring);
             }
-        
+
             // Add highlighting for a filter substring
             void AddFilterSubstringHighlighting(string substring)
             {
-                // Escape special regex characters in the substring
-                string escapedSubstring = Regex.Escape(substring);
-                
-                var rule = new HighlightingRule
+                try
                 {
-                    Color = _namedColors["filter"],
-                    Regex = new Regex(escapedSubstring, RegexOptions.IgnoreCase)
-                };
-                
-                _filterHighlightingRules.Add(rule);
-                MainRuleSet.Rules.Add(rule);
+                    // Create a regex from the substring (which might already be a regex pattern)
+                    var rule = new HighlightingRule
+                    {
+                        Color = _namedColors["filter"],
+                        Regex = new Regex(substring, RegexOptions.IgnoreCase)
+                    };
+                    
+                    _filterHighlightingRules.Add(rule);
+                    MainRuleSet.Rules.Add(rule);
+                }
+                catch (ArgumentException)
+                {
+                    // Skip invalid regex patterns
+                    // TODO: This should be an exception in the future
+                    System.Diagnostics.Debug.WriteLine($"Invalid regex pattern: {substring}");
+                }
             }
         }
 
