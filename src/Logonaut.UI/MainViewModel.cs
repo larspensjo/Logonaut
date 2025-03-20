@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Logonaut.UI.Services;
@@ -69,6 +70,12 @@ namespace Logonaut.UI.ViewModels
         }
 
         [RelayCommand]
+        private void AddRegexFilter()
+        {
+            AddFilter(new RegexFilter(".*"));
+        }
+
+        [RelayCommand]
         private void AddAndFilter()
         {
             AddFilter(new AndFilter());
@@ -83,6 +90,7 @@ namespace Logonaut.UI.ViewModels
         [RelayCommand]
         private void AddNegationFilter()
         {
+            // TODO: Should not be hard coded here.
             AddFilter(new NegationFilter(new SubstringFilter("Not this")));
         }
 
@@ -240,11 +248,18 @@ namespace Logonaut.UI.ViewModels
 
             void TraverseFilterTree(FilterViewModel filterViewModel)
             {
+                // TODO: Askk the filter itself if it has a substring.
                 if (filterViewModel.FilterModel is SubstringFilter substringFilter)
                 {
                     // Ignore empty strings, they can't be used for highlighting
                     if (substringFilter.Substring != "")
-                        newFilterSubstrings.Add(substringFilter.Substring);
+                        newFilterSubstrings.Add(Regex.Escape(substringFilter.Substring)); // Escape for regex
+                }
+                else if (filterViewModel.FilterModel is RegexFilter regexFilter)
+                {
+                    // Ignore empty patterns
+                    if (!string.IsNullOrEmpty(regexFilter.Pattern))
+                        newFilterSubstrings.Add(regexFilter.Pattern); // Use directly as regex
                 }
 
                 foreach (var childFilter in filterViewModel.Children)

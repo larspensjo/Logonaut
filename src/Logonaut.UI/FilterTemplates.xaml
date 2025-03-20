@@ -12,29 +12,66 @@
     <DataTemplate DataType="{x:Type vm:FilterViewModel}">
         <Grid>
             <!-- When not editing, show a TextBlock -->
-            <TextBlock Text="{Binding DisplayText}"
-                    Background="red"
-                    Visibility="{Binding IsNotEditing, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <TextBlock Visibility="{Binding IsNotEditing, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding FilterType}" Value="Substring">
+                                <Setter Property="Text" Value="{Binding DisplayText}" />
+                                <Setter Property="Foreground" Value="DarkBlue" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding FilterType}" Value="Regex">
+                                <Setter Property="Text" Value="{Binding DisplayText}" />
+                                <Setter Property="Foreground" Value="DarkGreen" />
+                                <Setter Property="FontStyle" Value="Italic" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding FilterType}" Value="AND">
+                                <Setter Property="Text" Value="∧" />
+                                <Setter Property="FontWeight" Value="Bold" />
+                                <Setter Property="Foreground" Value="DarkGreen" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding FilterType}" Value="OR">
+                                <Setter Property="Text" Value="∨" />
+                                <Setter Property="FontWeight" Value="Bold" />
+                                <Setter Property="Foreground" Value="DarkBlue" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding FilterType}" Value="NOT">
+                                <Setter Property="Text" Value="¬" />
+                                <Setter Property="FontWeight" Value="Bold" />
+                                <Setter Property="Foreground" Value="DarkRed" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
                 <i:Interaction.Triggers>
-                    <!-- Should be double-click, trigger BeginEditCommand -->
                     <i:EventTrigger EventName="MouseLeftButtonUp">
                         <i:InvokeCommandAction Command="{Binding BeginEditCommand}" />
                     </i:EventTrigger>
                 </i:Interaction.Triggers>
             </TextBlock>
+            
             <!-- When editing, show a TextBox -->
             <TextBox Text="{Binding FilterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                    Background="yellow"
                     Visibility="{Binding IsEditing, Converter={StaticResource BooleanToVisibilityConverter}}"
                     helpers:TextBoxHelper.FocusOnVisible="True">
+                <TextBox.Style>
+                    <Style TargetType="TextBox">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding FilterType}" Value="Substring">
+                                <Setter Property="Background" Value="#E6F7FF" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding FilterType}" Value="Regex">
+                                <Setter Property="Background" Value="#E6FFE6" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBox.Style>
                 <i:Interaction.Triggers>
-                    <!-- When the TextBox loses focus, trigger EndEditCommand -->
                     <i:EventTrigger EventName="LostFocus">
                         <i:InvokeCommandAction Command="{Binding EndEditCommand}" />
                     </i:EventTrigger>
                 </i:Interaction.Triggers>
                 <TextBox.InputBindings>
-                    <!-- Bind Enter key to EndEditCommand -->
                     <KeyBinding Key="Enter" Command="{Binding EndEditCommand}" />
                 </TextBox.InputBindings>
             </TextBox>
