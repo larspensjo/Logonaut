@@ -9,7 +9,7 @@ namespace Logonaut.Filters
     public class RegexFilter : FilterBase
     {
         private string _pattern;
-        private Regex _regex;
+        private Regex? _regex;
         private bool _isCaseSensitive;
 
         public override bool IsEditable => true;
