@@ -26,6 +26,6 @@ namespace Logonaut.Filters
 
         public override string DisplayText => $"\"{Substring}\"";
 
-        public override string TypeText => "Substring";
+        public override string TypeText => "SubstringType";
     }
 }

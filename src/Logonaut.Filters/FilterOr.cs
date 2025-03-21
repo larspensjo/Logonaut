@@ -24,6 +24,6 @@ namespace Logonaut.Filters
         
         public override string DisplayText => "∨";
 
-        public override string TypeText => "OR";
+        public override string TypeText => "OrType";
     }
 }

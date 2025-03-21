@@ -18,26 +18,26 @@
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">
                             <Style.Triggers>
-                                <DataTrigger Binding="{Binding FilterType}" Value="Substring">
+                                <DataTrigger Binding="{Binding FilterType}" Value="SubstringType">
                                     <Setter Property="Text" Value="{Binding DisplayText}" />
                                     <Setter Property="Foreground" Value="DarkBlue" />
                                 </DataTrigger>
-                                <DataTrigger Binding="{Binding FilterType}" Value="Regex">
+                                <DataTrigger Binding="{Binding FilterType}" Value="RegexType">
                                     <Setter Property="Text" Value="{Binding DisplayText}" />
                                     <Setter Property="Foreground" Value="DarkGreen" />
                                     <Setter Property="FontStyle" Value="Italic" />
                                 </DataTrigger>
-                                <DataTrigger Binding="{Binding FilterType}" Value="AND">
+                                <DataTrigger Binding="{Binding FilterType}" Value="AndType">
                                     <Setter Property="Text" Value="∧" />
                                     <Setter Property="FontWeight" Value="Bold" />
                                     <Setter Property="Foreground" Value="DarkGreen" />
                                 </DataTrigger>
-                                <DataTrigger Binding="{Binding FilterType}" Value="OR">
+                                <DataTrigger Binding="{Binding FilterType}" Value="OrType">
                                     <Setter Property="Text" Value="∨" />
                                     <Setter Property="FontWeight" Value="Bold" />
                                     <Setter Property="Foreground" Value="DarkBlue" />
                                 </DataTrigger>
-                                <DataTrigger Binding="{Binding FilterType}" Value="NOT">
+                                <DataTrigger Binding="{Binding FilterType}" Value="NotType">
                                     <Setter Property="Text" Value="¬" />
                                     <Setter Property="FontWeight" Value="Bold" />
                                     <Setter Property="Foreground" Value="DarkRed" />

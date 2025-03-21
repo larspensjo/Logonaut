@@ -25,6 +25,6 @@ namespace Logonaut.Filters
 
         public override string DisplayText => "¬";
 
-        public override string TypeText => "NOT";
+        public override string TypeText => "NotType";
     }
 }
