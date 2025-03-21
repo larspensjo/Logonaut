@@ -227,6 +227,9 @@ namespace Logonaut.UI.ViewModels
                     });
 
                     // Wait a bit before next update (throttling)
+                    // TODO: Use a reactive approach where filtering is triggered by changes to the log document or filter configuration
+                    // TODO: Consider implementing incremental filtering for large logs (only filter new content)
+                    // TODO: Add a debounce mechanism for filter changes to prevent excessive refiltering
                     await Task.Delay(250, _cts.Token);
                 }
             }, _cts.Token);
