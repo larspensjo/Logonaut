@@ -3,79 +3,82 @@
                     xmlns:filters="clr-namespace:Logonaut.Filters;assembly=Logonaut.Filters"
                     xmlns:vm="clr-namespace:Logonaut.UI.ViewModels"
                     xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
-                    xmlns:helpers="clr-namespace:Logonaut.UI.Helpers">
+                    xmlns:helpers="clr-namespace:Logonaut.UI.Helpers"
+                    xmlns:local="clr-namespace:Logonaut.UI">
 
-    <!-- TODO: This should be moved to the Resources folder -->
+    <local:BooleanToHighlightConverter x:Key="BooleanToHighlightConverter" />
     <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
-    <!-- Optionally, override templates per filter type using DataTriggers or separate templates.
-         For example, for SubstringFilter: -->
     <DataTemplate DataType="{x:Type vm:FilterViewModel}">
-        <Grid>
-            <!-- When not editing, show a TextBlock -->
-            <TextBlock Visibility="{Binding IsNotEditing, Converter={StaticResource BooleanToVisibilityConverter}}">
-                <TextBlock.Style>
-                    <Style TargetType="TextBlock">
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding FilterType}" Value="Substring">
-                                <Setter Property="Text" Value="{Binding DisplayText}" />
-                                <Setter Property="Foreground" Value="DarkBlue" />
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding FilterType}" Value="Regex">
-                                <Setter Property="Text" Value="{Binding DisplayText}" />
-                                <Setter Property="Foreground" Value="DarkGreen" />
-                                <Setter Property="FontStyle" Value="Italic" />
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding FilterType}" Value="AND">
-                                <Setter Property="Text" Value="∧" />
-                                <Setter Property="FontWeight" Value="Bold" />
-                                <Setter Property="Foreground" Value="DarkGreen" />
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding FilterType}" Value="OR">
-                                <Setter Property="Text" Value="∨" />
-                                <Setter Property="FontWeight" Value="Bold" />
-                                <Setter Property="Foreground" Value="DarkBlue" />
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding FilterType}" Value="NOT">
-                                <Setter Property="Text" Value="¬" />
-                                <Setter Property="FontWeight" Value="Bold" />
-                                <Setter Property="Foreground" Value="DarkRed" />
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </TextBlock.Style>
-                <i:Interaction.Triggers>
-                    <i:EventTrigger EventName="MouseLeftButtonUp">
-                        <i:InvokeCommandAction Command="{Binding BeginEditCommand}" />
-                    </i:EventTrigger>
-                </i:Interaction.Triggers>
-            </TextBlock>
-            
-            <!-- When editing, show a TextBox -->
-            <TextBox Text="{Binding FilterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                    Visibility="{Binding IsEditing, Converter={StaticResource BooleanToVisibilityConverter}}"
-                    helpers:TextBoxHelper.FocusOnVisible="True">
-                <TextBox.Style>
-                    <Style TargetType="TextBox">
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding FilterType}" Value="Substring">
-                                <Setter Property="Background" Value="#E6F7FF" />
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding FilterType}" Value="Regex">
-                                <Setter Property="Background" Value="#E6FFE6" />
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </TextBox.Style>
-                <i:Interaction.Triggers>
-                    <i:EventTrigger EventName="LostFocus">
-                        <i:InvokeCommandAction Command="{Binding EndEditCommand}" />
-                    </i:EventTrigger>
-                </i:Interaction.Triggers>
-                <TextBox.InputBindings>
-                    <KeyBinding Key="Enter" Command="{Binding EndEditCommand}" />
-                </TextBox.InputBindings>
-            </TextBox>
-        </Grid>
+        <Border x:Name="HighlightBorder" 
+                Background="{Binding IsSelected, Converter={StaticResource BooleanToHighlightConverter}}"
+                Padding="3" CornerRadius="3">
+            <Grid>
+                <!-- When not editing, show a TextBlock -->
+                <TextBlock Visibility="{Binding IsNotEditing, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding FilterType}" Value="Substring">
+                                    <Setter Property="Text" Value="{Binding DisplayText}" />
+                                    <Setter Property="Foreground" Value="DarkBlue" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding FilterType}" Value="Regex">
+                                    <Setter Property="Text" Value="{Binding DisplayText}" />
+                                    <Setter Property="Foreground" Value="DarkGreen" />
+                                    <Setter Property="FontStyle" Value="Italic" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding FilterType}" Value="AND">
+                                    <Setter Property="Text" Value="∧" />
+                                    <Setter Property="FontWeight" Value="Bold" />
+                                    <Setter Property="Foreground" Value="DarkGreen" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding FilterType}" Value="OR">
+                                    <Setter Property="Text" Value="∨" />
+                                    <Setter Property="FontWeight" Value="Bold" />
+                                    <Setter Property="Foreground" Value="DarkBlue" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding FilterType}" Value="NOT">
+                                    <Setter Property="Text" Value="¬" />
+                                    <Setter Property="FontWeight" Value="Bold" />
+                                    <Setter Property="Foreground" Value="DarkRed" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                    <i:Interaction.Triggers>
+                        <i:EventTrigger EventName="MouseLeftButtonUp">
+                            <i:InvokeCommandAction Command="{Binding BeginEditCommand}" />
+                        </i:EventTrigger>
+                    </i:Interaction.Triggers>
+                </TextBlock>
+                
+                <!-- When editing, show a TextBox -->
+                <TextBox Text="{Binding FilterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                        Visibility="{Binding IsEditing, Converter={StaticResource BooleanToVisibilityConverter}}"
+                        helpers:TextBoxHelper.FocusOnVisible="True">
+                    <TextBox.Style>
+                        <Style TargetType="TextBox">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding FilterType}" Value="Substring">
+                                    <Setter Property="Background" Value="#E6F7FF" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding FilterType}" Value="Regex">
+                                    <Setter Property="Background" Value="#E6FFE6" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBox.Style>
+                    <i:Interaction.Triggers>
+                        <i:EventTrigger EventName="LostFocus">
+                            <i:InvokeCommandAction Command="{Binding EndEditCommand}" />
+                        </i:EventTrigger>
+                    </i:Interaction.Triggers>
+                    <TextBox.InputBindings>
+                        <KeyBinding Key="Enter" Command="{Binding EndEditCommand}" />
+                    </TextBox.InputBindings>
+                </TextBox>
+            </Grid>
+        </Border>
     </DataTemplate>
 
     <!-- Similarly, for AndFilter: -->

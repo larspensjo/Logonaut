@@ -153,11 +153,23 @@ namespace Logonaut.UI.ViewModels
             }
         }
 
+        private FilterViewModel? _previousSelectedFilter;
         // This is a hack to force 'CanExecute' to be run again.
         partial void OnSelectedFilterChanged(FilterViewModel? value)
         {
             RemoveFilterCommand.NotifyCanExecuteChanged();
+            var x = value?.IsSelected;
+    
+            // If there was a previously selected filter, set its IsSelected to false
+            if (_previousSelectedFilter != null && _previousSelectedFilter != value)
+                _previousSelectedFilter.IsSelected = false;
+            
+            // If there's a new selected filter, set its IsSelected to true
+            if (value != null)
+                value.IsSelected = true;
+            _previousSelectedFilter = value;
         }
+
         private bool CanRemoveFilter() => SelectedFilter != null;
 
         [RelayCommand(CanExecute = nameof(CanSearch))]

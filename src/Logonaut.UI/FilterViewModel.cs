@@ -147,8 +147,11 @@ namespace Logonaut.UI.ViewModels
         [RelayCommand]
         public void BeginEdit()
         {
-            IsEditing = true;
-            IsNotEditing = false;
+            if (IsEditable)
+            {
+                IsEditing = true;
+                IsNotEditing = false;
+            }
         }
 
         // Command to end inline editing.
