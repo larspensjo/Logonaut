@@ -27,7 +27,7 @@ namespace Logonaut.UI.ViewModels
         [ObservableProperty]
         private bool isNotEditing = true;
 
-        // Indicates whether this filter is editable (only SubstringFilter is editable).
+        // Indicates whether this filter is editable.
         public bool IsEditable => FilterModel.IsEditable;
 
         public FilterViewModel(IFilter filter, FilterViewModel? parent = null)
@@ -42,10 +42,13 @@ namespace Logonaut.UI.ViewModels
                 }
             }
 
-            if (filter is SubstringFilter)
+#if false
+            // TODO: We want to start edit mode immediately, but some improved visual and focus management is needed.
+            if (filter.IsEditable)
             {
                 BeginEdit();
             }
+#endif
         }
 
         // Command to add a child filter.
@@ -84,16 +87,7 @@ namespace Logonaut.UI.ViewModels
         }
 
         // Read-only display text. See also FilterText, used when editing.
-        // TODO: Ask the class itself
-        public string DisplayText => FilterModel switch
-        {
-            SubstringFilter s => $"\"{s.Substring}\"",
-            RegexFilter r => $"/{r.Pattern}/",
-            AndFilter _ => "∧",
-            OrFilter _ => "∨",
-            NegationFilter _ => "¬",
-            _ => "Filter"
-        };
+        public string DisplayText => FilterModel.DisplayText;
 
         // This is used by FilterTemplates.xaml.
         // TODO: Ask the class itself

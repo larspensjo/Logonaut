@@ -23,6 +23,11 @@ namespace Logonaut.Filters
         /// Indicates whether this filter can be edited by the user.
         /// </summary>
         bool IsEditable { get; }
+
+        /// <summary>
+        /// The text displayed in .
+        /// </summary>
+        string DisplayText { get; }
     }
 
     /// <summary>
@@ -35,6 +40,8 @@ namespace Logonaut.Filters
         public virtual bool IsEditable => false;
         
         public abstract bool IsMatch(string line);
+
+        public abstract string DisplayText { get; }
     }
 
     /// <summary>
@@ -66,5 +73,7 @@ namespace Logonaut.Filters
     public class TrueFilter : FilterBase
     {
         public override bool IsMatch(string line) => true;
+
+        public override string DisplayText => "TRUE";
     }
 }

@@ -21,5 +21,7 @@ namespace Logonaut.Filters
             // OR logic: at least one filter must match
             return Filters.Any(filter => filter.IsMatch(line));
         }
+        
+        public override string DisplayText => "∨";
     }
 }

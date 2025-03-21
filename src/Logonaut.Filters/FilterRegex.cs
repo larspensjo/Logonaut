@@ -68,5 +68,7 @@ namespace Logonaut.Filters
 
             return _regex.IsMatch(line);
         }
+
+        public override string DisplayText => $"/{_pattern}/";
     }
 }

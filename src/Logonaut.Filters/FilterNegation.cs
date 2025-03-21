@@ -22,5 +22,7 @@ namespace Logonaut.Filters
                 
             return !InnerFilter.IsMatch(line);
         }
+
+        public override string DisplayText => "¬";
     }
 }

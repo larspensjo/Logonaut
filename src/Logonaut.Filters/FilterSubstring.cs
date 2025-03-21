@@ -23,5 +23,7 @@ namespace Logonaut.Filters
                 
             return line.Contains(Substring);
         }
+
+        public override string DisplayText => $"\"{Substring}\"";
     }
 }
