@@ -23,5 +23,7 @@ namespace Logonaut.Filters
         }
 
         public override string DisplayText => "∧";
+
+        public override string TypeText => "AND";
     }
 }

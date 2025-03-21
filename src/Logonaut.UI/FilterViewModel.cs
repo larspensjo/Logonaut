@@ -90,16 +90,7 @@ namespace Logonaut.UI.ViewModels
         public string DisplayText => FilterModel.DisplayText;
 
         // This is used by FilterTemplates.xaml.
-        // TODO: Ask the class itself
-        public string FilterType => FilterModel switch
-        {
-            SubstringFilter _ => "Substring",
-            RegexFilter _ => "Regex",
-            AndFilter _ => "AND",
-            OrFilter _ => "OR",
-            NegationFilter _ => "NOT",
-            _ => "Unknown"
-        };
+        public string FilterType => FilterModel.TypeText;
 
         // A property that gets/sets the substring when the FilterModel is a SubstringFilter.
         // See also DisplayText, used when displaying the filter.

@@ -27,7 +27,13 @@ namespace Logonaut.Filters
         /// <summary>
         /// The text displayed in .
         /// </summary>
+        // TODO: Should instead use ToString()
         string DisplayText { get; }
+
+        /// <summary>
+        /// Get the filter as a string. This is used by FilterTemplates.xaml
+        /// </summary>
+        string TypeText { get; }
     }
 
     /// <summary>
@@ -42,6 +48,8 @@ namespace Logonaut.Filters
         public abstract bool IsMatch(string line);
 
         public abstract string DisplayText { get; }
+
+        public abstract string TypeText { get; }
     }
 
     /// <summary>
@@ -75,5 +83,7 @@ namespace Logonaut.Filters
         public override bool IsMatch(string line) => true;
 
         public override string DisplayText => "TRUE";
+
+        public override string TypeText => "TRUE";
     }
 }

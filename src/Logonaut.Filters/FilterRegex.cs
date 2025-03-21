@@ -70,5 +70,7 @@ namespace Logonaut.Filters
         }
 
         public override string DisplayText => $"/{_pattern}/";
+
+        public override string TypeText => "Regex";
     }
 }
