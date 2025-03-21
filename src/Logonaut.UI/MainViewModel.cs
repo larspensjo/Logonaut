@@ -248,7 +248,7 @@ namespace Logonaut.UI.ViewModels
 
             void TraverseFilterTree(FilterViewModel filterViewModel)
             {
-                // TODO: Askk the filter itself if it has a substring.
+                // TODO: Ask the filter itself if it has a substring.
                 if (filterViewModel.FilterModel is SubstringFilter substringFilter)
                 {
                     // Ignore empty strings, they can't be used for highlighting

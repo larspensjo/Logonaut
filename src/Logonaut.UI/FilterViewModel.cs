@@ -103,6 +103,7 @@ namespace Logonaut.UI.ViewModels
 
         // A property that gets/sets the substring when the FilterModel is a SubstringFilter.
         // See also DisplayText, used when displaying the filter.
+        // TODO: this is unused, can it be removed?
         public string FilterText
         {
             get => FilterModel switch
