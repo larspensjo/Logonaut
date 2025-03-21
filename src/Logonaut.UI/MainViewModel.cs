@@ -194,7 +194,7 @@ namespace Logonaut.UI.ViewModels
                 {
                     IFilter currentFilter;
                     if (FilterProfiles.Count == 0)
-                        currentFilter = new NeutralFilter();
+                        currentFilter = new TrueFilter();
                     else
                         currentFilter = FilterProfiles.First().FilterModel;
 
@@ -275,14 +275,5 @@ namespace Logonaut.UI.ViewModels
             get => _filterSubstrings;
             set => SetProperty(ref _filterSubstrings, value);
         }
-    }
-
-    // A neutral filter that always returns true.
-    // TODO: Overlapping with NeutralFilter. This should be moved to Logonaut.Filters.
-    public class NeutralFilter : IFilter
-    {
-        public bool IsEditable => false;
-        public bool Enabled { get; set; } = true;
-        public bool IsMatch(string line) => true;
     }
 }

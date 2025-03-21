@@ -61,4 +61,12 @@ namespace Logonaut.Filters
             return Filters.Remove(filter);
         }
     }
+
+    // A neutral filter that always returns true.
+    public class TrueFilter : IFilter
+    {
+        public bool IsEditable => false;
+        public bool Enabled { get; set; } = true;
+        public bool IsMatch(string line) => true;
+    }
 }
