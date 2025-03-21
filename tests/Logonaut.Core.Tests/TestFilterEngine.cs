@@ -11,9 +11,13 @@ namespace Logonaut.Core.Tests
     public class FilterEngineTests
     {
         // A simple test filter that always returns true.
+        // TODO: Overlapping with NeutralFilter.
         private class TrueFilter : IFilter
         {
             public bool Enabled { get; set; } = true;
+
+            public bool IsEditable => false;
+
             public bool IsMatch(string line) => true;
         }
 

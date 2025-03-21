@@ -11,6 +11,8 @@ namespace Logonaut.Filters
     {
         public string Substring { get; set; }
 
+        public override bool IsEditable => true;
+
         public SubstringFilter(string substring)
         {
             Substring = substring;

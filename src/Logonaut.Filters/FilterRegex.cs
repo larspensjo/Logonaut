@@ -12,6 +12,8 @@ namespace Logonaut.Filters
         private Regex _regex;
         private bool _isCaseSensitive;
 
+        public override bool IsEditable => true;
+
         public string Pattern
         {
             get => _pattern;

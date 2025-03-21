@@ -278,8 +278,10 @@ namespace Logonaut.UI.ViewModels
     }
 
     // A neutral filter that always returns true.
+    // TODO: Overlapping with NeutralFilter. This should be moved to Logonaut.Filters.
     public class NeutralFilter : IFilter
     {
+        public bool IsEditable => false;
         public bool Enabled { get; set; } = true;
         public bool IsMatch(string line) => true;
     }

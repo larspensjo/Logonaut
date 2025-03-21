@@ -28,8 +28,7 @@ namespace Logonaut.UI.ViewModels
         private bool isNotEditing = true;
 
         // Indicates whether this filter is editable (only SubstringFilter is editable).
-        // TODO: Ask the class instead.
-        public bool IsEditable => FilterModel is SubstringFilter || FilterModel is RegexFilter;
+        public bool IsEditable => FilterModel.IsEditable;
 
         public FilterViewModel(IFilter filter, FilterViewModel? parent = null)
         {

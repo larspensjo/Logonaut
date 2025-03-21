@@ -18,6 +18,8 @@ namespace Logonaut.Filters
         /// Indicates whether the filter is active. When disabled, the filter is considered neutral.
         /// </summary>
         bool Enabled { get; set; }
+
+        bool IsEditable { get; }
     }
 
     /// <summary>
@@ -26,6 +28,11 @@ namespace Logonaut.Filters
     public abstract class FilterBase : IFilter
     {
         public bool Enabled { get; set; } = true;
+
+        /// <summary>
+        /// Indicates whether this filter can be edited by the user.
+        /// </summary>
+        public virtual bool IsEditable => false;
 
         public abstract bool IsMatch(string line);
     }
