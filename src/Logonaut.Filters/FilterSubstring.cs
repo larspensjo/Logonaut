@@ -1,16 +1,12 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-
 namespace Logonaut.Filters
 {
     /// <summary>
     /// A filter that checks whether a log line contains a specified substring.
     /// </summary>
-    public class SubstringFilter : FilterBase
+     public class SubstringFilter : FilterBase
     {
         public string Substring { get; set; }
-
+        
         public override bool IsEditable => true;
 
         public SubstringFilter(string substring)
@@ -24,7 +20,7 @@ namespace Logonaut.Filters
                 return true; // Disabled filters are treated as neutral.
             if (line == null || Substring == null)
                 return false;
-
+                
             return line.Contains(Substring);
         }
     }

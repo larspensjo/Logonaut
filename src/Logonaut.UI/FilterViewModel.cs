@@ -34,7 +34,7 @@ namespace Logonaut.UI.ViewModels
         {
             FilterModel = filter;
             Parent = parent;
-            if (filter is CompositeFilterBase composite)
+            if (filter is CompositeFilter composite)
             {
                 foreach (var child in composite.SubFilters)
                 {
@@ -52,7 +52,7 @@ namespace Logonaut.UI.ViewModels
         [RelayCommand]
         public void AddChildFilter(IFilter childFilter)
         {
-            if (FilterModel is CompositeFilterBase composite)
+            if (FilterModel is CompositeFilter composite)
             {
                 composite.Add(childFilter);
                 Children.Add(new FilterViewModel(childFilter, this));
@@ -62,7 +62,7 @@ namespace Logonaut.UI.ViewModels
         // Removes a child filter from the composite.
         public void RemoveChild(FilterViewModel child)
         {
-            if (FilterModel is CompositeFilterBase composite)
+            if (FilterModel is CompositeFilter composite)
             {
                 composite.Remove(child.FilterModel);
                 Children.Remove(child);

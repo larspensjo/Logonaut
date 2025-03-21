@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-
 namespace Logonaut.Filters
 {
     /// <summary>
@@ -9,7 +5,7 @@ namespace Logonaut.Filters
     /// </summary>
     public class NegationFilter : FilterBase
     {
-        public IFilter InnerFilter { get; set; }
+        public IFilter? InnerFilter { get; set; }
 
         public NegationFilter(IFilter innerFilter)
         {
@@ -20,6 +16,10 @@ namespace Logonaut.Filters
         {
             if (!Enabled)
                 return true;
+
+            if (InnerFilter == null)
+                return true;
+                
             return !InnerFilter.IsMatch(line);
         }
     }

@@ -19,28 +19,28 @@ namespace Logonaut.Filters
         /// </summary>
         bool Enabled { get; set; }
 
+        /// <summary>
+        /// Indicates whether this filter can be edited by the user.
+        /// </summary>
         bool IsEditable { get; }
     }
 
     /// <summary>
-    /// Base class for filters that implements the Enabled property.
+    /// Optional base class providing typical common filter functionality.
     /// </summary>
     public abstract class FilterBase : IFilter
     {
         public bool Enabled { get; set; } = true;
-
-        /// <summary>
-        /// Indicates whether this filter can be edited by the user.
-        /// </summary>
+        
         public virtual bool IsEditable => false;
-
+        
         public abstract bool IsMatch(string line);
     }
 
     /// <summary>
     /// Abstract base class for composite filters that combine multiple sub-filters.
     /// </summary>
-    public abstract class CompositeFilterBase : FilterBase
+    public abstract class CompositeFilter : FilterBase
     {
         // Use a private list, but expose it as a public read‑only property.
         protected readonly List<IFilter> Filters = new List<IFilter>();
@@ -63,10 +63,8 @@ namespace Logonaut.Filters
     }
 
     // A neutral filter that always returns true.
-    public class TrueFilter : IFilter
+    public class TrueFilter : FilterBase
     {
-        public bool IsEditable => false;
-        public bool Enabled { get; set; } = true;
-        public bool IsMatch(string line) => true;
+        public override bool IsMatch(string line) => true;
     }
 }

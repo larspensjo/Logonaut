@@ -107,7 +107,7 @@ namespace Logonaut.UI.ViewModels
             else if (SelectedFilter != null)
             {
                 // Add to the currently selected composite filter.
-                if (SelectedFilter.FilterModel is CompositeFilterBase compositeFilter)
+                if (SelectedFilter.FilterModel is CompositeFilter compositeFilter)
                 {
                     SelectedFilter.AddChildFilter(filter);
                 }
