@@ -55,7 +55,7 @@ namespace Logonaut.UI.Tests.ViewModels
             Assert.IsInstanceOfType(parentVM.Children[parentVM.Children.Count - 1].FilterModel, typeof(SubstringFilter));
             SubstringFilter? substringFilter = parentVM.Children[parentVM.Children.Count - 1].FilterModel as SubstringFilter;
             Assert.IsNotNull(substringFilter);
-            Assert.AreEqual("child", substringFilter.Substring);
+            Assert.AreEqual("child", substringFilter.Value);
         }
 
         [TestMethod]

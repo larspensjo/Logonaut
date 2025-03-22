@@ -48,7 +48,7 @@ namespace Logonaut.Filters.Tests
             Assert.IsInstanceOfType(deserializedAndFilter.SubFilters[0], typeof(SubstringFilter), "First sub-filter should be a SubstringFilter.");
             var substringFilter = deserializedAndFilter.SubFilters[0] as SubstringFilter;
             Assert.IsNotNull(substringFilter, "Filter expected.");
-            Assert.AreEqual("A", substringFilter.Substring, "Substring value should be 'A'.");
+            Assert.AreEqual("A", substringFilter.Value, "Substring value should be 'A'.");
 
             // Validate the second sub-filter is a NegationFilter wrapping a SubstringFilter with value "B".
             Assert.IsInstanceOfType(deserializedAndFilter.SubFilters[1], typeof(NegationFilter), "Second sub-filter should be a NegationFilter.");
@@ -58,7 +58,7 @@ namespace Logonaut.Filters.Tests
             Assert.IsInstanceOfType(negationFilter.InnerFilter, typeof(SubstringFilter), "Inner filter should be a SubstringFilter.");
             var innerSubstring = negationFilter.InnerFilter as SubstringFilter;
             Assert.IsNotNull(innerSubstring, "Filter expected.");
-            Assert.AreEqual("B", innerSubstring.Substring, "Inner substring value should be 'B'.");
+            Assert.AreEqual("B", innerSubstring.Value, "Inner substring value should be 'B'.");
         }
     }
 }

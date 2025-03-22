@@ -156,6 +156,9 @@ namespace Logonaut.UI.Helpers
             // Add highlighting for a filter substring
             void AddFilterSubstringHighlighting(string substring)
             {
+                // TODO: There is a bug that makes this happen sometimes.
+                if (substring == "")
+                    throw new ArgumentException("Filter substring cannot be empty");
                 try
                 {
                     // Create a regex from the substring (which might already be a regex pattern)

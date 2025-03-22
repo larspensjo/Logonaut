@@ -3,29 +3,31 @@ namespace Logonaut.Filters
     /// <summary>
     /// A filter that checks whether a log line contains a specified substring.
     /// </summary>
-     public class SubstringFilter : FilterBase
+     public class SubstringFilter : IFilter
     {
-        public string Substring { get; set; }
+        public bool Enabled { get; set; } = true;
+        // The value is the substring.
+        public string Value { get; set; }
         
-        public override bool IsEditable => true;
+        public bool IsEditable => true;
 
         public SubstringFilter(string substring)
         {
-            Substring = substring;
+            Value = substring;
         }
 
-        public override bool IsMatch(string line)
+        public bool IsMatch(string line)
         {
             if (!Enabled)
                 return true; // Disabled filters are treated as neutral.
-            if (line == null || Substring == null)
+            if (line == null || Value == null)
                 return false;
                 
-            return line.Contains(Substring);
+            return line.Contains(Value);
         }
 
-        public override string DisplayText => $"\"{Substring}\"";
+        public string DisplayText => $"\"{Value}\"";
 
-        public override string TypeText => "SubstringType";
+        public string TypeText => "SubstringType";
     }
 }

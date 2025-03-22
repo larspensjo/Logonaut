@@ -34,10 +34,15 @@ namespace Logonaut.Filters
         /// Get the filter as a string. This is used by FilterTemplates.xaml
         /// </summary>
         string TypeText { get; }
+
+        /// <summary>
+        /// The value of the filter. Only used by some filters.
+        /// </summary>
+        string Value { get; set; }
     }
 
     /// <summary>
-    /// Optional base class providing typical common filter functionality.
+    /// Optional base class providing typical common filter functionality for filters without editable values.
     /// </summary>
     public abstract class FilterBase : IFilter
     {
@@ -50,6 +55,13 @@ namespace Logonaut.Filters
         public abstract string DisplayText { get; }
 
         public abstract string TypeText { get; }
+
+        public virtual string Value
+        {
+            // TODO: This getter isn't supposed to be used, but it still happens. Fix that.
+            get => string.Empty;
+            set => throw new NotSupportedException($"{nameof(Value)} is not supported in {nameof(FilterBase)}.");
+        }
     }
 
     /// <summary>

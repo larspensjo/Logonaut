@@ -6,15 +6,17 @@ namespace Logonaut.Filters
     /// <summary>
     /// A filter that checks whether a log line matches a specified regular expression.
     /// </summary>
-    public class RegexFilter : FilterBase
+    public class RegexFilter : IFilter
     {
+        public bool Enabled { get; set; } = true;
         private string _pattern;
         private Regex? _regex;
         private bool _isCaseSensitive;
 
-        public override bool IsEditable => true;
+        public bool IsEditable => true;
 
-        public string Pattern
+        // The value is the search pattern.
+        public string Value
         {
             get => _pattern;
             set
@@ -58,7 +60,7 @@ namespace Logonaut.Filters
             }
         }
 
-        public override bool IsMatch(string line)
+        public bool IsMatch(string line)
         {
             if (!Enabled)
                 return true; // Disabled filters are treated as neutral.
@@ -69,8 +71,8 @@ namespace Logonaut.Filters
             return _regex.IsMatch(line);
         }
 
-        public override string DisplayText => $"/{_pattern}/";
+        public string DisplayText => $"/{_pattern}/";
 
-        public override string TypeText => "RegexType";
+        public string TypeText => "RegexType";
     }
 }

@@ -92,29 +92,17 @@ namespace Logonaut.UI.ViewModels
         // This is used by FilterTemplates.xaml.
         public string FilterType => FilterModel.TypeText;
 
-        // A property that gets/sets the substring when the FilterModel is a SubstringFilter.
+        // A property that sets the substring when the FilterModel shows a TextBox.
         // See also DisplayText, used when displaying the filter.
-        // TODO: this is unused, can it be removed?
+        // VS Code shows reference as 0, but it is used by FilterTemplates.xaml.
         public string FilterText
         {
-            get => FilterModel switch
-            {
-                SubstringFilter s => s.Substring,
-                RegexFilter r => r.Pattern,
-                _ => string.Empty // TODO: This is shown when clicking on a composite filter. Should be fixed.
-            };
+            get => FilterModel.Value;
             set
             {
-                if (FilterModel is SubstringFilter s && s.Substring != value)
+                if (FilterModel.Value != value)
                 {
-                    s.Substring = value;
-                    OnPropertyChanged();
-                    OnPropertyChanged(nameof(DisplayText));
-                    NotifyFilterTextChanged();
-                }
-                else if (FilterModel is RegexFilter r && r.Pattern != value)
-                {
-                    r.Pattern = value;
+                    FilterModel.Value = value;
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(DisplayText));
                     NotifyFilterTextChanged();

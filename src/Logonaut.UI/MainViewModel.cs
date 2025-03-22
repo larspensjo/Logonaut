@@ -267,14 +267,14 @@ namespace Logonaut.UI.ViewModels
                 if (filterViewModel.FilterModel is SubstringFilter substringFilter)
                 {
                     // Ignore empty strings, they can't be used for highlighting
-                    if (substringFilter.Substring != "")
-                        newFilterSubstrings.Add(Regex.Escape(substringFilter.Substring)); // Escape for regex
+                    if (substringFilter.Value != "")
+                        newFilterSubstrings.Add(Regex.Escape(substringFilter.Value)); // Escape for regex
                 }
                 else if (filterViewModel.FilterModel is RegexFilter regexFilter)
                 {
                     // Ignore empty patterns
-                    if (!string.IsNullOrEmpty(regexFilter.Pattern))
-                        newFilterSubstrings.Add(regexFilter.Pattern); // Use directly as regex
+                    if (!string.IsNullOrEmpty(regexFilter.Value))
+                        newFilterSubstrings.Add(regexFilter.Value); // Use directly as regex
                 }
 
                 foreach (var childFilter in filterViewModel.Children)
