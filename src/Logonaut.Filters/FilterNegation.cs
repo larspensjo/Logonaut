@@ -3,6 +3,8 @@ namespace Logonaut.Filters
     /// <summary>
     /// A filter that negates the result of an inner filter.
     /// </summary>
+    /// 
+    // TODO: Should use a composite filter, limited to one sub node. This will enable it to be shown and edited in the filter tree.
     public class NegationFilter : FilterBase
     {
         public IFilter? InnerFilter { get; set; }
