@@ -62,21 +62,6 @@ namespace Logonaut.UI.Tests.ViewModels
         }
 
         [TestMethod]
-        public void AddNegationFilter_NoExistingFilter_ShouldCreateRootFilter()
-        {
-            // Arrange
-            var viewModel = new MainViewModel();
-
-            // Act
-            viewModel.AddNegationFilterCommand.Execute(null);
-
-            // Assert
-            Assert.AreEqual(1, viewModel.FilterProfiles.Count, "A root NOT filter should be added.");
-            Assert.IsNotNull(viewModel.SelectedFilter, "SelectedFilter should be set.");
-            Assert.IsInstanceOfType(viewModel.SelectedFilter.FilterModel, typeof(NegationFilter), "Root filter should be a NegationFilter.");
-        }
-
-        [TestMethod]
         public void AddFilter_WithExistingCompositeFilter_ShouldAddChildFilter()
         {
             // Arrange

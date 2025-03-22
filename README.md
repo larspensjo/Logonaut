@@ -10,7 +10,7 @@ This is a WIP, not ready for use.
   Continuously reads from a log file and updates the display asynchronously using Reactive Extensions and FileSystemWatcher.
 
 - **Advanced Filtering:**  
-  Supports substring matching, negation, and composite logical (AND/OR) filter conditions. Filters are organized in a hierarchical tree for complex expressions like `(A or (B and not C))`.
+  Supports substring matching, and composite logical (AND/OR/NOR) filter conditions. Filters are organized in a hierarchical tree for complex expressions like `(A or (B and not C))`.
 
 - **User-Friendly UI:**  
   Built with WPF and AvalonEdit for a modern look and feel. Provides a dedicated panel for managing filters, a log display area with syntax highlighting, and free-text search with navigation.
@@ -32,7 +32,7 @@ Logonaut is organized into several independent modules:
   Provides core business logic and shared utilities.
 
 - **Logonaut.Filters:**  
-  Implements the filtering engine with support for simple and composite filters (AND/OR/NOT).
+  Implements the filtering engine with support for simple and composite filters (AND/OR/NOR).
 
 - **Logonaut.LogTailing:**  
   Handles asynchronous log file reading and tailing, exposing new log lines as an observable sequence.

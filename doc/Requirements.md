@@ -52,8 +52,7 @@ Logonaut is a Windows application written in C#. It functions as a log viewer, r
 - Filters shall support two types of text matching:
   - Exact substring matching (testing against all positions in each line)
   - Regular expression pattern matching for more complex filtering needs
-- Filters shall support negation (excluding lines that contain certain text).
-- Filters shall support AND and OR combinations (e.g., find all lines containing A and B, or all lines containing A or B).
+- Filters shall support AND, OR and NOR combinations (e.g., find all lines containing A and B, or all lines containing A or B).
 - Filters shall be structured hierarchically to allow complex conditions (e.g., (A or (B and not C))).
 - Users shall be able to set a global line number context (default: 0) to include a specified number of lines before and after each match.
 - The text used for filtering shall be visibly marked in the output, such as with a colored background or changed font.
@@ -85,7 +84,7 @@ Logonaut is a Windows application written in C#. It functions as a log viewer, r
   - RegexFilter (for regular expression pattern matching)
   - AndFilter
   - OrFilter
-  - NegationFilter
+  - NorFilter
 - When a SubstringFilter or RegexFilter is added, it shall automatically receive input focus.
 - The UI shall provide visual cues to distinguish between substring filters and regex filters.
 

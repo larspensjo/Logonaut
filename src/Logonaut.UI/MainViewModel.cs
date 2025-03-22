@@ -93,13 +93,6 @@ namespace Logonaut.UI.ViewModels
             AddFilter(new NorFilter());
         }
 
-        [RelayCommand]
-        private void AddNegationFilter()
-        {
-            // TODO: Should not be hard coded here.
-            AddFilter(new NegationFilter(new SubstringFilter("Not this")));
-        }
-
         private void AddFilter(IFilter filter)
         {
             var newFilterVM = new FilterViewModel(filter);

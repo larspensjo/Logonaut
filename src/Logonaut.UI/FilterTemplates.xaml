@@ -42,11 +42,6 @@
                                     <Setter Property="FontWeight" Value="Bold" />
                                     <Setter Property="Foreground" Value="DarkBlue" />
                                 </DataTrigger>
-                                <DataTrigger Binding="{Binding FilterType}" Value="NotType">
-                                    <Setter Property="Text" Value="¬" />
-                                    <Setter Property="FontWeight" Value="Bold" />
-                                    <Setter Property="Foreground" Value="DarkRed" />
-                                </DataTrigger>
                             </Style.Triggers>
                         </Style>
                     </TextBlock.Style>

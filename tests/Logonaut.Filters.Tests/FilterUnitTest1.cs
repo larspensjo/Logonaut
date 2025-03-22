@@ -32,37 +32,6 @@ namespace Logonaut.Filters.Tests
     }
 
     [TestClass]
-    public class NegationFilterTests
-    {
-        [TestMethod]
-        public void NegationFilter_Matches_WhenInnerFilterDoesNotMatch()
-        {
-            IFilter innerFilter = new SubstringFilter("test");
-            var negationFilter = new NegationFilter(innerFilter);
-            bool result = negationFilter.IsMatch("No matching text here");
-            Assert.IsTrue(result, "Negation should match when the inner filter does not match.");
-        }
-
-        [TestMethod]
-        public void NegationFilter_DoesNotMatch_WhenInnerFilterMatches()
-        {
-            IFilter innerFilter = new SubstringFilter("test");
-            var negationFilter = new NegationFilter(innerFilter);
-            bool result = negationFilter.IsMatch("This is a test string");
-            Assert.IsFalse(result, "Negation should not match when the inner filter matches.");
-        }
-
-        [TestMethod]
-        public void NegationFilter_Disabled_AlwaysMatches()
-        {
-            IFilter innerFilter = new SubstringFilter("test");
-            var negationFilter = new NegationFilter(innerFilter) { Enabled = false };
-            bool result = negationFilter.IsMatch("Any string");
-            Assert.IsTrue(result, "A disabled filter should be considered neutral and match.");
-        }
-    }
-
-    [TestClass]
     public class AndFilterTests
     {
         [TestMethod]
