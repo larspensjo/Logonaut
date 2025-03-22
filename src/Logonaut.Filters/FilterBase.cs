@@ -44,6 +44,7 @@ namespace Logonaut.Filters
     /// <summary>
     /// Optional base class providing typical common filter functionality for filters without editable values.
     /// </summary>
+    // TODO: FilterBase should only be used by CompositeFilter. Merge them into one class.
     public abstract class FilterBase : IFilter
     {
         public bool Enabled { get; set; } = true;
