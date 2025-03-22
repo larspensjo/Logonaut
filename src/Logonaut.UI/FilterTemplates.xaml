@@ -37,6 +37,11 @@
                                     <Setter Property="FontWeight" Value="Bold" />
                                     <Setter Property="Foreground" Value="DarkBlue" />
                                 </DataTrigger>
+                                <DataTrigger Binding="{Binding FilterType}" Value="NorType">
+                                    <Setter Property="Text" Value="¬∨" />
+                                    <Setter Property="FontWeight" Value="Bold" />
+                                    <Setter Property="Foreground" Value="DarkBlue" />
+                                </DataTrigger>
                                 <DataTrigger Binding="{Binding FilterType}" Value="NotType">
                                     <Setter Property="Text" Value="¬" />
                                     <Setter Property="FontWeight" Value="Bold" />
@@ -79,27 +84,6 @@
                 </TextBox>
             </Grid>
         </Border>
-    </DataTemplate>
-
-    <!-- Similarly, for AndFilter: -->
-    <DataTemplate x:Key="AndFilterTemplate" DataType="{x:Type filters:AndFilter}">
-        <StackPanel Orientation="Horizontal">
-            <TextBlock Text="AND" FontWeight="Bold" Foreground="DarkGreen" />
-        </StackPanel>
-    </DataTemplate>
-    
-    <!-- And for OrFilter: -->
-    <DataTemplate x:Key="OrFilterTemplate" DataType="{x:Type filters:OrFilter}">
-        <StackPanel Orientation="Horizontal">
-            <TextBlock Text="OR" FontWeight="Bold" Foreground="DarkGreen" />
-        </StackPanel>
-    </DataTemplate>
-    
-    <!-- And for NegationFilter: -->
-    <DataTemplate x:Key="NegationFilterTemplate" DataType="{x:Type filters:NegationFilter}">
-        <StackPanel Orientation="Horizontal">
-            <TextBlock Text="NOT" FontWeight="Bold" Foreground="DarkRed" />
-        </StackPanel>
     </DataTemplate>
 
 </ResourceDictionary>

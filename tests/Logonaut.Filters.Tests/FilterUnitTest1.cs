@@ -148,7 +148,52 @@ namespace Logonaut.Filters.Tests
         {
             var orFilter = new OrFilter();
             bool result = orFilter.IsMatch("Any string");
-            Assert.IsFalse(result, "An OrFilter with no sub-filters should match nothing.");
+            Assert.IsTrue(result, "An OrFilter with no sub-filters should allways match.");
+        }
+    }
+
+    [TestClass]
+    public class NorFilterTests
+    {
+        [TestMethod]
+        public void NorFilter_Matches_WhenNoSubFilterMatches()
+        {
+            var norFilter = new NorFilter();
+            norFilter.Add(new SubstringFilter("notfound"));
+            norFilter.Add(new SubstringFilter("missing"));
+
+            bool result = norFilter.IsMatch("This is a test string");
+            Assert.IsTrue(result, "No sub-filter matches, so the NorFilter should match.");
+        }
+
+        [TestMethod]
+        public void NorFilter_DoesNotMatch_WhenAnySubFilterMatches()
+        {
+            var norFilter = new NorFilter();
+            norFilter.Add(new SubstringFilter("test"));
+            norFilter.Add(new SubstringFilter("missing"));
+
+            bool result = norFilter.IsMatch("This is a test string");
+            Assert.IsFalse(result, "At least one sub-filter matches, so the NorFilter should not match.");
+        }
+
+        [TestMethod]
+        public void NorFilter_Disabled_AlwaysMatches()
+        {
+            var norFilter = new NorFilter() { Enabled = false };
+            norFilter.Add(new SubstringFilter("test"));
+            norFilter.Add(new SubstringFilter("string"));
+
+            bool result = norFilter.IsMatch("Any string");
+            Assert.IsTrue(result, "A disabled filter should be considered neutral and match.");
+        }
+
+        [TestMethod]
+        public void NorFilter_WithNoSubFilters_MatchesEverything()
+        {
+            var norFilter = new NorFilter();
+            bool result = norFilter.IsMatch("Any string");
+            Assert.IsTrue(result, "A NorFilter with no sub-filters should match everything.");
         }
     }
 }

@@ -88,6 +88,12 @@ namespace Logonaut.UI.ViewModels
         }
 
         [RelayCommand]
+        private void AddNorFilter()
+        {
+            AddFilter(new NorFilter());
+        }
+
+        [RelayCommand]
         private void AddNegationFilter()
         {
             // TODO: Should not be hard coded here.

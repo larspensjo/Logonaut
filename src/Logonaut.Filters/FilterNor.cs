@@ -1,13 +1,9 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-
 namespace Logonaut.Filters
 {
     /// <summary>
-    /// A composite filter that matches a log line if any sub-filter matches (logical OR).
+    /// A composite filter that matches a log line if none sub-filter matches.
     /// </summary>
-    public class OrFilter : CompositeFilter
+    public class NorFilter : CompositeFilter
     {
         public override bool IsMatch(string line)
         {
@@ -19,11 +15,11 @@ namespace Logonaut.Filters
                 return true;
                 
             // OR logic: at least one filter must match
-            return Filters.Any(filter => filter.IsMatch(line));
+            return Filters.All(filter => !filter.IsMatch(line));
         }
         
-        public override string DisplayText => "∨";
+        public override string DisplayText => "¬∨";
 
-        public override string TypeText => "OrType";
+        public override string TypeText => "NorType";
     }
 }
