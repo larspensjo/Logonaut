@@ -19,7 +19,7 @@ namespace Logonaut.UI.ViewModels
 
         // The filtered text. It will be used as an input to the LogText, used by Avalon.
         // TODO: Rename VisibleLogLines to FilteredLogLines.
-        public ObservableCollection<string> VisibleLogLines { get; } = new();
+        public List<string> VisibleLogLines { get; set; } = new();
 
         // Property for binding to AvalonEdit
         [ObservableProperty]
@@ -215,11 +215,7 @@ namespace Logonaut.UI.ViewModels
                     // Update the VisibleLogLines on the UI thread.
                     App.Current.Dispatcher.Invoke(() =>
                     {
-                        VisibleLogLines.Clear();
-                        foreach (var line in newFilteredLines)
-                        {
-                            VisibleLogLines.Add(line);
-                        }
+                        VisibleLogLines = new List<string>(newFilteredLines);
                         
                         // Update the LogText property after filtering
                         UpdateLogText();
