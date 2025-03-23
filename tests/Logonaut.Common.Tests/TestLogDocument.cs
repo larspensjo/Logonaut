@@ -99,5 +99,22 @@ namespace Logonaut.Common.Tests
             Assert.AreEqual("Line 2", doc[1], "Second line should be 'Line 2'.");
             Assert.AreEqual("Line 3", doc[2], "Third line should be 'Line 3'.");
         }
+
+        [TestMethod]
+        public void AsReadOnly_ReturnsAllLines()
+        {
+            // Arrange
+            var doc = new LogDocument();
+            doc.AppendLine("Line 1");
+            doc.AppendLine("Line 2");
+
+            // Act
+            var readOnlyLines = doc.ToList();
+
+            // Assert
+            Assert.AreEqual(2, readOnlyLines.Count, "Read-only list should contain all lines.");
+            Assert.AreEqual("Line 1", readOnlyLines[0], "First line should be 'Line 1'.");
+            Assert.AreEqual("Line 2", readOnlyLines[1], "Second line should be 'Line 2'.");
+        }
     }
 }

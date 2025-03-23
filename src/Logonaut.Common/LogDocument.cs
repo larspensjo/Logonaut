@@ -7,6 +7,7 @@ namespace Logonaut.Common
     /// Represents a log document as a collection of lines.
     /// Supports thread-safe appending and retrieving of log lines.
     /// </summary>
+    // TODO: This class contains various members that are not used in the current implementation.
     public class LogDocument
     {
         private readonly List<string> _lines = new();
@@ -70,6 +71,17 @@ namespace Logonaut.Common
                 if (start + count > _lines.Count)
                     count = _lines.Count - start;
                 return _lines.GetRange(start, count).AsReadOnly();
+            }
+        }
+
+        /// <summary>
+        /// Returns a read-only list of all lines in the document.
+        /// </summary>
+        public IReadOnlyList<string> ToList()
+        {
+            lock (_lock)
+            {
+                return _lines.AsReadOnly();
             }
         }
 

@@ -38,6 +38,7 @@ This architecture provides a responsive, modular system for monitoring and filte
     - **AppendLine**: Adding individual lines.
     - **AddInitialLines**: Loading multiple lines at once.
     - **GetLines**: Retrieving subsets of lines.
+    - **AsReadOnly**: Returns a complete read-only list of all lines.
     - **Indexed access**: Accessing specific lines.
 - Thread safety is ensured through locking.
 
@@ -65,6 +66,7 @@ This architecture provides a responsive, modular system for monitoring and filte
 
 ### 3. Filter Processing (`FilterEngine`)
 - `FilterEngine.ApplyFilters` processes the entire log against the filter tree.
+- It now uses the `AsReadOnly` method from `LogDocument` to retrieve all lines as a read-only list.
 - For each line, it checks if the line matches the filter criteria.
 - If a match is found, it includes the line and optional context lines.
 - Context lines are lines before and after the matching line.

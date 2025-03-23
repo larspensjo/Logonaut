@@ -13,13 +13,9 @@ namespace Logonaut.Core
         // Applies the filter to the log document and returns a filtered list.
         public static IReadOnlyList<string> ApplyFilters(LogDocument logDoc, IFilter filterTree, int contextLines = 0)
         {
-            var allLines = new List<string>();
-            for (int i = 0; i < logDoc.Count; i++)
-            {
-                allLines.Add(logDoc[i]);
-            }
-            
+            var allLines = logDoc.ToList(); // Use the complete read-only list
             var filteredLines = new List<string>();
+
             for (int i = 0; i < allLines.Count; i++)
             {
                 if (filterTree.IsMatch(allLines[i]))
