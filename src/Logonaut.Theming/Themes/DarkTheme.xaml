@@ -243,11 +243,67 @@
         <Setter Property="Background" Value="{StaticResource ButtonBackgroundBrush}"/>
         <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
         <Setter Property="Foreground" Value="{StaticResource ButtonForegroundBrush}"/>
-        <Style.Triggers>
-            <Trigger Property="IsChecked" Value="True">
-                <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
-                <Setter Property="Foreground" Value="White"/>
-            </Trigger>
-        </Style.Triggers>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="ToggleButtonBorder"
+                            CornerRadius="8"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="1">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                <GradientStop Offset="0.0" Color="#FF444444" />
+                                <GradientStop Offset="1.0" Color="{TemplateBinding Background}" />
+                            </LinearGradientBrush>
+                        </Border.Background>
+                        <Border.Effect>
+                            <DropShadowEffect Color="#000000"
+                                              BlurRadius="8"
+                                              ShadowDepth="3"
+                                              Opacity="0.3" />
+                        </Border.Effect>
+                        <ContentPresenter HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          RecognizesAccessKey="True" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="ToggleButtonBorder" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                            <Setter TargetName="ToggleButtonBorder" Property="Cursor" Value="Hand" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="ToggleButtonBorder" Property="Background" Value="#FF333333" />
+                            <Setter TargetName="ToggleButtonBorder" Property="Effect">
+                                <Setter.Value>
+                                    <DropShadowEffect Color="#000000"
+                                                      BlurRadius="10"
+                                                      ShadowDepth="1"
+                                                      Opacity="0.5" />
+                                </Setter.Value>
+                            </Setter>
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="ToggleButtonBorder" Property="Background">
+                                <Setter.Value>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                        <GradientStop Offset="0.0" Color="#555555" />
+                                        <GradientStop Offset="1.0" Color="#444444" />
+                                    </LinearGradientBrush>
+                                </Setter.Value>
+                            </Setter>
+                            <Setter TargetName="ToggleButtonBorder" Property="BorderBrush" Value="#444444" />
+                            <Setter TargetName="ToggleButtonBorder" Property="Effect">
+                                <Setter.Value>
+                                    <DropShadowEffect Color="#000000"
+                                                      BlurRadius="5"
+                                                      ShadowDepth="0"
+                                                      Opacity="0.3" />
+                                </Setter.Value>
+                            </Setter>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 </ResourceDictionary>
