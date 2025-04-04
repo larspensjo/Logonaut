@@ -5,34 +5,21 @@ using Logonaut.Filters;
 
 namespace Logonaut.UI.ViewModels
 {
-    // There will be one instance of this for every filter.
-    // TODO: Remove all hard coded dependency of filter type. Instead, ask the filter itself.
     public partial class FilterViewModel : ObservableObject
     {
-        // The underlying filter model from Logonaut.Filters.
         public IFilter FilterModel { get; }
-        
-        // Optional parent reference for non-root filters.
         public FilterViewModel? Parent { get; }
-        
-        // Child view models for composite filters.
         public ObservableCollection<FilterViewModel> Children { get; } = new();
 
-        [ObservableProperty]
-        private bool isSelected;
-
-        [ObservableProperty]
-        private bool isEditing = false;
-
-        [ObservableProperty]
-        private bool isNotEditing = true;
+        [ObservableProperty] private bool _isSelected;
+        [ObservableProperty] private bool _isEditing = false;
+        [ObservableProperty] private bool _isNotEditing = true;
 
         public bool IsEditable => FilterModel.IsEditable;
 
-        // Callback to notify the owner (MainViewModel) that the filter configuration changed
-        private readonly Action? _filterConfigurationChangedCallback;
+        // Callback to notify owner (MainViewModel) that filter config requires re-evaluation
+        private readonly Action? _filterConfigurationChangedCallback; // <<< RENAME? More like "TriggerRefilterCallback"
 
-        // Modified constructor to accept the callback
         public FilterViewModel(IFilter filter, Action? filterConfigurationChangedCallback = null, FilterViewModel? parent = null)
         {
             FilterModel = filter;
@@ -43,7 +30,6 @@ namespace Logonaut.UI.ViewModels
             {
                 foreach (var child in composite.SubFilters)
                 {
-                    // Propagate the callback down to children
                     Children.Add(new FilterViewModel(child, filterConfigurationChangedCallback, this));
                 }
             }
@@ -55,9 +41,10 @@ namespace Logonaut.UI.ViewModels
             if (FilterModel is CompositeFilter composite)
             {
                 composite.Add(childFilter);
-                // Pass the callback when creating child ViewModel
-                Children.Add(new FilterViewModel(childFilter, _filterConfigurationChangedCallback, this));
-                NotifyFilterConfigurationChanged(); // Notify that structure changed
+                // Ensure the callback is passed down
+                var childVM = new FilterViewModel(childFilter, _filterConfigurationChangedCallback, this);
+                Children.Add(childVM);
+                NotifyFilterConfigurationChanged(); // Notify after structural change
             }
         }
 
@@ -65,9 +52,11 @@ namespace Logonaut.UI.ViewModels
         {
             if (FilterModel is CompositeFilter composite)
             {
-                composite.Remove(child.FilterModel);
-                Children.Remove(child);
-                NotifyFilterConfigurationChanged(); // Notify that structure changed
+                if (composite.Remove(child.FilterModel))
+                {
+                    Children.Remove(child);
+                    NotifyFilterConfigurationChanged(); // Notify after structural change
+                }
             }
         }
 
@@ -80,36 +69,27 @@ namespace Logonaut.UI.ViewModels
                 {
                     FilterModel.Enabled = value;
                     OnPropertyChanged();
-                    NotifyFilterConfigurationChanged(); // <<<<< ADDED
+                    NotifyFilterConfigurationChanged(); // <<< Notify on Enabled change
                 }
             }
         }
 
-        // Read-only display text. See also FilterText, used when editing.
         public string DisplayText => FilterModel.DisplayText;
-
-        // This is used by FilterTemplates.xaml.
         public string FilterType => FilterModel.TypeText;
 
-        // A property that sets the substring when the FilterModel shows a TextBox.
-        // See also DisplayText, used when displaying the filter.
-        // VS Code shows reference as 0, but it is used by FilterTemplates.xaml.
         public string FilterText
         {
             get => FilterModel.Value;
             set
             {
-                // Only trigger change if the value actually changed.
-                // Also handles cases where Value getter/setter might throw if not supported.
                 try
                 {
                     if (FilterModel.Value != value)
                     {
                         FilterModel.Value = value;
                         OnPropertyChanged();
-                        OnPropertyChanged(nameof(DisplayText)); // DisplayText depends on Value
-                        // No need to notify config changed on every keystroke here,
-                        // only when editing finishes (EndEdit) or Enabled changes.
+                        OnPropertyChanged(nameof(DisplayText)); // DisplayText depends on Value for some types
+                        // DO NOT notify on every keystroke. Notification happens on EndEdit or Enabled change.
                     }
                 }
                 catch (NotSupportedException)
@@ -138,10 +118,13 @@ namespace Logonaut.UI.ViewModels
         [RelayCommand]
         public void EndEdit()
         {
-            IsEditing = false;
-            IsNotEditing = true;
-            // Notify AFTER editing is finished
-            NotifyFilterConfigurationChanged();
+            if (IsEditing) // Only trigger if we were actually editing
+            {
+                IsEditing = false;
+                IsNotEditing = true;
+                // Notify AFTER editing is finished and state is updated
+                NotifyFilterConfigurationChanged(); // <<< Notify on finishing edit
+            }
         }
     }
 }

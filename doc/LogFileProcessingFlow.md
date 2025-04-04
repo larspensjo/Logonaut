@@ -1,91 +1,76 @@
 # Logonaut: Log File Processing Flow
 
 ## Complete Data Flow
-1. **User selects a log file** → `OpenLogFile` command → `LogTailerManager.ChangeFile`.
-2. **LogTailer monitors the file** → Detects changes → Reads new lines.
-3. **New lines flow through** → Observable stream → `MainViewModel` → `LogDocument.AppendLine`.
-4. **Background filtering process** → Applies filter tree → Produces filtered lines.
-5. **UI updates** → `FilteredLogLines` collection (holding `FilteredLogLine` objects) → `LogText` (text only) updates editor content, *and* custom margin reads `FilteredLogLines` to display original line numbers → Display.
+1.  **User selects a log file** → `OpenLogFile` command → `LogTailerManager.ChangeFile`.
+2.  **LogTailer monitors the file** → Detects changes → Reads new lines → Publishes via `IObservable<string>`.
+3.  **New lines flow through** → `LogTailerManager.Instance.LogLines` → `LogFilterProcessor`.
+4.  **`LogFilterProcessor`** → Appends line to `LogDocument` → Processes line via incremental Rx pipeline → Applies current filter to buffered new lines.
+5.  **Filter Settings Changed** → `MainViewModel` calls `LogFilterProcessor.UpdateFilterSettings()` → `LogFilterProcessor` triggers (debounced) full re-filter using `FilterEngine.ApplyFilters` on `LogDocument` snapshot.
+6.  **`LogFilterProcessor`** → Generates `FilteredUpdate` (Replace or Append) → Pushes update to `MainViewModel` via `FilteredUpdates` observable (on UI thread).
+7.  **`MainViewModel` subscribes** → Receives `FilteredUpdate` → Updates `FilteredLogLines` collection (`ObservableCollection<FilteredLogLine>`).
+8.  **UI Updates** → `FilteredLogLines` change notifies custom line number margin → `MainViewModel` schedules `LogText` update → `LogText` property updates AvalonEdit content → Display.
 
-This architecture provides a responsive, modular system for monitoring and filtering log files in real-time, with a clean separation of concerns between file monitoring, data storage, filtering, and UI presentation.
+This architecture provides a responsive, modular system for monitoring and filtering log files in real-time, with a clean separation of concerns between file monitoring, data storage, reactive processing/filtering, and UI presentation.
 
 ## Log File Loading and Updating
 
 ### 1. Log File Selection
 - Users select a log file through the UI using the `OpenLogFile` command in `MainViewModel`.
 - The file path is passed to `LogTailerManager.Instance.ChangeFile(selectedFile)`.
-- The `LogTailerManager` is a singleton that manages the current log file being monitored.
+- The `LogTailerManager` is a singleton managing the current `LogTailer`.
+- Before changing the file, `MainViewModel` calls `LogFilterProcessor.Reset()` to clear internal state and UI collections.
 
 ### 2. Log File Monitoring (`LogTailer`)
-- `LogTailer` is responsible for monitoring a specific log file for changes.
-- It uses `FileSystemWatcher` to detect when the file is modified.
-
-#### Key components:
-- **Constructor**: Validates the file exists and is accessible.
-- **Start()**: Initializes monitoring with `FileSystemWatcher`.
-- **OnFileChanged**: Event handler triggers when file changes are detected.
-- **ReadNewLinesAsync**: Reads new content from the last known position.
+- `LogTailer` monitors a specific log file for changes using `FileSystemWatcher`.
+- It reads new content asynchronously from the last known position.
+- New log lines are exposed as an `IObservable<string>` stream using Reactive Extensions (Rx.NET).
 
 ### 3. Log Data Flow
-- New log lines are exposed as an `IObservable<string>` stream using Reactive Extensions.
-- When new lines are read, they're published through a `Subject<string>`.
-- The `LogTailerManager` subscribes to this stream and republishes it to application components.
-- `MainViewModel` subscribes to the manager's stream and appends lines to `LogDocument`.
+- New lines are published via `LogTailer.LogLines`.
+- `LogTailerManager` subscribes and republishes these lines via its own `LogLines` observable.
+- `LogFilterProcessor` subscribes to `LogTailerManager.Instance.LogLines`.
 
 ### 4. Log Storage (`LogDocument`)
-- `LogDocument` is a thread-safe container for log lines.
-- It provides methods for:
-    - **AppendLine**: Adding individual lines.
-    - **AddInitialLines**: Loading multiple lines at once.
-    - **GetLines**: Retrieving subsets of lines.
-    - **AsReadOnly**: Returns a complete read-only list of all lines.
-    - **Indexed access**: Accessing specific lines.
-- Thread safety is ensured through locking.
+- `LogDocument` is a thread-safe container holding *all* original log lines.
+- `LogFilterProcessor` appends incoming lines to this document (`AppendLine`).
+- `LogFilterProcessor` reads snapshots (`ToList()`) from `LogDocument` when performing full re-filters.
+- Thread safety is ensured through locking within `LogDocument`.
 
 ## Log Filtering System
 
-### 1. Filter Types
+### 1. Filter Types & Hierarchy
+- Filter types (Substring, Regex, And, Or, Nor, True) remain the same.
+- Filters are organized in a hierarchical tree managed by `MainViewModel` and `FilterViewModel`.
+- `MainViewModel` holds the root `FilterProfiles` (usually one tree).
 
-#### Simple Filters:
-- **SubstringFilter**: Matches lines containing a specific substring.
-- **RegexFilter**: Matches lines using regular expressions.
+### 2. Filter Processing (`LogFilterProcessor` & `FilterEngine`)
+- **Reactive Orchestration (`LogFilterProcessor` in `Logonaut.Core`):**
+    - Manages the Rx pipelines for filtering.
+    - Handles incoming lines incrementally (buffering, applying current filter to new lines).
+    - Handles filter changes (debouncing, triggering full re-filters).
+    - Performs work on background threads.
+    - Marshals results (`FilteredUpdate`) back to the UI thread.
+- **Core Filtering Logic (`FilterEngine` in `Logonaut.Core`):**
+    - Contains the static `ApplyFilters` method.
+    - Takes a `LogDocument` (snapshot), an `IFilter` tree, and `contextLines`.
+    - Iterates through the lines, applies the filter logic, includes context lines, ensures uniqueness, and returns `IReadOnlyList<FilteredLogLine>`.
+    - This method is called by `LogFilterProcessor` during a full re-filter.
 
-#### Composite Filters:
-- **AndFilter**: Matches when all child filters match (logical AND).
-- **OrFilter**: Matches when any child filter matches (logical OR).
-- **NorFilter**: Matches when no child filters match (logical NOR).
+### 3. Filtering Execution Flow
+- **Incremental:** New lines arrive → `LogFilterProcessor` buffers them → Applies *current* filter to the buffer → Emits an `Append` type `FilteredUpdate` with matching lines.
+- **Full Re-filter:** User changes filter UI → `FilterViewModel` callback → `MainViewModel.TriggerFilterUpdate()` → Calls `LogFilterProcessor.UpdateFilterSettings()` → Processor updates internal filter state → Debounces → Calls `FilterEngine.ApplyFilters` on `LogDocument` snapshot → Emits a `Replace` type `FilteredUpdate` with the complete new result set.
 
-#### Default Filter:
-- **TrueFilter**: Always returns true (used when no filters are defined).
+### 4. UI Updates
+- `MainViewModel` receives `FilteredUpdate` objects on the UI thread.
+- It updates the `FilteredLogLines` `ObservableCollection` accordingly (clearing + adding for `Replace`, just adding for `Append`).
+- The change to `FilteredLogLines` automatically updates the custom `OriginalLineNumberMargin` via data binding.
+- `MainViewModel` then calls `ScheduleLogTextUpdate`, which posts `UpdateLogTextInternal` to the UI thread's queue.
+- `UpdateLogTextInternal` safely reads the `FilteredLogLines`, extracts the text, joins it, and updates the `LogText` property bound to AvalonEdit.
 
-### 2. Filter Hierarchy
-- Filters are organized in a hierarchical tree structure.
-- The UI allows users to add, remove, and edit filters.
-- Composite filters can contain other filters (simple or composite).
-- This enables complex expressions like `(A or (B and not C))`.
-
-### 3. Filter Processing (`FilterEngine`)
-- `FilterEngine.ApplyFilters` processes the entire log against the filter tree.
-- It uses the `ToList()` method from `LogDocument` to retrieve all lines as a read-only list.
-- For each line, it checks if it matches the filter criteria.
-- If a match is found (or if the line is included as context), it creates a `FilteredLogLine` object containing the line's text and its **original 1-based line number**.
-- If a match is found, it includes the line and optional context lines.
-- Context lines are lines before and after the matching line.
-- Duplicate lines are avoided in the final output.
-
-### 4. Background Filtering
-- Filtering runs on a background thread to keep the UI responsive.
-- `StartBackgroundFiltering` in `MainViewModel` creates a continuous filtering loop.
-- Every 250ms, it:
-    1. Gets the current filter tree (or uses `TrueFilter` if none exists).
-    2. Applies the filter to the entire log document.
-    3. Updates the `FilteredLogLines` collection on the UI thread with the results (list of `FilteredLogLine` objects).
-- The `FilteredLogLines` collection holds the data for the filtered view.
-- `UpdateLogText` extracts only the text part from `FilteredLogLines` and joins it into a single string for AvalonEdit's content display.
-- A custom line number margin reads the `FilteredLogLines` collection to render the correct original line numbers alongside the text.
-
-### 5. Filter Highlighting
-- `UpdateFilterSubstrings` collects all substrings and regex patterns from filters.
-- These are used to highlight matching text in the log display.
-    - For substring filters, the text is escaped for regex.
-    - For regex filters, the pattern is used directly.
+### 5. Filter Highlighting (`MainViewModel` & `AvalonEditHelper`)
+- When filters change (`TriggerFilterUpdate` is called), `MainViewModel` also executes `UpdateFilterSubstringsCommand`.
+- This command traverses the *current* filter tree in `FilterProfiles` (`MainViewModel`) to collect all active substring/regex patterns.
+- It updates the `FilterSubstrings` property (an `ObservableCollection<string>`).
+- Data binding triggers `AvalonEditHelper.OnFilterSubstringsChanged`.
+- `AvalonEditHelper` updates the `CustomHighlightingDefinition` with the new patterns.
+- AvalonEdit redraws, applying the highlighting rules.
