@@ -10,3 +10,5 @@
   * Custom colors, font weights, and styles for different log elements
   * The ability to save and load highlighting configurations
   * Real-time updates to highlighting as configurations change
+
+* Using MSTest for unit tests

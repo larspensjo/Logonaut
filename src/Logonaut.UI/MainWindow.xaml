@@ -96,21 +96,24 @@
 
                 <!-- Log Display using AvalonEdit with syntax highlighting -->
                 <Border Grid.Row="1" Style="{StaticResource CardPanelStyle}">
-                    <avalonEdit:TextEditor 
-                        Name="LogTextEditor"
-                        FontFamily="Consolas"
-                        FontSize="12"
-                        SyntaxHighlighting="Log"
-                        ShowLineNumbers="{Binding ShowLineNumbers}"
-                        IsReadOnly="True"
-                        WordWrap="True"
-                        Background="{DynamicResource WindowBackgroundBrush}"
-                        Foreground="{DynamicResource TextForegroundBrush}"
-                        helpers:AvalonEditHelper.BindableText="{Binding LogText}"
-                        helpers:AvalonEditHelper.EnableTextBinding="True"
-                        helpers:AvalonEditHelper.FilterSubstrings="{Binding FilterSubstrings}"
-                        helpers:AvalonEditHelper.HighlightTimestamps="{Binding HighlightTimestamps}">
-                    </avalonEdit:TextEditor>
+                    <avalonedit:TextEditor x:Name="LogOutputEditor"
+                                        xmlns:avalonedit="http://icsharpcode.net/sharpdevelop/avalonedit"
+                                        xmlns:helpers="clr-namespace:Logonaut.UI.Helpers"
+                                        FontFamily="Consolas"
+                                        FontSize="12pt"
+                                        IsReadOnly="True"
+                                        SyntaxHighlighting="Log"
+                                        WordWrap="False"
+                                        VerticalScrollBarVisibility="Visible"
+                                        HorizontalScrollBarVisibility="Visible"
+                                        Padding="3,0,0,0"
+                                        Background="{DynamicResource EditorBackgroundBrush}"
+                                        Foreground="{DynamicResource EditorForegroundBrush}"
+                                        helpers:AvalonEditHelper.BindableText="{Binding LogText, Mode=OneWay}"
+                                        helpers:AvalonEditHelper.FilterSubstrings="{Binding FilterSubstrings, Mode=OneWay}"
+                                        helpers:AvalonEditHelper.HighlightTimestamps="{Binding HighlightTimestamps, Mode=OneWay}"
+                                        ShowLineNumbers="False">
+                    </avalonedit:TextEditor>
                 </Border>
 
                 <!-- Search Panel -->

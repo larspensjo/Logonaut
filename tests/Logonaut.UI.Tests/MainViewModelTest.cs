@@ -126,8 +126,8 @@ namespace Logonaut.UI.Tests.ViewModels
             viewModel.PreviousSearchCommand.Execute(null);
 
             // Assert
-            var combined = string.Join("\n", viewModel.VisibleLogLines);
-            StringAssert.Contains(combined, "Previous search executed.", "VisibleLogLines should contain the previous search message.");
+            var combined = string.Join("\n", viewModel.FilteredLogLines);
+            StringAssert.Contains(combined, "Previous search executed.", "FilteredLogLines should contain the previous search message.");
         }
 
         [TestMethod]
@@ -141,8 +141,8 @@ namespace Logonaut.UI.Tests.ViewModels
             viewModel.NextSearchCommand.Execute(null);
 
             // Assert
-            var combined = string.Join("\n", viewModel.VisibleLogLines);
-            StringAssert.Contains(combined, "Next search executed.", "VisibleLogLines should contain the next search message.");
+            var combined = string.Join("\n", viewModel.FilteredLogLines);
+            StringAssert.Contains(combined, "Next search executed.", "FilteredLogLines should contain the next search message.");
         }
 
         [TestMethod]
