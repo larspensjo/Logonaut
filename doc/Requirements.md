@@ -19,6 +19,7 @@ Logonaut is a Windows application written in C#. It functions as a log viewer, r
 - The log output shall be continuously updated in real-time.
 - There shall be some kind of indication showing how much of the log output is currently included in the display.
 - Many log files have a prefix in the format of a date or time. The application shall detect this prefix and visibly mark it for better readability.
+- Line numbers displayed next to filtered log entries shall correspond to the original line number in the complete log file.
 - The user shall be able to adjust the font size and color scheme for better readability.
 
 ### 2.3 User Interaction
@@ -79,7 +80,7 @@ Logonaut is a Windows application written in C#. It functions as a log viewer, r
 - If no filters exist, the new filter becomes the top-level filter.
 - If filters already exist, the user must select where the new filter should be placed in the hierarchy.
 - If a filter is removed, its children are also removed unless rearranged.
-- Several buttons shall be available for adding specific filter types: 
+- Several buttons shall be available for adding specific filter types:
   - SubstringFilter (for exact text matching)
   - RegexFilter (for regular expression pattern matching)
   - AndFilter

@@ -5,7 +5,7 @@
 2. **LogTailer monitors the file** → Detects changes → Reads new lines.
 3. **New lines flow through** → Observable stream → `MainViewModel` → `LogDocument.AppendLine`.
 4. **Background filtering process** → Applies filter tree → Produces filtered lines.
-5. **UI updates** → `VisibleLogLines` collection → `UpdateLogText` → Display.
+5. **UI updates** → `FilteredLogLines` collection (holding `FilteredLogLine` objects) → `LogText` (text only) updates editor content, *and* custom margin reads `FilteredLogLines` to display original line numbers → Display.
 
 This architecture provides a responsive, modular system for monitoring and filtering log files in real-time, with a clean separation of concerns between file monitoring, data storage, filtering, and UI presentation.
 
@@ -66,8 +66,9 @@ This architecture provides a responsive, modular system for monitoring and filte
 
 ### 3. Filter Processing (`FilterEngine`)
 - `FilterEngine.ApplyFilters` processes the entire log against the filter tree.
-- It now uses the `AsReadOnly` method from `LogDocument` to retrieve all lines as a read-only list.
-- For each line, it checks if the line matches the filter criteria.
+- It uses the `ToList()` method from `LogDocument` to retrieve all lines as a read-only list.
+- For each line, it checks if it matches the filter criteria.
+- If a match is found (or if the line is included as context), it creates a `FilteredLogLine` object containing the line's text and its **original 1-based line number**.
 - If a match is found, it includes the line and optional context lines.
 - Context lines are lines before and after the matching line.
 - Duplicate lines are avoided in the final output.
@@ -78,9 +79,10 @@ This architecture provides a responsive, modular system for monitoring and filte
 - Every 250ms, it:
     1. Gets the current filter tree (or uses `TrueFilter` if none exists).
     2. Applies the filter to the entire log document.
-    3. Updates the UI with the filtered results.
-- The filtered lines are stored in the `VisibleLogLines` collection.
-- `UpdateLogText` converts these lines to a single string for display.
+    3. Updates the `FilteredLogLines` collection on the UI thread with the results (list of `FilteredLogLine` objects).
+- The `FilteredLogLines` collection holds the data for the filtered view.
+- `UpdateLogText` extracts only the text part from `FilteredLogLines` and joins it into a single string for AvalonEdit's content display.
+- A custom line number margin reads the `FilteredLogLines` collection to render the correct original line numbers alongside the text.
 
 ### 5. Filter Highlighting
 - `UpdateFilterSubstrings` collects all substrings and regex patterns from filters.
