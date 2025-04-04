@@ -163,6 +163,7 @@ namespace Logonaut.UI.Helpers
         private static void ApplyAllHighlighting(TextEditor editor)
         {
             // Create a simple highlighting definition programmatically
+            // This will recompute the list every time. It is fine, the cost is negligible.
             CustomHighlightingDefinition definition = new();
             definition.AddCommonTimestampPatterns();
 
@@ -174,9 +175,7 @@ namespace Logonaut.UI.Helpers
             // Apply any existing filter substrings
             var substrings = GetFilterSubstrings(editor);
             if (substrings != null)
-            {
                 definition.UpdateFilterHighlighting(substrings);
-            }
 
             _timestampHighlightingDefinition = definition;
             
