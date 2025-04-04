@@ -27,52 +27,50 @@ namespace Logonaut.UI.ViewModels
         [ObservableProperty]
         private bool isNotEditing = true;
 
-        // Indicates whether this filter is editable.
         public bool IsEditable => FilterModel.IsEditable;
 
-        public FilterViewModel(IFilter filter, FilterViewModel? parent = null)
+        // Callback to notify the owner (MainViewModel) that the filter configuration changed
+        private readonly Action? _filterConfigurationChangedCallback;
+
+        // Modified constructor to accept the callback
+        public FilterViewModel(IFilter filter, Action? filterConfigurationChangedCallback = null, FilterViewModel? parent = null)
         {
             FilterModel = filter;
             Parent = parent;
+            _filterConfigurationChangedCallback = filterConfigurationChangedCallback;
+
             if (filter is CompositeFilter composite)
             {
                 foreach (var child in composite.SubFilters)
                 {
-                    Children.Add(new FilterViewModel(child, this));
+                    // Propagate the callback down to children
+                    Children.Add(new FilterViewModel(child, filterConfigurationChangedCallback, this));
                 }
             }
-
-#if false
-            // TODO: We want to start edit mode immediately, but some improved visual and focus management is needed.
-            if (filter.IsEditable)
-            {
-                BeginEdit();
-            }
-#endif
         }
 
-        // Command to add a child filter.
         [RelayCommand]
         public void AddChildFilter(IFilter childFilter)
         {
             if (FilterModel is CompositeFilter composite)
             {
                 composite.Add(childFilter);
-                Children.Add(new FilterViewModel(childFilter, this));
+                // Pass the callback when creating child ViewModel
+                Children.Add(new FilterViewModel(childFilter, _filterConfigurationChangedCallback, this));
+                NotifyFilterConfigurationChanged(); // Notify that structure changed
             }
         }
 
-        // Removes a child filter from the composite.
         public void RemoveChild(FilterViewModel child)
         {
             if (FilterModel is CompositeFilter composite)
             {
                 composite.Remove(child.FilterModel);
                 Children.Remove(child);
+                NotifyFilterConfigurationChanged(); // Notify that structure changed
             }
         }
 
-        // Property to control whether the filter is enabled.
         public bool Enabled
         {
             get => FilterModel.Enabled;
@@ -82,6 +80,7 @@ namespace Logonaut.UI.ViewModels
                 {
                     FilterModel.Enabled = value;
                     OnPropertyChanged();
+                    NotifyFilterConfigurationChanged(); // <<<<< ADDED
                 }
             }
         }
@@ -100,29 +99,32 @@ namespace Logonaut.UI.ViewModels
             get => FilterModel.Value;
             set
             {
-                if (FilterModel.Value != value)
+                // Only trigger change if the value actually changed.
+                // Also handles cases where Value getter/setter might throw if not supported.
+                try
                 {
-                    FilterModel.Value = value;
-                    OnPropertyChanged();
-                    OnPropertyChanged(nameof(DisplayText));
-                    NotifyFilterTextChanged();
+                    if (FilterModel.Value != value)
+                    {
+                        FilterModel.Value = value;
+                        OnPropertyChanged();
+                        OnPropertyChanged(nameof(DisplayText)); // DisplayText depends on Value
+                        // No need to notify config changed on every keystroke here,
+                        // only when editing finishes (EndEdit) or Enabled changes.
+                    }
+                }
+                catch (NotSupportedException)
+                {
+                    // Ignore attempts to set Value on filters that don't support it.
                 }
             }
         }
 
-        // Method to propagate filter text changes up to MainViewModel
-        private void NotifyFilterTextChanged()
+        // Method to invoke the callback
+        private void NotifyFilterConfigurationChanged()
         {
-            // Find the root MainViewModel
-            if (App.Current.MainWindow?.DataContext is MainViewModel mainViewModel)
-            {
-                // Update filter substrings for highlighting
-                // Use the command property instead of the method
-                mainViewModel.UpdateFilterSubstringsCommand.Execute(null);
-            }
+            _filterConfigurationChangedCallback?.Invoke();
         }
 
-        // Command to begin inline editing.
         [RelayCommand]
         public void BeginEdit()
         {
@@ -133,15 +135,13 @@ namespace Logonaut.UI.ViewModels
             }
         }
 
-        // Command to end inline editing.
         [RelayCommand]
         public void EndEdit()
         {
             IsEditing = false;
             IsNotEditing = true;
-    
-            // Notify that filter text has changed to update highlighting
-            NotifyFilterTextChanged();
+            // Notify AFTER editing is finished
+            NotifyFilterConfigurationChanged();
         }
     }
 }
