@@ -1,5 +1,7 @@
+using System; // Added for Environment.NewLine, InvalidOperationException
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Linq; // Added for Select, FirstOrDefault
 using System.Reactive.Disposables; // For CompositeDisposable
 using System.Text.RegularExpressions;
 using System.Threading; // For SynchronizationContext
@@ -14,218 +16,126 @@ using Logonaut.UI.Services;
 
 namespace Logonaut.UI.ViewModels
 {
-    // Using partial class for potential future organization (e.g., MainViewModel.Commands.cs)
+    // MainViewModel now acts as a true mediator between the View, the UI data structures (FilterViewModel tree), and the core processing logic (ILogFilterProcessor).
+    // It focuses on managing the UI state, handling user input via commands, and coordinating the flow of data and triggers between the UI and the background processing service,
+    // without containing the complex reactive pipeline logic itself.
     public partial class MainViewModel : ObservableObject, IDisposable
     {
-        public ThemeViewModel Theme { get; } = new();
+        #region // --- Fields ---
 
-        // LogDocument remains to hold the full log, managed by LogFilterProcessor
+        // --- UI Services & Context ---
+        private readonly IFileDialogService _fileDialogService;
+        private readonly SynchronizationContext _uiContext;
+
+        // --- Core Processing Service ---
+        private readonly ILogFilterProcessor _logFilterProcessor;
+
+        // --- Log Display Text Generation ---
+        private bool _logTextUpdateScheduled = false;
+        private readonly object _logTextUpdateLock = new object();
+
+        // --- Lifecycle Management ---
+        private readonly CompositeDisposable _disposables = new();
+
+        #endregion // --- Fields ---
+
+        #region // --- Constructor ---
+
+        public MainViewModel(IFileDialogService? fileDialogService = null, ILogFilterProcessor? logFilterProcessor = null)
+        {
+            // --- Interaction with UI Services ---
+            _fileDialogService = fileDialogService ?? new FileDialogService();
+            _uiContext = SynchronizationContext.Current ?? throw new InvalidOperationException("Could not capture SynchronizationContext. Ensure ViewModel is created on the UI thread.");
+
+            // --- Orchestration with ILogFilterProcessor ---
+            // Initialize and own the processor
+            _logFilterProcessor = logFilterProcessor ?? new LogFilterProcessor(
+                LogTailerManager.Instance.LogLines,
+                LogDoc, // Pass the LogDocument instance - LogDoc owned by VM (UI State)
+                _uiContext);
+
+            // Subscribe to results from the processor
+            var filterSubscription = _logFilterProcessor.FilteredUpdates
+                .Subscribe(
+                    update => ApplyFilteredUpdate(update),
+                    ex => HandleProcessorError("Log Processing Error", ex)
+                );
+
+            // --- Lifecycle Management ---
+            _disposables.Add(_logFilterProcessor);
+            _disposables.Add(filterSubscription);
+
+            // --- Initial State Setup ---
+            Theme = new ThemeViewModel(); // Part of UI State
+            TriggerFilterUpdate(); // Initial filter application
+        }
+
+        #endregion // --- Constructor ---
+
+        #region // --- UI State Management ---
+        // Holds observable properties representing the application's state for data binding.
+
+        public ThemeViewModel Theme { get; }
+
+        // Central store for all original log lines, passed to processor but owned here.
         public LogDocument LogDoc { get; } = new();
 
-        // The filtered lines collection, updated by the LogFilterProcessor subscription
+        // Collection of filtered lines currently displayed in the UI.
         public ObservableCollection<FilteredLogLine> FilteredLogLines { get; } = new();
 
-        // Property for binding to AvalonEdit (holds only the text content)
+        // Raw text content derived from FilteredLogLines, bound to AvalonEdit.
         [ObservableProperty]
         private string _logText = string.Empty;
 
-        // Search text property
+        // Text entered by the user for searching.
         [ObservableProperty]
         [NotifyCanExecuteChangedFor(nameof(PreviousSearchCommand))]
         [NotifyCanExecuteChangedFor(nameof(NextSearchCommand))]
         private string _searchText = "";
 
-        // Current file path property
+        // Path of the currently monitored log file.
         [ObservableProperty]
         private string? _currentLogFilePath;
 
-        // Filter profiles (tree structure for UI)
+        // Hierarchical structure of FilterViewModel objects for the filter tree UI.
         public ObservableCollection<FilterViewModel> FilterProfiles { get; } = new();
 
-        // Selected filter in the tree view
+        // Currently selected node in the filter tree UI.
         [ObservableProperty]
         [NotifyCanExecuteChangedFor(nameof(RemoveFilterCommand))]
         [NotifyCanExecuteChangedFor(nameof(ToggleEditCommand))]
         private FilterViewModel? _selectedFilter;
 
-        // Context lines (TODO: Add UI control to change this)
+        // Configured number of context lines to display around filter matches.
         [ObservableProperty]
         private int _contextLines = 0; // Default to 0
 
-        // UI Services
-        private readonly IFileDialogService _fileDialogService;
-        private readonly ILogFilterProcessor _logFilterProcessor; // <<< New Service
+        // Controls visibility of the custom line number margin.
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(IsCustomLineNumberMarginVisible))]
+        private bool _showLineNumbers = true;
+        public Visibility IsCustomLineNumberMarginVisible => ShowLineNumbers ? Visibility.Visible : Visibility.Collapsed;
 
-        // --- UI Update Scheduling ---
-        private bool _logTextUpdateScheduled = false;
-        private readonly object _logTextUpdateLock = new object();
-        private readonly SynchronizationContext _uiContext;
+        // Controls whether timestamp highlighting rules are applied in AvalonEdit.
+        [ObservableProperty]
+        private bool _highlightTimestamps = true;
 
-        // --- Rx Disposables ---
-        private readonly CompositeDisposable _disposables = new();
+        // Collection of filter patterns (substrings/regex) for highlighting.
+        // Note: This state is derived by traversing FilterProfiles (see Highlighting Configuration).
+        [ObservableProperty]
+        private ObservableCollection<string> _filterSubstrings = new();
 
-        public MainViewModel(IFileDialogService? fileDialogService = null, ILogFilterProcessor? logFilterProcessor = null)
-        {
-            _fileDialogService = fileDialogService ?? new FileDialogService();
+        #endregion // --- UI State Management ---
 
-            _uiContext = SynchronizationContext.Current ?? throw new InvalidOperationException("Could not capture SynchronizationContext. Ensure ViewModel is created on the UI thread.");
+        #region // --- Command Handling ---
+        // Defines RelayCommands executed in response to user interactions.
 
-            // --- Initialize Log Filter Processor ---
-            // The processor now takes the raw lines stream and the LogDocument
-            _logFilterProcessor = logFilterProcessor ?? new LogFilterProcessor(
-                LogTailerManager.Instance.LogLines,
-                LogDoc, // Pass the LogDocument instance
-                _uiContext);
-
-            _disposables.Add(_logFilterProcessor);
-
-            // --- Subscribe to Filtered Updates from the Processor ---
-            var filterSubscription = _logFilterProcessor.FilteredUpdates
-                // No ObserveOn needed here, processor ensures updates are on UI context
-                .Subscribe(
-                    update => ApplyFilteredUpdate(update),
-                    ex => HandleProcessorError("Log Processing Error", ex) // Handle errors from the processor stream
-                );
-            _disposables.Add(filterSubscription);
-
-            // Initial filter update
-            TriggerFilterUpdate();
-        }
-
-        // --- Apply Updates from LogFilterProcessor ---
-        private void ApplyFilteredUpdate(FilteredUpdate update)
-        {
-            if (update.Type == UpdateType.Replace)
-            {
-                ReplaceFilteredLines(update.Lines);
-            }
-            else // Append
-            {
-                AddFilteredLines(update.Lines);
-            }
-        }
-
-        // --- UI Update Methods (Called by ApplyFilteredUpdate on UI Thread) ---
-        private void AddFilteredLines(IReadOnlyList<FilteredLogLine> linesToAdd)
-        {
-            foreach (var line in linesToAdd)
-            {
-                FilteredLogLines.Add(line);
-            }
-            ScheduleLogTextUpdate();
-        }
-
-        private void ReplaceFilteredLines(IReadOnlyList<FilteredLogLine> newLines)
-        {
-            FilteredLogLines.Clear();
-            foreach (var line in newLines)
-            {
-                FilteredLogLines.Add(line);
-            }
-            ScheduleLogTextUpdate();
-        }
-
-        // --- Schedule the UpdateLogText call (Remains the Same) ---
-        private void ScheduleLogTextUpdate()
-        {
-            lock (_logTextUpdateLock)
-            {
-                if (!_logTextUpdateScheduled)
-                {
-                    _logTextUpdateScheduled = true;
-                    _uiContext.Post(_ =>
-                    {
-                        lock (_logTextUpdateLock)
-                        {
-                            _logTextUpdateScheduled = false;
-                        }
-                        UpdateLogTextInternal();
-                    }, null);
-                }
-            }
-        }
-
-        // --- Internal LogText Update (Remains the Same) ---
-        private void UpdateLogTextInternal()
-        {
-            try
-            {
-                var textOnly = FilteredLogLines.Select(line => line.Text).ToList();
-                LogText = string.Join(Environment.NewLine, textOnly);
-            }
-            catch (InvalidOperationException ioex)
-            {
-                Debug.WriteLine($"Error during UpdateLogTextInternal (Collection modified?): {ioex}");
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Generic error during UpdateLogTextInternal: {ex}");
-            }
-        }
-
-        // --- Helper to get the current filter from the UI structure ---
-        private IFilter GetCurrentFilter()
-        {
-            return FilterProfiles.FirstOrDefault()?.FilterModel ?? new TrueFilter();
-        }
-
-        // --- Trigger Filter Update in the Processor ---
-        private void TriggerFilterUpdate()
-        {
-            var currentFilter = GetCurrentFilter();
-            _logFilterProcessor.UpdateFilterSettings(currentFilter, ContextLines); // Pass context lines
-            // Update highlighting based on the new filter state
-            UpdateFilterSubstringsCommand.Execute(null);
-        }
-
-        // --- Error Handling ---
-        private void HandleProcessorError(string contextMessage, Exception ex)
-        {
-            Debug.WriteLine($"{contextMessage}: {ex}");
-            // Consider showing a user-friendly error message
-            // _uiContext.Post(_ => MessageBox.Show($"Error processing logs: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Warning), null);
-        }
-
-        // --- Commands ---
-
-        // Command methods now trigger TriggerFilterUpdate after modifying the FilterProfiles
-        [RelayCommand]
-        private void AddSubstringFilter() => AddFilter(new SubstringFilter(""));
-        [RelayCommand]
-        private void AddRegexFilter() => AddFilter(new RegexFilter(".*"));
-        [RelayCommand]
-        private void AddAndFilter() => AddFilter(new AndFilter());
-        [RelayCommand]
-        private void AddOrFilter() => AddFilter(new OrFilter());
-        [RelayCommand]
-        private void AddNorFilter() => AddFilter(new NorFilter());
-
-        private void AddFilter(IFilter filter)
-        {
-            // Pass the TriggerFilterUpdate method as the callback
-            var newFilterVM = new FilterViewModel(filter, TriggerFilterUpdate);
-
-            if (FilterProfiles.Count == 0)
-            {
-                FilterProfiles.Add(newFilterVM);
-                SelectedFilter = newFilterVM; // Auto-select the new root
-            }
-            else if (SelectedFilter != null && SelectedFilter.FilterModel is CompositeFilter)
-            {
-                SelectedFilter.AddChildFilter(filter); // AddChildFilter uses the callback
-            }
-            else
-            {
-                MessageBox.Show(
-                    SelectedFilter == null
-                    ? "Please select a composite filter node (And, Or, Nor) first to add a child."
-                    : "Selected filter is not a composite filter (And, Or, Nor). Cannot add a child filter here.",
-                    "Add Filter Information", MessageBoxButton.OK, MessageBoxImage.Information);
-                return; // Don't trigger update if nothing was added
-            }
-            // Trigger update AFTER adding the filter to the structure
-            TriggerFilterUpdate();
-        }
+        // --- Filter Manipulation Commands ---
+        [RelayCommand] private void AddSubstringFilter() => AddFilter(new SubstringFilter(""));
+        [RelayCommand] private void AddRegexFilter() => AddFilter(new RegexFilter(".*"));
+        [RelayCommand] private void AddAndFilter() => AddFilter(new AndFilter());
+        [RelayCommand] private void AddOrFilter() => AddFilter(new OrFilter());
+        [RelayCommand] private void AddNorFilter() => AddFilter(new NorFilter());
 
         [RelayCommand(CanExecute = nameof(CanRemoveFilter))]
         private void RemoveFilter()
@@ -243,115 +153,245 @@ namespace Logonaut.UI.ViewModels
             }
             else if (parent != null)
             {
-                parent.RemoveChild(SelectedFilter); // RemoveChild uses callback
+                parent.RemoveChild(SelectedFilter); // RemoveChild internally uses callback
                 removed = true;
                 SelectedFilter = parent; // Select parent after removing child
             }
 
             if (removed)
             {
-                // Trigger update AFTER removing the filter
-                TriggerFilterUpdate();
+                TriggerFilterUpdate(); // Orchestration: Signal processor after change
             }
         }
         private bool CanRemoveFilter() => SelectedFilter != null;
 
-
-        // ToggleEdit now implicitly triggers update via EndEdit -> Callback -> TriggerFilterUpdate
         [RelayCommand(CanExecute = nameof(CanToggleEdit))]
         private void ToggleEdit()
         {
+            // Logic relies on FilterViewModel's BeginEdit/EndEdit which uses the callback
+            // to trigger TriggerFilterUpdate indirectly.
             if (SelectedFilter?.IsEditable ?? false)
             {
                 if (SelectedFilter.IsNotEditing)
                     SelectedFilter.BeginEdit();
                 else
-                    SelectedFilter.EndEdit(); // EndEdit calls the callback
+                    SelectedFilter.EndEdit();
             }
         }
         private bool CanToggleEdit() => SelectedFilter?.IsEditable ?? false;
 
-        // Handling selection change (remains the same)
-        partial void OnSelectedFilterChanged(FilterViewModel? oldValue, FilterViewModel? newValue)
-        {
-            if (oldValue != null && oldValue.IsEditing)
-            {
-                oldValue.EndEditCommand.Execute(null);
-            }
-            if (oldValue != null) oldValue.IsSelected = false;
-            if (newValue != null) newValue.IsSelected = true;
-        }
-
-        // ContextLines change should trigger a re-filter
-        partial void OnContextLinesChanged(int value)
-        {
-            TriggerFilterUpdate();
-        }
-
-        // --- Search Commands (Remain the Same) ---
-        [RelayCommand(CanExecute = nameof(CanSearch))]
-        private void PreviousSearch() { Debug.WriteLine("Previous search triggered."); /* TODO */ }
-        [RelayCommand(CanExecute = nameof(CanSearch))]
-        private void NextSearch() { Debug.WriteLine("Next search triggered."); /* TODO */ }
-        private bool CanSearch() => !string.IsNullOrWhiteSpace(SearchText);
-
-        // --- File Handling ---
+        // --- File Handling Command ---
         [RelayCommand]
         private void OpenLogFile()
         {
+            // Interaction with UI Services:
             string? selectedFile = _fileDialogService.OpenFile("Select a log file", "Log Files|*.log;*.txt|All Files|*.*");
             if (string.IsNullOrEmpty(selectedFile))
                 return;
 
-            // Reset processor state BEFORE changing the tailer
-            _logFilterProcessor.Reset();
-            // Clear UI collections immediately
-            FilteredLogLines.Clear();
-            ScheduleLogTextUpdate(); // Update LogText to empty
-
-            CurrentLogFilePath = selectedFile;
+            // Orchestration & State Update:
+            _logFilterProcessor.Reset(); // Reset processor first
+            FilteredLogLines.Clear();    // Clear UI collection
+            ScheduleLogTextUpdate();     // Update text display to empty
+            CurrentLogFilePath = selectedFile; // Update state
 
             try
             {
-                // Change the underlying tailer; the processor is already listening
+                // Interaction with Log Tailing Service:
                 LogTailerManager.Instance.ChangeFile(selectedFile);
-                // No need to explicitly restart processor; Reset + new lines handle it.
             }
             catch (Exception ex)
             {
                 MessageBox.Show($"Error opening or monitoring log file '{selectedFile}':\n{ex.Message}", "File Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                CurrentLogFilePath = null; // Reset path on error
-                _logFilterProcessor.Reset(); // Also reset processor on error
+                CurrentLogFilePath = null; // Reset state on error
+                _logFilterProcessor.Reset(); // Also reset processor
             }
         }
 
-        // --- UI Properties (ShowLineNumbers, HighlightTimestamps remain) ---
-        [ObservableProperty]
-        [NotifyPropertyChangedFor(nameof(IsCustomLineNumberMarginVisible))]
-        private bool _showLineNumbers = true;
-        public Visibility IsCustomLineNumberMarginVisible => ShowLineNumbers ? Visibility.Visible : Visibility.Collapsed;
+        // --- Search Commands (Placeholders) ---
+        [RelayCommand(CanExecute = nameof(CanSearch))]
+        private void PreviousSearch() { Debug.WriteLine("Previous search triggered."); /* TODO: Implement Search Logic */ }
+        [RelayCommand(CanExecute = nameof(CanSearch))]
+        private void NextSearch() { Debug.WriteLine("Next search triggered."); /* TODO: Implement Search Logic */ }
+        private bool CanSearch() => !string.IsNullOrWhiteSpace(SearchText);
 
-        [ObservableProperty]
-        private bool _highlightTimestamps = true; // This controls AvalonEdit highlighting rule application
-
-        // --- Filter Highlighting (Logic remains in ViewModel as it reads UI Filter Tree) ---
-        [ObservableProperty]
-        private ObservableCollection<string> _filterSubstrings = new();
-
+        // --- Highlighting Command ---
         [RelayCommand]
-        private void UpdateFilterSubstrings()
+        private void UpdateFilterSubstrings() // Triggered by TriggerFilterUpdate
         {
             var newFilterSubstrings = new ObservableCollection<string>();
             if (FilterProfiles.Count > 0)
             {
                 TraverseFilterTreeForHighlighting(FilterProfiles[0], newFilterSubstrings);
             }
-            FilterSubstrings = newFilterSubstrings; // Update the property bound to AvalonEditHelper
+            FilterSubstrings = newFilterSubstrings; // Update the UI State property
         }
 
-        // Traverse logic remains the same
+        #endregion // --- Command Handling ---
+
+        #region // --- Filter Tree Management (UI Representation) ---
+        // Manages the FilterProfiles collection and interaction logic for the filter tree UI.
+
+        // Helper method used by Add*Filter commands.
+        private void AddFilter(IFilter filter)
+        {
+            // Creates the ViewModel, passing the callback for orchestration.
+            var newFilterVM = new FilterViewModel(filter, TriggerFilterUpdate);
+
+            if (FilterProfiles.Count == 0)
+            {
+                FilterProfiles.Add(newFilterVM);
+                SelectedFilter = newFilterVM; // Update UI State: Auto-select the new root
+            }
+            else if (SelectedFilter != null && SelectedFilter.FilterModel is CompositeFilter)
+            {
+                // AddChildFilter internally adds to FilterViewModel's Children collection.
+                SelectedFilter.AddChildFilter(filter);
+            }
+            else
+            {
+                // UI Feedback / Interaction Logic:
+                MessageBox.Show(
+                    SelectedFilter == null
+                    ? "Please select a composite filter node (And, Or, Nor) first to add a child."
+                    : "Selected filter is not a composite filter (And, Or, Nor). Cannot add a child filter here.",
+                    "Add Filter Information", MessageBoxButton.OK, MessageBoxImage.Information);
+                return; // Don't trigger update if nothing was added
+            }
+            // Orchestration: Signal processor after structure change.
+            TriggerFilterUpdate();
+        }
+
+        // Handles changes to the SelectedFilter property (UI State).
+        partial void OnSelectedFilterChanged(FilterViewModel? oldValue, FilterViewModel? newValue)
+        {
+            // Ensure edit mode is ended if selection moves away.
+            if (oldValue != null && oldValue.IsEditing)
+            {
+                oldValue.EndEditCommand.Execute(null);
+            }
+            // Update IsSelected state on ViewModels for visual feedback (if needed by template).
+            if (oldValue != null) oldValue.IsSelected = false;
+            if (newValue != null) newValue.IsSelected = true;
+        }
+
+        #endregion // --- Filter Tree Management (UI Representation) ---
+
+        #region // --- Orchestration with ILogFilterProcessor ---
+        // Coordinates interactions with the background filtering service.
+
+        // Called by the processor subscription to apply incoming updates.
+        private void ApplyFilteredUpdate(FilteredUpdate update)
+        {
+            if (update.Type == UpdateType.Replace)
+            {
+                ReplaceFilteredLines(update.Lines); // Updates UI State
+            }
+            else // Append
+            {
+                AddFilteredLines(update.Lines); // Updates UI State
+            }
+        }
+
+        // Helper methods called by ApplyFilteredUpdate to modify UI collections.
+        // These also trigger the Log Display Text Generation.
+        private void AddFilteredLines(IReadOnlyList<FilteredLogLine> linesToAdd)
+        {
+            foreach (var line in linesToAdd)
+            {
+                FilteredLogLines.Add(line);
+            }
+            ScheduleLogTextUpdate(); // Trigger text update
+        }
+
+        private void ReplaceFilteredLines(IReadOnlyList<FilteredLogLine> newLines)
+        {
+            FilteredLogLines.Clear();
+            foreach (var line in newLines)
+            {
+                FilteredLogLines.Add(line);
+            }
+            ScheduleLogTextUpdate(); // Trigger text update
+        }
+
+        // Central method to signal the processor that filters or context may have changed.
+        private void TriggerFilterUpdate()
+        {
+            var currentFilter = GetCurrentFilter(); // Reads filter tree state
+            _logFilterProcessor.UpdateFilterSettings(currentFilter, ContextLines); // Sends to processor
+            UpdateFilterSubstringsCommand.Execute(null); // Triggers Highlighting Configuration update
+        }
+
+        // Handles property changes that require triggering a filter update.
+        partial void OnContextLinesChanged(int value)
+        {
+            TriggerFilterUpdate();
+        }
+
+        // Handles errors reported by the processor's observable stream.
+        private void HandleProcessorError(string contextMessage, Exception ex)
+        {
+            Debug.WriteLine($"{contextMessage}: {ex}");
+            // TODO: Implement user-facing error reporting (e.g., status bar, dialog).
+            // Example:
+            // _uiContext.Post(_ => MessageBox.Show($"Error processing logs: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Warning), null);
+        }
+
+        #endregion // --- Orchestration with ILogFilterProcessor ---
+
+        #region // --- Log Display Text Generation ---
+        // Manages the asynchronous update of the LogText property for AvalonEdit.
+
+        // Schedules the LogText update to run after current UI operations.
+        private void ScheduleLogTextUpdate()
+        {
+            lock (_logTextUpdateLock)
+            {
+                if (!_logTextUpdateScheduled)
+                {
+                    _logTextUpdateScheduled = true;
+                    // Interaction with UI Services (SynchronizationContext):
+                    _uiContext.Post(_ =>
+                    {
+                        lock (_logTextUpdateLock)
+                        {
+                            _logTextUpdateScheduled = false;
+                        }
+                        UpdateLogTextInternal(); // Execute the update
+                    }, null);
+                }
+            }
+        }
+
+        // Performs the actual update of the LogText property.
+        private void UpdateLogTextInternal()
+        {
+            try
+            {
+                // Reads UI State (FilteredLogLines) and updates UI State (LogText)
+                var textOnly = FilteredLogLines.Select(line => line.Text).ToList();
+                LogText = string.Join(Environment.NewLine, textOnly);
+            }
+            catch (InvalidOperationException ioex)
+            {
+                // Handle potential collection modified error (should be rare with Post)
+                Debug.WriteLine($"Error during UpdateLogTextInternal (Collection modified?): {ioex}");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Generic error during UpdateLogTextInternal: {ex}");
+            }
+        }
+
+        #endregion // --- Log Display Text Generation ---
+
+        #region // --- Highlighting Configuration ---
+        // Generates the list of patterns for AvalonEdit highlighting based on filters.
+
+        // Helper method to recursively traverse the filter tree UI representation.
         private void TraverseFilterTreeForHighlighting(FilterViewModel filterViewModel, ObservableCollection<string> patterns)
         {
+            // Reads UI State (Filter Tree Enabled/Value)
             if (!filterViewModel.Enabled) return;
 
             string? pattern = null;
@@ -372,25 +412,38 @@ namespace Logonaut.UI.ViewModels
             {
                 try
                 {
-                    // Basic validation: Ensure regex patterns are valid before adding
-                    if (isRegex) { _ = new Regex(pattern); }
+                    // Basic validation before adding to the list
+                    if (isRegex) { _ = new Regex(pattern); } // Throws if invalid
                     if (!patterns.Contains(pattern))
                         patterns.Add(pattern);
                 }
                 catch (ArgumentException ex)
                 {
+                    // Log invalid patterns found in the filter tree
                     Debug.WriteLine($"Invalid regex pattern skipped for highlighting: '{pattern}'. Error: {ex.Message}");
-                    // Optionally: Provide UI feedback about the invalid regex in the filter
+                    // TODO: Optionally provide UI feedback about the invalid regex in the filter.
                 }
             }
 
+            // Recurse through children
             foreach (var childFilter in filterViewModel.Children)
             {
                 TraverseFilterTreeForHighlighting(childFilter, patterns);
             }
         }
 
-        // --- IDisposable Implementation ---
+        // Helper method to extract the current filter configuration (used by Orchestration).
+        // Note: Reads filter tree state.
+        private IFilter GetCurrentFilter()
+        {
+            return FilterProfiles.FirstOrDefault()?.FilterModel ?? new TrueFilter();
+        }
+
+        #endregion // --- Highlighting Configuration ---
+
+        #region // --- Lifecycle Management ---
+        // Implements IDisposable and handles cleanup of resources like subscriptions.
+
         public void Dispose()
         {
             Dispose(true);
@@ -402,14 +455,18 @@ namespace Logonaut.UI.ViewModels
             if (disposing)
             {
                 _disposables.Dispose(); // Disposes processor and subscriptions
-                LogTailerManager.Instance.Dispose(); // Dispose the singleton manager if appropriate here
+                // Dispose LogTailerManager only if VM truly owns it (singleton might be disposed elsewhere)
+                // LogTailerManager.Instance.Dispose();
                 Debug.WriteLine("MainViewModel Disposed.");
             }
         }
 
+        // Called explicitly from the Window's Closing event.
         public void Cleanup()
         {
             Dispose();
         }
+
+        #endregion // --- Lifecycle Management ---
     }
 }
