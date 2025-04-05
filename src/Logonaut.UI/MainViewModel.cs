@@ -125,6 +125,9 @@ namespace Logonaut.UI.ViewModels
         [ObservableProperty]
         private ObservableCollection<string> _filterSubstrings = new();
 
+        [ObservableProperty]
+        private bool _isBusyFiltering = false;
+
         #endregion // --- UI State Management ---
 
         #region // --- Command Handling ---
@@ -206,6 +209,7 @@ namespace Logonaut.UI.ViewModels
             }
             catch (Exception ex)
             {
+                IsBusyFiltering = false; // Hide busy on error
                 MessageBox.Show($"Error opening or monitoring log file '{selectedFile}':\n{ex.Message}", "File Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 CurrentLogFilePath = null; // Reset state on error
                 _logFilterProcessor.Reset(); // Also reset processor
@@ -287,13 +291,28 @@ namespace Logonaut.UI.ViewModels
         // Called by the processor subscription to apply incoming updates.
         private void ApplyFilteredUpdate(FilteredUpdate update)
         {
-            if (update.Type == UpdateType.Replace)
+            bool wasReplace = update.Type == UpdateType.Replace;
+
+            if (wasReplace)
             {
                 ReplaceFilteredLines(update.Lines); // Updates UI State
             }
             else // Append
             {
                 AddFilteredLines(update.Lines); // Updates UI State
+            }
+
+            // If this update was the result of a full re-filter (Replace),
+            // hide the busy indicator *after* the UI collections are updated.
+            // We post this with low priority to ensure UI updates take precedence.
+            if (wasReplace)
+            {
+                _uiContext.Post(_ =>
+                {
+                    IsBusyFiltering = false;
+                }, null);
+                // Alternative using Dispatcher if preferred (though _uiContext should work):
+                // Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, new Action(() => IsBusy = false));
             }
         }
 
@@ -321,9 +340,25 @@ namespace Logonaut.UI.ViewModels
         // Central method to signal the processor that filters or context may have changed.
         private void TriggerFilterUpdate()
         {
-            var currentFilter = GetCurrentFilter(); // Reads filter tree state
-            _logFilterProcessor.UpdateFilterSettings(currentFilter, ContextLines); // Sends to processor
-            UpdateFilterSubstringsCommand.Execute(null); // Triggers Highlighting Configuration update
+            // Show busy indicator *before* starting the potentially long operation.
+            IsBusyFiltering = true;
+
+            // Post the actual filter update call to the dispatcher queue.
+            // This allows the UI to update (show the spinner) before the potentially
+            // blocking call to GetCurrentFilter or UpdateFilterSettings happens.
+             _uiContext.Post(_ =>
+             {
+                 var currentFilter = GetCurrentFilter(); // Reads filter tree state
+                 _logFilterProcessor.UpdateFilterSettings(currentFilter, ContextLines); // Sends to processor
+                 UpdateFilterSubstringsCommand.Execute(null); // Triggers Highlighting Configuration update
+             }, null);
+             // Alternative using Dispatcher:
+             // Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+             //{
+             //    var currentFilter = GetCurrentFilter(); // Reads filter tree state
+             //    _logFilterProcessor.UpdateFilterSettings(currentFilter, ContextLines); // Sends to processor
+             //    UpdateFilterSubstringsCommand.Execute(null); // Triggers Highlighting Configuration update
+             //}));
         }
 
         // Handles property changes that require triggering a filter update.
@@ -468,6 +503,7 @@ namespace Logonaut.UI.ViewModels
         // Called explicitly from the Window's Closing event.
         public void Cleanup()
         {
+            IsBusyFiltering = false; // Ensure busy indicator is hidden on exit
             Dispose();
         }
 
