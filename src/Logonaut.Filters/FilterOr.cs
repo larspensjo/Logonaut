@@ -18,8 +18,9 @@ namespace Logonaut.Filters
             if (Filters.Count == 0)
                 return true;
                 
-            // OR logic: at least one filter must match
-            return Filters.Any(filter => filter.IsMatch(line));
+            // OR logic: at least one sub filter must match
+            // If any filter is disabled, it doesn't affect the match
+            return Filters.Any(filter => filter.Enabled && filter.IsMatch(line));
         }
         
         public override string DisplayText => "∨";
