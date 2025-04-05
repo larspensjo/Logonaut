@@ -121,6 +121,7 @@ namespace Logonaut.UI
         using System.Globalization;
         using System.Windows.Data;
 
+        // TODO: Move this to the Converters subfolder
         public class NullToBoolConverter : IValueConverter
         {
             public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
@@ -134,6 +135,7 @@ namespace Logonaut.UI
                 return value != null;
             }
 
+            // TODO: Is this needed?
             public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
             {
                 // Not typically needed for IsEnabled binding

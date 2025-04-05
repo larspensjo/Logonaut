@@ -15,6 +15,7 @@ namespace Logonaut.UI
             return new SolidColorBrush(Colors.Transparent); // Default color
         }
 
+        // TODO: Is this needed?
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         {
             throw new NotImplementedException();

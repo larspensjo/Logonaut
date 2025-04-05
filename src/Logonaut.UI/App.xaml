@@ -1,12 +1,15 @@
 ﻿<Application x:Class="Logonaut.UI.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:converters="clr-namespace:Logonaut.UI.Converters"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="FilterTemplates.xaml"/>
             </ResourceDictionary.MergedDictionaries>
+            <converters:StringToIntConverter x:Key="StringToIntConverter" />
+            <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" /> <!-- This should also use converters:    -->
         </ResourceDictionary>
     </Application.Resources>
 </Application>

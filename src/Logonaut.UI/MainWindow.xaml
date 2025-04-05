@@ -99,16 +99,35 @@
                 </Grid.RowDefinitions>
 
                 <!-- Toolbar with toggle buttons -->
-                <StackPanel Grid.Row="0" Orientation="Horizontal" Background="{DynamicResource CardBackgroundBrush}">
+                <StackPanel Grid.Row="0" Orientation="Horizontal" Background="{DynamicResource CardBackgroundBrush}" VerticalAlignment="Center">
                     <TextBlock Text="Display Options:" VerticalAlignment="Center" Margin="5,0,10,0"/>
-                    <ToggleButton Content="Line Numbers" 
-                                IsChecked="{Binding ShowLineNumbers}" 
+                    <ToggleButton Content="Line Numbers"
+                                IsChecked="{Binding ShowLineNumbers}"
                                 Style="{StaticResource ToggleButtonStyle}"
                                 ToolTip="Show or hide line numbers"/>
-                    <ToggleButton Content="Highlight Timestamps" 
-                                IsChecked="{Binding HighlightTimestamps}" 
+                    <ToggleButton Content="Highlight Timestamps"
+                                IsChecked="{Binding HighlightTimestamps}"
                                 Style="{StaticResource ToggleButtonStyle}"
                                 ToolTip="Highlight timestamp patterns in log entries"/>
+
+                    <!-- Optional: Add a separator for visual grouping -->
+                    <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,2"/>
+
+                    <!-- Context Lines Control -->
+                    <TextBlock Text="Context Lines:" VerticalAlignment="Center" Margin="5,0,2,0"/>
+                    <TextBox Text="{Binding ContextLines, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource StringToIntConverter}}"
+                             Width="40"
+                             VerticalAlignment="Center"
+                             VerticalContentAlignment="Center"
+                             Margin="0,0,5,0">
+                        <TextBox.ToolTip>
+                            <ToolTip>
+                                Enter the number of lines to show before and after a matched line (0 = none).
+                                Filters will update automatically after changing the value.
+                            </ToolTip>
+                        </TextBox.ToolTip>
+                    </TextBox>
+
                 </StackPanel>
 
                 <!-- Log Display using AvalonEdit with syntax highlighting -->
