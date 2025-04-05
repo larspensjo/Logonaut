@@ -199,6 +199,10 @@ namespace Logonaut.UI.ViewModels
             {
                 // Interaction with Log Tailing Service:
                 LogTailerManager.Instance.ChangeFile(selectedFile);
+
+                // After successfully changing the file and resetting the processor,
+                // tell the processor to apply the filters currently defined in the UI.
+                TriggerFilterUpdate();
             }
             catch (Exception ex)
             {
