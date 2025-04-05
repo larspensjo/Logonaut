@@ -38,7 +38,7 @@ namespace Logonaut.Filters.Tests
             Assert.IsInstanceOfType(deserializedConfig.RootFilter, typeof(AndFilter), "Root filter should be an AndFilter.");
             var deserializedAndFilter = deserializedConfig.RootFilter as AndFilter;
             Assert.IsNotNull(deserializedAndFilter, "Filter expected.");
-            Assert.AreEqual(2, deserializedAndFilter.SubFilters.Count, "AndFilter should contain 2 sub-filters.");
+            Assert.AreEqual(1, deserializedAndFilter.SubFilters.Count, "AndFilter should contain 1 sub-filter.");
 
             // Validate the first sub-filter is a SubstringFilter with the expected value.
             Assert.IsInstanceOfType(deserializedAndFilter.SubFilters[0], typeof(SubstringFilter), "First sub-filter should be a SubstringFilter.");

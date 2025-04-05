@@ -57,11 +57,13 @@ namespace Logonaut.Filters
 
         public abstract string TypeText { get; }
 
+        private string _value = string.Empty;
+
+        [JsonProperty] // Allow JSON serialization/deserialization of the Value property.
         public virtual string Value
         {
-            // TODO: This getter isn't supposed to be used, but it still happens. Fix that.
-            get => string.Empty;
-            set => throw new NotSupportedException($"{nameof(Value)} is not supported in {nameof(FilterBase)}.");
+            get => _value;
+            set => _value = value;
         }
     }
 
