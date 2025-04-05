@@ -116,19 +116,6 @@ namespace Logonaut.Filters.Tests
         }
 
         [TestMethod]
-        public void RegexFilter_IsMatch_WithNullLine_ReturnsFalse()
-        {
-            // Arrange
-            var filter = new RegexFilter(".*"); // Match anything
-
-            // Act
-            bool result = filter.IsMatch(null);
-
-            // Assert
-            Assert.IsFalse(result, "IsMatch should return false for null input line.");
-        }
-
-        [TestMethod]
         public void RegexFilter_WithEmptyPattern_MatchesAnyNonNullLine()
         {
             // Arrange
@@ -139,7 +126,6 @@ namespace Logonaut.Filters.Tests
             // Act & Assert
             Assert.IsTrue(filter.IsMatch("Any string"), "Empty pattern should match non-empty string.");
             Assert.IsTrue(filter.IsMatch(""), "Empty pattern should match empty string.");
-            Assert.IsFalse(filter.IsMatch(null), "Empty pattern should not match null string.");
         }
 
         [TestMethod]

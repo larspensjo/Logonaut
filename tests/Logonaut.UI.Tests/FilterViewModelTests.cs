@@ -174,7 +174,7 @@ namespace Logonaut.UI.Tests.ViewModels
             var filter = new SubstringFilter("test");
             var viewModel = new FilterViewModel(filter);
             var receivedNotifications = new List<string>();
-            viewModel.PropertyChanged += (s, e) => receivedNotifications.Add(e.PropertyName);
+            viewModel.PropertyChanged += (s, e) => receivedNotifications.Add(e.PropertyName ?? string.Empty);
 
             // Act & Assert: Set to false
             viewModel.Enabled = false;
@@ -239,7 +239,7 @@ namespace Logonaut.UI.Tests.ViewModels
             var filter = new SubstringFilter("old");
             var viewModel = new FilterViewModel(filter);
             var receivedNotifications = new List<string>();
-            viewModel.PropertyChanged += (s, e) => receivedNotifications.Add(e.PropertyName);
+            viewModel.PropertyChanged += (s, e) => receivedNotifications.Add(e.PropertyName ?? string.Empty);
 
             viewModel.FilterText = "new"; // Act
 
