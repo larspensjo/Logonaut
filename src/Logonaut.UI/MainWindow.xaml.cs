@@ -115,33 +115,4 @@ namespace Logonaut.UI
             this.Close(); // Trigger the Window_Closing event
         }
     }
-
-    namespace Helpers
-    {
-        using System.Globalization;
-        using System.Windows.Data;
-
-        // TODO: Move this to the Converters subfolder
-        public class NullToBoolConverter : IValueConverter
-        {
-            public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-            {
-                // If parameter is "Invert", return true if value is null
-                if (parameter is string strParam && strParam.Equals("Invert", StringComparison.OrdinalIgnoreCase))
-                {
-                    return value == null;
-                }
-                // Default: return true if value is not null
-                return value != null;
-            }
-
-            // TODO: Is this needed?
-            public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-            {
-                // Not typically needed for IsEnabled binding
-                throw new NotImplementedException();
-            }
-        }
-    }
-    // --- End NullToBoolConverter ---
 }
