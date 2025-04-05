@@ -51,9 +51,26 @@
                     <TreeView ItemsSource="{Binding FilterProfiles}" Margin="0,0,0,5"
                             SelectedItemChanged="TreeView_SelectedItemChanged">
                         <TreeView.ItemTemplate>
-                            <HierarchicalDataTemplate DataType="{x:Type vm:FilterViewModel}" 
-                                                    ItemsSource="{Binding Children}">
-                                <ContentControl Content="{Binding}" />
+                            <HierarchicalDataTemplate DataType="{x:Type vm:FilterViewModel}" ItemsSource="{Binding Children}">
+                                <Border x:Name="ItemBorder" Background="Transparent">
+                                    <ContentPresenter Content="{Binding}">
+                                        <ContentPresenter.Style>
+                                            <Style TargetType="ContentPresenter">
+                                                <Setter Property="Opacity" Value="1.0"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Enabled}" Value="False">
+                                                        <Setter Property="Opacity" Value="0.5"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </ContentPresenter.Style>
+                                    </ContentPresenter>
+                                </Border>
+                                <HierarchicalDataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                        <Setter TargetName="ItemBorder" Property="Background" Value="LightGray"/>
+                                    </DataTrigger>
+                                </HierarchicalDataTemplate.Triggers>
                             </HierarchicalDataTemplate>
                         </TreeView.ItemTemplate>
                     </TreeView>
