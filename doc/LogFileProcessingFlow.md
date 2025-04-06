@@ -13,6 +13,9 @@
 This architecture provides a responsive, modular system for monitoring and filtering log files in real-time, with a clean separation of concerns between file monitoring, data storage, reactive processing/filtering, and UI presentation.
 
 ## Log File Loading and Updating
+### 0. Application Starts
+- Reads settings from %LocalAppData%\Logonaut\settings.json
+- Applies settings (filters, context lines, display options) to `MainViewModel`.
 
 ### 1. Log File Selection
 - Users select a log file through the UI using the `OpenLogFile` command in `MainViewModel`.

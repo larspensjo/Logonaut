@@ -4,7 +4,8 @@
         xmlns:avalonEdit="http://icsharpcode.net/sharpdevelop/avalonedit"
         xmlns:helpers="clr-namespace:Logonaut.UI.Helpers"
         xmlns:vm="clr-namespace:Logonaut.UI.ViewModels"
-        Title="Logonaut" Height="600" Width="800">
+        Title="Logonaut" Height="600" Width="800"
+        Closing="Window_Closing">
     <!-- Main Layout: A Grid with three rows: Menu, Stats Panel, and Main Content -->
     <Grid>
         <Grid.RowDefinitions>
@@ -25,6 +26,9 @@
                 <MenuItem Header="Light Mode" Command="{Binding Theme.SwitchToLightCommand}" 
                           Style="{StaticResource CustomSubMenuItemStyle}"/>
             </MenuItem>
+            <MenuItem Header="E_xit"
+                    Click="ExitMenuItem_Click"
+                    Style="{StaticResource CustomSubMenuItemStyle}"/>
         </Menu>
 
         <!-- Stats Bar in Grid.Row="1" -->

@@ -65,6 +65,8 @@ namespace Logonaut.UI.ViewModels
             _disposables.Add(_logFilterProcessor);
             _disposables.Add(filterSubscription);
 
+            LoadPersistedSettings();
+
             // --- Initial State Setup ---
             Theme = new ThemeViewModel(); // Part of UI State
             TriggerFilterUpdate(); // Initial filter application
@@ -127,6 +129,62 @@ namespace Logonaut.UI.ViewModels
 
         [ObservableProperty]
         private bool _isBusyFiltering = false;
+
+        private void LoadPersistedSettings()
+        {
+            LogonautSettings settings;
+            try
+            {
+                settings = SettingsManager.LoadSettings();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error loading settings: {ex.Message}", "Settings Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            // Apply loaded settings to ViewModel properties
+            // Use SetProperty directly or let ObservableProperty handle notifications
+            ContextLines = settings.ContextLines;
+            ShowLineNumbers = settings.ShowLineNumbers;
+            HighlightTimestamps = settings.HighlightTimestamps;
+            // TODO: Apply theme based on settings.LastTheme
+
+            // Rebuild the FilterProfiles collection from the loaded filter
+            FilterProfiles.Clear(); // Clear any default/existing
+            if (settings.RootFilter != null)
+            {
+                // The callback passed here ensures changes trigger updates later
+                var rootFilterViewModel = new FilterViewModel(settings.RootFilter, TriggerFilterUpdate);
+                FilterProfiles.Add(rootFilterViewModel);
+                // Optionally select the root filter automatically
+                // SelectedFilter = rootFilterViewModel;
+            }
+            // If settings.RootFilter was null, FilterProfiles remains empty,
+            // and GetCurrentFilter() will correctly return a TrueFilter.
+        }
+
+        private void SaveCurrentSettings()
+        {
+            // Create a settings object from the current ViewModel state
+            var settingsToSave = new LogonautSettings
+            {
+                RootFilter = GetCurrentFilter(), // Get the current filter tree
+                ContextLines = this.ContextLines,
+                ShowLineNumbers = this.ShowLineNumbers,
+                HighlightTimestamps = this.HighlightTimestamps
+                // TODO: Add theme, window state etc.
+            };
+
+            try
+            {
+                SettingsManager.SaveSettings(settingsToSave);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error saving settings: {ex.Message}", "Settings Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
 
         #endregion // --- UI State Management ---
 
@@ -494,9 +552,6 @@ namespace Logonaut.UI.ViewModels
             if (disposing)
             {
                 _disposables.Dispose(); // Disposes processor and subscriptions
-                // Dispose LogTailerManager only if VM truly owns it (singleton might be disposed elsewhere)
-                // LogTailerManager.Instance.Dispose();
-                Debug.WriteLine("MainViewModel Disposed.");
             }
         }
 
@@ -504,6 +559,7 @@ namespace Logonaut.UI.ViewModels
         public void Cleanup()
         {
             IsBusyFiltering = false; // Ensure busy indicator is hidden on exit
+            SaveCurrentSettings();
             Dispose();
         }
 

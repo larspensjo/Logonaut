@@ -59,7 +59,7 @@ namespace Logonaut.UI
 
             // Create and add the custom margin
             var margin = new Logonaut.UI.Helpers.OriginalLineNumberMargin();
-            LogOutputEditor.TextArea.LeftMargins.Add(margin);
+            LogOutputEditor.TextArea.LeftMargins.Add(margin); // LogOutputEditor is generated automatically from XAML
 
             // Set up the necessary bindings in code
             var filteredLinesBinding = new System.Windows.Data.Binding("FilteredLogLines") {
