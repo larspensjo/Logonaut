@@ -9,6 +9,7 @@ using ICSharpCode.AvalonEdit.Highlighting;
 using System.Windows.Media;
 using ICSharpCode.AvalonEdit.Highlighting.Xshd;
 using System.Xml;
+using System.Collections.Generic; // For List<>
 
 namespace Logonaut.UI.Helpers
 {
@@ -32,12 +33,17 @@ namespace Logonaut.UI.Helpers
         // Track filter-based highlighting rules separately
         private List<HighlightingRule> _filterHighlightingRules = new();
 
+        // Track the search highlighting rule separately
+        private HighlightingRule? _searchHighlightingRule = null;
+
         public IEnumerable<HighlightingColor> NamedHighlightingColors => _namedColors.Values;
 
         public IDictionary<string, string> Properties => _properties;
 
         public CustomHighlightingDefinition()
         {
+            // TODO: Clean-up here.
+            // TODO: Should defaultl colors be set in the constructor or in a separate method? Maybe in the themes?
             // Initialize with some default named colors
             _namedColors["timestamp"] = new HighlightingColor 
             { 
@@ -66,6 +72,13 @@ namespace Logonaut.UI.Helpers
             { 
                 Background = new SimpleHighlightingBrush(Colors.Yellow),
                 Foreground = new SimpleHighlightingBrush(Colors.Black)
+            };
+
+            _namedColors["searchMatch"] = new HighlightingColor
+            {
+                // Choose a suitable background - LightCyan is often distinct
+                Background = new SimpleHighlightingBrush(Colors.LightCyan),
+                Foreground = new SimpleHighlightingBrush(Colors.Black) // Ensure readable text
             };
         }
 
@@ -134,6 +147,42 @@ namespace Logonaut.UI.Helpers
         public void ClearRules()
         {
             MainRuleSet.Rules.Clear();
+        }
+
+        // Method to update/create/remove the search term highlighting rule
+        public void UpdateSearchHighlighting(string? searchTerm, bool matchCase = false)
+        {
+            // Remove existing search rule if present
+            if (_searchHighlightingRule != null)
+            {
+                MainRuleSet.Rules.Remove(_searchHighlightingRule);
+                _searchHighlightingRule = null;
+            }
+
+            // Add new rule if search term is valid
+            if (!string.IsNullOrEmpty(searchTerm))
+            {
+                try
+                {
+                    // Escape the search term to treat it literally unless it's intended as regex
+                    // For simple search, escaping is safer.
+                    string escapedSearchTerm = Regex.Escape(searchTerm);
+
+                    _searchHighlightingRule = new HighlightingRule
+                    {
+                        Color = _namedColors["searchMatch"],
+                        Regex = new Regex(escapedSearchTerm, matchCase ? RegexOptions.None : RegexOptions.IgnoreCase)
+                    };
+                    MainRuleSet.Rules.Add(_searchHighlightingRule);
+                }
+                catch (ArgumentException ex)
+                {
+                    // Handle invalid regex resulting from escaping (highly unlikely but possible)
+                    _searchHighlightingRule = null; // Ensure it's null
+                    // TODO: Better error handling
+                    System.Diagnostics.Debug.WriteLine($"Error creating search regex for '{searchTerm}': {ex.Message}");
+                }
+            }
         }
         
         // Update filter-based highlighting with a new set of substrings

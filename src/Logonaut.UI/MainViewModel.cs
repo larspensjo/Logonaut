@@ -37,6 +37,10 @@ namespace Logonaut.UI.ViewModels
         // --- Lifecycle Management ---
         private readonly CompositeDisposable _disposables = new();
 
+        // Search State
+        private List<SearchResult> _searchMatches = new List<SearchResult>();
+        private int _currentSearchIndex = -1;
+
         #endregion // --- Fields ---
 
         #region // --- Constructor ---
@@ -93,7 +97,26 @@ namespace Logonaut.UI.ViewModels
         [ObservableProperty]
         [NotifyCanExecuteChangedFor(nameof(PreviousSearchCommand))]
         [NotifyCanExecuteChangedFor(nameof(NextSearchCommand))]
+        [NotifyPropertyChangedFor(nameof(SearchStatusText))]
         private string _searchText = "";
+
+        // Properties for target selection in AvalonEdit
+        [ObservableProperty]
+        private int _currentMatchOffset = -1;
+        [ObservableProperty]
+        private int _currentMatchLength = 0;
+
+        // Status text for search
+        public string SearchStatusText
+        {
+            get
+            {
+                if (string.IsNullOrEmpty(SearchText)) return "";
+                if (_searchMatches.Count == 0) return "Phrase not found";
+                if (_currentSearchIndex == -1) return $"{_searchMatches.Count} matches found";
+                return $"Match {_currentSearchIndex + 1} of {_searchMatches.Count}";
+            }
+        }
 
         // Path of the currently monitored log file.
         [ObservableProperty]
@@ -273,12 +296,60 @@ namespace Logonaut.UI.ViewModels
             }
         }
 
-        // --- Search Commands (Placeholders) ---
+        // --- Search Commands ---
         [RelayCommand(CanExecute = nameof(CanSearch))]
-        private void PreviousSearch() { Debug.WriteLine("Previous search triggered."); /* TODO: Implement Search Logic */ }
+        private void PreviousSearch()
+        {
+            if (_searchMatches.Count == 0) return;
+
+            _currentSearchIndex--;
+            if (_currentSearchIndex < 0)
+            {
+                _currentSearchIndex = _searchMatches.Count - 1; // Wrap around to the end
+            }
+            SelectAndScrollToCurrentMatch();
+            OnPropertyChanged(nameof(SearchStatusText)); // Update status
+        }
+
         [RelayCommand(CanExecute = nameof(CanSearch))]
-        private void NextSearch() { Debug.WriteLine("Next search triggered."); /* TODO: Implement Search Logic */ }
+        private void NextSearch()
+        {
+            if (_searchMatches.Count == 0) return;
+
+            _currentSearchIndex++;
+            if (_currentSearchIndex >= _searchMatches.Count)
+            {
+                _currentSearchIndex = 0; // Wrap around to the start
+            }
+            SelectAndScrollToCurrentMatch();
+            OnPropertyChanged(nameof(SearchStatusText)); // Update status
+        }
         private bool CanSearch() => !string.IsNullOrWhiteSpace(SearchText);
+
+        // Helper to update selection properties based on current index
+        private void SelectAndScrollToCurrentMatch()
+        {
+            if (_currentSearchIndex >= 0 && _currentSearchIndex < _searchMatches.Count)
+            {
+                var match = _searchMatches[_currentSearchIndex];
+                // Update properties bound to AvalonEditHelper
+                CurrentMatchOffset = match.Offset;
+                CurrentMatchLength = match.Length;
+            }
+            else
+            {
+                // Clear selection if index is invalid
+                CurrentMatchOffset = -1;
+                CurrentMatchLength = 0;
+            }
+        }
+
+        // Trigger search update when SearchText changes
+        partial void OnSearchTextChanged(string value)
+        {
+            // Delay slightly or use async if searching becomes slow
+            UpdateSearchMatches();
+        }
 
         // --- Highlighting Command ---
         [RelayCommand]
@@ -467,6 +538,7 @@ namespace Logonaut.UI.ViewModels
                 // Reads UI State (FilteredLogLines) and updates UI State (LogText)
                 var textOnly = FilteredLogLines.Select(line => line.Text).ToList();
                 LogText = string.Join(Environment.NewLine, textOnly);
+                UpdateSearchMatches();
             }
             catch (InvalidOperationException ioex)
             {
@@ -477,6 +549,44 @@ namespace Logonaut.UI.ViewModels
             {
                 Debug.WriteLine($"Generic error during UpdateLogTextInternal: {ex}");
             }
+        }
+
+        // Core search logic
+        private void UpdateSearchMatches()
+        {
+             string currentSearchTerm = SearchText; // Use local copy
+             string textToSearch = LogText; // Use local copy
+
+             // Clear previous results
+             _searchMatches.Clear();
+             _currentSearchIndex = -1;
+             // Clear selection in editor immediately
+             SelectAndScrollToCurrentMatch();
+
+
+            if (string.IsNullOrEmpty(currentSearchTerm) || string.IsNullOrEmpty(textToSearch))
+             {
+                 OnPropertyChanged(nameof(SearchStatusText)); // Update status (e.g., clear it)
+                 return; // Nothing to search for or in
+             }
+
+             int offset = 0;
+             while (offset < textToSearch.Length)
+             {
+                 // Case-insensitive search within the *visible* text (LogText)
+                 int foundIndex = textToSearch.IndexOf(currentSearchTerm, offset, StringComparison.OrdinalIgnoreCase);
+                 if (foundIndex == -1)
+                 {
+                     break; // No more matches
+                 }
+
+                 _searchMatches.Add(new SearchResult(foundIndex, currentSearchTerm.Length));
+                 offset = foundIndex + 1; // Start next search after the beginning of the current match
+                 // Use + 1 instead of + Length to find overlapping matches if needed, though less common for search.
+                 // Using + currentSearchTerm.Length would be slightly more efficient if overlaps aren't desired.
+             }
+
+             OnPropertyChanged(nameof(SearchStatusText)); // Update match count display
         }
 
         #endregion // --- Log Display Text Generation ---
@@ -564,4 +674,8 @@ namespace Logonaut.UI.ViewModels
 
         #endregion // --- Lifecycle Management ---
     }
+    /// <summary>
+    /// Represents the position and length of a found search match within the text.
+    /// </summary>
+    public record SearchResult(int Offset, int Length);
 }

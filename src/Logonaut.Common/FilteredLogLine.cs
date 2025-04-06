@@ -22,7 +22,6 @@ namespace Logonaut.Common
             if (originalLineNumber < 1)
             {
                 // Defensive check, though FilterEngine should provide 1-based
-                System.Diagnostics.Debug.WriteLine($"Warning: Created FilteredLogLine with non-positive OriginalLineNumber: {originalLineNumber}");
                 originalLineNumber = 1; // Default to 1 if invalid
             }
             OriginalLineNumber = originalLineNumber;

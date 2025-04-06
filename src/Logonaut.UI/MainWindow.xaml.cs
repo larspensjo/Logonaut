@@ -38,11 +38,13 @@ namespace Logonaut.UI
                     int result = DwmSetWindowAttribute(hwnd, attribute, ref useImmersiveDarkMode, sizeof(int));
                     if (result != 0) // S_OK = 0
                     {
-                         System.Diagnostics.Debug.WriteLine($"DwmSetWindowAttribute failed with result: {result}");
+                        // TODO better error handling
+                        System.Diagnostics.Debug.WriteLine($"DwmSetWindowAttribute failed with result: {result}");
                     }
                 }
                 catch (Exception ex)
                 {
+                    // TODO: Better error handling
                     System.Diagnostics.Debug.WriteLine($"Failed to set dark title bar attribute: {ex.Message}");
                 }
             }
@@ -91,7 +93,8 @@ namespace Logonaut.UI
                 SetDarkTitleBar(hwnd); // Apply dark title bar if applicable
             }
             else {
-                 System.Diagnostics.Debug.WriteLine("Could not get window handle in SourceInitialized.");
+                // TODO: Better error handling
+                System.Diagnostics.Debug.WriteLine("Could not get window handle in SourceInitialized.");
             }
         }
 

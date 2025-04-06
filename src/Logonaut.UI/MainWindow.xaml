@@ -146,6 +146,12 @@
                         </TextBlock.ToolTip>
                     </TextBlock>
 
+                    <!-- Search Status -->
+                    <TextBlock Text="{Binding SearchStatusText}"
+                               VerticalAlignment="Center"
+                               Margin="10,0,5,0"
+                               FontStyle="Italic"/>
+
                 </StackPanel>
 
                 <!-- Log Display using AvalonEdit with syntax highlighting -->
@@ -166,15 +172,22 @@
                                         helpers:AvalonEditHelper.BindableText="{Binding LogText, Mode=OneWay}"
                                         helpers:AvalonEditHelper.FilterSubstrings="{Binding FilterSubstrings, Mode=OneWay}"
                                         helpers:AvalonEditHelper.HighlightTimestamps="{Binding HighlightTimestamps, Mode=OneWay}"
-                                        ShowLineNumbers="False">
+                                        ShowLineNumbers="False"
+                                        helpers:AvalonEditHelper.SearchTerm="{Binding SearchText, Mode=OneWay}"
+                                        helpers:AvalonEditHelper.SelectOffset="{Binding CurrentMatchOffset, Mode=OneWay}"
+                                        helpers:AvalonEditHelper.SelectLength="{Binding CurrentMatchLength, Mode=OneWay}">
                     </avalonedit:TextEditor>
                 </Border>
 
                 <!-- Search Panel -->
                 <StackPanel Orientation="Horizontal" Grid.Row="2" HorizontalAlignment="Center" Margin="5">
-                    <Button Content="Previous" Command="{Binding PreviousSearchCommand}" Margin="5"/>
+                <StackPanel Orientation="Horizontal" Grid.Row="2" HorizontalAlignment="Center" Margin="5">
+                    <Button Content="Previous" Command="{Binding PreviousSearchCommand}" Margin="5"
+                            IsEnabled="{Binding PreviousSearchCommand.CanExecute}"/>
                     <TextBox Width="200" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" Margin="5"/>
-                    <Button Content="Next" Command="{Binding NextSearchCommand}" Margin="5"/>
+                    <Button Content="Next" Command="{Binding NextSearchCommand}" Margin="5"
+                            IsEnabled="{Binding NextSearchCommand.CanExecute}"/>
+                </StackPanel>
                 </StackPanel>
             </Grid>
         </Grid>
