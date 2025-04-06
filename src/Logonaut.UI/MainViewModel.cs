@@ -160,8 +160,7 @@ namespace Logonaut.UI.ViewModels
                 // Optionally select the root filter automatically
                 // SelectedFilter = rootFilterViewModel;
             }
-            // If settings.RootFilter was null, FilterProfiles remains empty,
-            // and GetCurrentFilter() will correctly return a TrueFilter.
+            // If settings.RootFilter was null, FilterProfiles remains empty.
         }
 
         private void SaveCurrentSettings()
@@ -406,8 +405,8 @@ namespace Logonaut.UI.ViewModels
             // blocking call to GetCurrentFilter or UpdateFilterSettings happens.
              _uiContext.Post(_ =>
              {
-                 var currentFilter = GetCurrentFilter(); // Reads filter tree state
-                 _logFilterProcessor.UpdateFilterSettings(currentFilter, ContextLines); // Sends to processor
+                 IFilter? currentFilter = GetCurrentFilter(); // Reads filter tree state
+                 _logFilterProcessor.UpdateFilterSettings(currentFilter ?? new TrueFilter(), ContextLines); // Sends to processor
                  UpdateFilterSubstringsCommand.Execute(null); // Triggers Highlighting Configuration update
              }, null);
              // Alternative using Dispatcher:
@@ -531,9 +530,9 @@ namespace Logonaut.UI.ViewModels
 
         // Helper method to extract the current filter configuration (used by Orchestration).
         // Note: Reads filter tree state.
-        private IFilter GetCurrentFilter()
+        private IFilter? GetCurrentFilter()
         {
-            return FilterProfiles.FirstOrDefault()?.FilterModel ?? new TrueFilter();
+            return FilterProfiles.FirstOrDefault()?.FilterModel;
         }
 
         #endregion // --- Highlighting Configuration ---
