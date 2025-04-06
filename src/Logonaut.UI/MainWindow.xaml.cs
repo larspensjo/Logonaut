@@ -52,7 +52,7 @@ namespace Logonaut.UI
 
         public MainWindow()
         {
-            // InitializeComponent() is the method generated from your XAML. When it runs, it parses the XAML, creates the UI elements, and wires them up.
+            // InitializeComponent() is the method generated from the XAML. When it runs, it parses the XAML, creates the UI elements, and wires them up.
             InitializeComponent();
             DataContext = new ViewModels.MainViewModel(); // Assuming you set DC here or earlier
             this.SourceInitialized += MainWindow_SourceInitialized;
@@ -73,9 +73,14 @@ namespace Logonaut.UI
                 Mode = System.Windows.Data.BindingMode.OneWay
                 // You might need a converter if IsCustomLineNumberMarginVisible is not a Visibility type
             };
+
             margin.SetBinding(UIElement.VisibilityProperty, visibilityBinding);
 
-            // Apply other bindings or settings to the margin if needed
+            var lineSeparatorMargin = new Logonaut.UI.Helpers.VerticalLineMargin();
+            // Bind its visibility to the same property as the number margin
+            lineSeparatorMargin.SetBinding(UIElement.VisibilityProperty, visibilityBinding); // Re-use the same binding object
+            // Add it *after* the number margin
+            LogOutputEditor.TextArea.LeftMargins.Add(lineSeparatorMargin);
         }
 
         private void MainWindow_SourceInitialized(object? sender, EventArgs e)
