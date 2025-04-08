@@ -8,7 +8,7 @@ This document provides a summary of the public API of the AvalonEdit library and
 
 Inherits from `System.Windows.Controls.Control`, implements `ITextEditorComponent`, `System.IServiceProvider`, `System.Windows.IWeakEventListener`.
 
-**Summary:** The main control for the AvalonEdit text editor. It wraps a `TextArea` and `TextView` and provides common text editor functionality like scrolling, syntax highlighting management, and options.
+**Summary:** The main control for the AvalonEdit text editor. It wraps a `TextArea` and `TextView` and provides common text editor functionality like scrolling, syntax highlighting management, and options. **Its default ControlTemplate includes a `ScrollViewer` which hosts the `TextArea`.**
 
 **Public Properties:**
 
@@ -18,7 +18,7 @@ Inherits from `System.Windows.Controls.Control`, implements `ITextEditorComponen
 *   `SyntaxHighlighting`: `IHighlightingDefinition` - Gets/sets the syntax highlighting definition used.
 *   `IsReadOnly`: `bool` - Gets/Sets whether the text editor content can be changed by the user.
 *   `IsModified`: `bool` - Gets/Sets the 'modified' flag, indicating if the document has unsaved changes. Tied to the `UndoStack.IsOriginalFile`.
-*   `ShowLineNumbers`: `bool` - Gets/Sets whether line numbers are shown.
+*   `ShowLineNumbers`: `bool` - Gets/Sets whether line numbers are shown via the built-in `LineNumberMargin`.
 *   `LineNumbersForeground`: `Brush` - Gets/Sets the brush used for displaying line numbers.
 *   `WordWrap`: `bool` - Gets/Sets whether word wrapping is enabled. Overrides `HorizontalScrollBarVisibility`.
 *   `TextArea`: `TextArea` (readonly) - Gets the underlying `TextArea` instance.
@@ -31,8 +31,8 @@ Inherits from `System.Windows.Controls.Control`, implements `ITextEditorComponen
 *   `CanUndo`: `bool` (readonly) - Gets if the most recent command can be undone.
 *   `CanRedo`: `bool` (readonly) - Gets if the most recent undone command can be redone.
 *   `ExtentHeight`, `ExtentWidth`, `ViewportHeight`, `ViewportWidth`, `VerticalOffset`, `HorizontalOffset`: `double` (readonly) - Scrolling properties (forwarded from internal ScrollViewer/TextView).
-*   `HorizontalScrollBarVisibility`: `ScrollBarVisibility` - Gets/Sets the horizontal scroll bar visibility.
-*   `VerticalScrollBarVisibility`: `ScrollBarVisibility` - Gets/Sets the vertical scroll bar visibility.
+*   `HorizontalScrollBarVisibility`: `ScrollBarVisibility` - Gets/Sets the horizontal scroll bar visibility **of the internal `ScrollViewer`**.
+*   `VerticalScrollBarVisibility`: `ScrollBarVisibility` - Gets/Sets the vertical scroll bar visibility **of the internal `ScrollViewer`**.
 
 **Public Methods:**
 
@@ -49,7 +49,7 @@ Inherits from `System.Windows.Controls.Control`, implements `ITextEditorComponen
 *   `GetPositionFromPoint(Point point)`: `TextViewPosition?` - Gets the text position from a point relative to the TextEditor control.
 *   `BeginChange()` / `EndChange()` / `DeclareChangeBlock()`: Methods for managing document update grouping (forwarded to `TextDocument`).
 *   `Copy()` / `Cut()` / `Paste()` / `Delete()` / `SelectAll()` / `Undo()` / `Redo()`: Standard editing commands.
-*   `ScrollToEnd()` / `ScrollToHome()` / `ScrollToHorizontalOffset(double offset)` / `ScrollToVerticalOffset(double offset)`: Scrolling methods.
+*   `ScrollToEnd()` / `ScrollToHome()` / `ScrollToHorizontalOffset(double offset)` / `ScrollToVerticalOffset(double offset)`: Scrolling methods **acting on the internal `ScrollViewer`**.
 *   `LineUp()` / `LineDown()` / `LineLeft()` / `LineRight()` / `PageUp()` / `PageDown()` / `PageLeft()` / `PageRight()`: Scrolling methods.
 
 **Public Events:**
@@ -61,12 +61,13 @@ Inherits from `System.Windows.Controls.Control`, implements `ITextEditorComponen
 
 **Internal Insights:**
 
-*   The `TextEditor` is the main user-facing control. It primarily acts as a container for a `ScrollViewer` which in turn hosts the `TextArea`.
+*   The `TextEditor` is the main user-facing control. It primarily acts as a container for a `ScrollViewer` (often named `PART_ScrollViewer` in the default template) which in turn hosts the `TextArea`.
 *   Most editing and rendering logic resides within the `TextArea` and its contained `TextView`.
 *   It manages the installation and switching of the `HighlightingColorizer` based on the `SyntaxHighlighting` property.
 *   Handles focus management, forwarding focus to the internal `TextArea`.
 *   Connects the `IsModified` property to the `UndoStack`'s `IsOriginalFile` state.
-*   Manages the visibility of the `LineNumberMargin` based on the `ShowLineNumbers` property.
+*   Manages the visibility of the `LineNumberMargin` based on the `ShowLineNumbers` property by adding/removing it from `TextArea.LeftMargins`.
+*   **Customizing Layout (e.g., adding an Overview Ruler):** To add UI elements alongside the `TextArea` but *within* the scrollable area (conceptually), or elements positioned where the standard scrollbars are, you typically need to **modify the `ControlTemplate` of the `TextEditor`**. This allows you to rearrange the internal `ScrollViewer` and add sibling elements (like a custom overview ruler control) next to it, potentially hiding the default scrollbars (`VerticalScrollBarVisibility="Hidden"`) and binding your custom element to the `ScrollViewer`'s state.
 
 ### Interface: `ITextEditorComponent`
 
@@ -409,7 +410,7 @@ Inherits from `System.ComponentModel.INotifyPropertyChanged`.
 
 Inherits from `System.Windows.Controls.Control`, implements `IScrollInfo`, `IWeakEventListener`, `ITextEditorComponent`, `System.IServiceProvider`.
 
-**Summary:** The core editing control, containing the `TextView` and handling user input, caret, selection, margins, and scrolling. It does not include the outer scroll bars, which are typically part of the `TextEditor` control template.
+**Summary:** The core editing control, containing the `TextView` and handling user input, caret, selection, margins, and scrolling logic (`IScrollInfo`). It does **not** include the visual outer scroll bars, which are typically part of the parent `TextEditor` control template's `ScrollViewer`.
 
 **Public Properties:**
 
@@ -418,7 +419,7 @@ Inherits from `System.Windows.Controls.Control`, implements `IScrollInfo`, `IWea
 *   `TextView`: `TextView` (readonly) - Gets the underlying `TextView` used for rendering.
 *   `Caret`: `Caret` (readonly) - Gets the caret instance.
 *   `Selection`: `Selection` - Gets/Sets the current selection.
-*   `LeftMargins`: `ObservableCollection<UIElement>` (readonly) - Gets the collection of margins displayed to the left.
+*   `LeftMargins`: `ObservableCollection<UIElement>` (readonly) - Gets the collection of margins displayed to the **left** of the text view. **There is no built-in `RightMargins` collection.** Margins inheriting from `AbstractMargin` are designed for this collection.
 *   `ReadOnlySectionProvider`: `IReadOnlySectionProvider` - Gets/Sets the provider for read-only sections. Default is `NoReadOnlySections.Instance`.
 *   `IndentationStrategy`: `IIndentationStrategy` - Gets/Sets the indentation strategy. Default is `DefaultIndentationStrategy`.
 *   `SelectionBrush`, `SelectionForeground`: `Brush` - Brushes for selection appearance. (Dependency Properties)
@@ -449,7 +450,9 @@ Inherits from `System.Windows.Controls.Control`, implements `IScrollInfo`, `IWea
 
 **Internal Insights:**
 
-*   Composition: `TextArea` owns the `TextView`, `Caret`, `Selection`, `Margins`, and `Input Handlers`.
+*   Composition: `TextArea` owns the `TextView`, `Caret`, `Selection`, `LeftMargins`, and `Input Handlers`.
+*   **Margins:** Custom UI elements inheriting `AbstractMargin` can be added to the `LeftMargins` collection. They render to the left of the text and scroll vertically with it. There's no equivalent `RightMargins` collection. Elements intended for the right side (like an overview ruler replacing the scrollbar) must typically be added by modifying the parent `TextEditor`'s `ControlTemplate`.
+*   **Scrolling (`IScrollInfo`):** Implements `IScrollInfo` to integrate with a parent `ScrollViewer`. It calculates `ExtentWidth`, `ExtentHeight`, `ViewportWidth`, `ViewportHeight`, `HorizontalOffset`, `VerticalOffset` and handles scroll requests (`LineUp`, `SetVerticalOffset`, etc.). The actual visual scrollbars are usually part of the parent `ScrollViewer`.
 *   Input Handling: Uses a chain/stack of `ITextAreaInputHandler` objects. The `DefaultInputHandler` contains nested handlers for caret navigation, editing, and mouse selection. Stacked handlers (like `SnippetInputHandler` or custom handlers) can temporarily take precedence.
 *   Read-Only Support: Uses `IReadOnlySectionProvider` to determine editable regions. `NoReadOnlySections` (default) and `ReadOnlySectionDocument` are predefined providers. `TextSegmentReadOnlySectionProvider` is a common implementation using a `TextSegmentCollection`.
 *   Caret/Selection Synchronization: Ensures the caret generally stays within the selection using a delayed validation mechanism (`EnsureSelectionValid`).
