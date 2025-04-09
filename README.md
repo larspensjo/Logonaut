@@ -47,6 +47,7 @@ For more detailed information on specific aspects of Logonaut, please refer to t
 *   [Log File Processing Flow](doc/LogFileProcessingFlow.md): How log data is read, processed, and displayed.
 *   [Reactive and Incremental Filtering](doc/ReactiveINcrementalFiltering.md): Details on the reactive filtering implementation.
 *   [Original Line Number Management](doc/LineNumberManagement.md): Explanation of how original line numbers are preserved and displayed.
+*   [Overview Ruler Data Flow](doc/OverviewRulerFlow.md): How the custom scrollbar gets data and controls scrolling. <!-- <<< ADD THIS LINE -->
 *   [Gemini Analysis (Code Review)](doc/GeminAnalysis.md): An automated analysis of potential improvements and issues (as of a specific point in time).
 
 ## Getting Started
