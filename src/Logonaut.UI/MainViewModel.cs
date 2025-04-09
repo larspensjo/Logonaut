@@ -37,9 +37,13 @@ namespace Logonaut.UI.ViewModels
         // --- Lifecycle Management ---
         private readonly CompositeDisposable _disposables = new();
 
-        // Search State
-        private List<SearchResult> _searchMatches = new List<SearchResult>();
+        // --- Search State & Ruler Markers ---
+        private List<SearchResult> _searchMatches = new(); // Internal list
         private int _currentSearchIndex = -1;
+
+        // Observable property bound to OverviewRulerMargin.SearchMarkers
+        [ObservableProperty]
+        private ObservableCollection<SearchResult> _searchMarkers = new();
 
         #endregion // --- Fields ---
 
@@ -112,6 +116,7 @@ namespace Logonaut.UI.ViewModels
             get
             {
                 if (string.IsNullOrEmpty(SearchText)) return "";
+                // Use _searchMatches for status count, SearchMarkers is just for the ruler display
                 if (_searchMatches.Count == 0) return "Phrase not found";
                 if (_currentSearchIndex == -1) return $"{_searchMatches.Count} matches found";
                 return $"Match {_currentSearchIndex + 1} of {_searchMatches.Count}";
@@ -423,24 +428,26 @@ namespace Logonaut.UI.ViewModels
 
             if (wasReplace)
             {
-                ReplaceFilteredLines(update.Lines); // Updates UI State
+                ReplaceFilteredLines(update.Lines); // Updates UI State (FilteredLogLines)
+                SearchMarkers.Clear(); // Clear markers when replacing content
+                _searchMatches.Clear(); // Clear internal match list
+                _currentSearchIndex = -1; // Reset search index
             }
             else // Append
             {
-                AddFilteredLines(update.Lines); // Updates UI State
+                AddFilteredLines(update.Lines); // Updates UI State (FilteredLogLines)
+                // Appending might invalidate existing marker offsets if done simply.
+                // For now, we'll let the next search update handle markers correctly.
+                // TODO: A more advanced approach might try to update marker offsets, but
+                // re-running search on the updated LogText is safer.
             }
 
-            // If this update was the result of a full re-filter (Replace),
-            // hide the busy indicator *after* the UI collections are updated.
-            // We post this with low priority to ensure UI updates take precedence.
+            // Schedule the LogText update AFTER updating FilteredLogLines
+            ScheduleLogTextUpdate(); // This now also triggers UpdateSearchMatches
+
             if (wasReplace)
             {
-                _uiContext.Post(_ =>
-                {
-                    IsBusyFiltering = false;
-                }, null);
-                // Alternative using Dispatcher if preferred (though _uiContext should work):
-                // Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, new Action(() => IsBusy = false));
+                 _uiContext.Post(_ => { IsBusyFiltering = false; }, null);
             }
         }
 
@@ -538,6 +545,8 @@ namespace Logonaut.UI.ViewModels
                 // Reads UI State (FilteredLogLines) and updates UI State (LogText)
                 var textOnly = FilteredLogLines.Select(line => line.Text).ToList();
                 LogText = string.Join(Environment.NewLine, textOnly);
+
+                // Update search matches and markers AFTER LogText is updated
                 UpdateSearchMatches();
             }
             catch (InvalidOperationException ioex)
@@ -559,12 +568,13 @@ namespace Logonaut.UI.ViewModels
 
              // Clear previous results
              _searchMatches.Clear();
+             SearchMarkers.Clear(); // Clear the collection for the ruler
              _currentSearchIndex = -1;
              // Clear selection in editor immediately
              SelectAndScrollToCurrentMatch();
 
 
-            if (string.IsNullOrEmpty(currentSearchTerm) || string.IsNullOrEmpty(textToSearch))
+             if (string.IsNullOrEmpty(currentSearchTerm) || string.IsNullOrEmpty(textToSearch))
              {
                  OnPropertyChanged(nameof(SearchStatusText)); // Update status (e.g., clear it)
                  return; // Nothing to search for or in
@@ -580,10 +590,10 @@ namespace Logonaut.UI.ViewModels
                      break; // No more matches
                  }
 
-                 _searchMatches.Add(new SearchResult(foundIndex, currentSearchTerm.Length));
-                 offset = foundIndex + 1; // Start next search after the beginning of the current match
-                 // Use + 1 instead of + Length to find overlapping matches if needed, though less common for search.
-                 // Using + currentSearchTerm.Length would be slightly more efficient if overlaps aren't desired.
+                 var newMatch = new SearchResult(foundIndex, currentSearchTerm.Length);
+                 _searchMatches.Add(newMatch);
+                 SearchMarkers.Add(newMatch); // Add to the collection for the ruler
+                 offset = foundIndex + 1;
              }
 
              OnPropertyChanged(nameof(SearchStatusText)); // Update match count display

@@ -1,6 +1,7 @@
 ﻿using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
+using System.Windows.Media;
 using Logonaut.UI.ViewModels; // Ensure this using is present
 using System; // For EventArgs
 
@@ -51,39 +52,105 @@ namespace Logonaut.UI
         }
         // --- End Dark Title Bar Support ---
 
+        private Logonaut.UI.Helpers.OverviewRulerMargin? _overviewRuler; // Field to hold the ruler instance
 
         public MainWindow()
         {
             // InitializeComponent() is the method generated from the XAML. When it runs, it parses the XAML, creates the UI elements, and wires them up.
             InitializeComponent();
-            DataContext = new ViewModels.MainViewModel(); // Assuming you set DC here or earlier
+            DataContext = new ViewModels.MainViewModel();
             this.SourceInitialized += MainWindow_SourceInitialized;
 
-            // Create and add the custom margin
-            var margin = new Logonaut.UI.Helpers.OriginalLineNumberMargin();
-            LogOutputEditor.TextArea.LeftMargins.Add(margin); // LogOutputEditor is generated automatically from XAML
+            // Add original line number and separator margins (code-behind approach)
+            SetupCustomMargins();
 
-            // Set up the necessary bindings in code
-            var filteredLinesBinding = new System.Windows.Data.Binding("FilteredLogLines") {
-                Source = this.DataContext, // Or find the ViewModel appropriately
-                Mode = System.Windows.Data.BindingMode.OneWay
-            };
-            margin.SetBinding(Logonaut.UI.Helpers.OriginalLineNumberMargin.FilteredLinesSourceProperty, filteredLinesBinding);
+            // Hook up event handlers AFTER the template is applied
+            LogOutputEditor.Loaded += LogOutputEditor_Loaded;
+        }
 
-            var visibilityBinding = new System.Windows.Data.Binding("IsCustomLineNumberMarginVisible") {
+        private void LogOutputEditor_Loaded(object sender, RoutedEventArgs e)
+        {
+             // The template should be applied now, try to find the ruler
+             // Use VisualTreeHelper to find the element within the template
+             _overviewRuler = FindVisualChild<Logonaut.UI.Helpers.OverviewRulerMargin>(LogOutputEditor);
+
+             if (_overviewRuler != null)
+             {
+                // Hook up the event handler
+                _overviewRuler.RequestScrollOffset += OverviewRuler_RequestScrollOffset;
+             }
+             else
+             {
+                // TODO: Log or handle the case where the ruler wasn't found
+                System.Diagnostics.Debug.WriteLine("OverviewRulerMargin not found in TextEditor template.");
+             }
+
+             // Unsubscribe when the editor unloads to prevent memory leaks
+             LogOutputEditor.Unloaded += (s, ev) => {
+                 if (_overviewRuler != null)
+                 {
+                     _overviewRuler.RequestScrollOffset -= OverviewRuler_RequestScrollOffset;
+                 }
+                 // Also unsubscribe from Loaded/Unloaded? Might not be necessary if window closes.
+             };
+        }
+
+
+         // Handler for the ruler's request to scroll
+         private void OverviewRuler_RequestScrollOffset(object? sender, double requestedOffset)
+         {
+             LogOutputEditor.ScrollToVerticalOffset(requestedOffset);
+         }
+
+
+        // Helper to find a child element of a specific type in the visual tree
+        private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+        {
+            if (parent == null) return null;
+
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+            {
+                DependencyObject child = VisualTreeHelper.GetChild(parent, i);
+                if (child != null && child is T typedChild)
+                {
+                    return typedChild;
+                }
+                else
+                {
+                    T? childOfChild = FindVisualChild<T>(child);
+                    if (childOfChild != null)
+                        return childOfChild;
+                }
+            }
+            return null;
+        }
+
+
+        private void SetupCustomMargins()
+        {
+            var numberMargin = new Logonaut.UI.Helpers.OriginalLineNumberMargin();
+            LogOutputEditor.TextArea.LeftMargins.Add(numberMargin);
+
+            var filteredLinesBinding = new System.Windows.Data.Binding("FilteredLogLines")
+            {
                 Source = this.DataContext,
                 Mode = System.Windows.Data.BindingMode.OneWay
-                // You might need a converter if IsCustomLineNumberMarginVisible is not a Visibility type
             };
+            numberMargin.SetBinding(Logonaut.UI.Helpers.OriginalLineNumberMargin.FilteredLinesSourceProperty, filteredLinesBinding);
 
-            margin.SetBinding(UIElement.VisibilityProperty, visibilityBinding);
+            var visibilityBinding = new System.Windows.Data.Binding("IsCustomLineNumberMarginVisible")
+            {
+                Source = this.DataContext,
+                Mode = System.Windows.Data.BindingMode.OneWay
+            };
+            numberMargin.SetBinding(UIElement.VisibilityProperty, visibilityBinding);
 
+            // --- Separator Margin ---
             var lineSeparatorMargin = new Logonaut.UI.Helpers.VerticalLineMargin();
-            // Bind its visibility to the same property as the number margin
-            lineSeparatorMargin.SetBinding(UIElement.VisibilityProperty, visibilityBinding); // Re-use the same binding object
-            // Add it *after* the number margin
+            lineSeparatorMargin.SetBinding(UIElement.VisibilityProperty, visibilityBinding);
             LogOutputEditor.TextArea.LeftMargins.Add(lineSeparatorMargin);
         }
+
 
         private void MainWindow_SourceInitialized(object? sender, EventArgs e)
         {

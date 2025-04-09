@@ -4,9 +4,10 @@
                     xmlns:vm="clr-namespace:Logonaut.UI.ViewModels"
                     xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
                     xmlns:helpers="clr-namespace:Logonaut.UI.Helpers"
+                    xmlns:converters="clr-namespace:Logonaut.UI.Converters"
                     xmlns:local="clr-namespace:Logonaut.UI">
 
-    <local:BooleanToHighlightConverter x:Key="BooleanToHighlightConverter" />
+    <converters:BooleanToHighlightConverter x:Key="BooleanToHighlightConverter" />
     <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
 
     <!-- This is the DataTemplate being used by your TreeView's ContentPresenter -->

@@ -141,7 +141,6 @@ namespace Logonaut.Core
         public void Dispose()
         {
             _disposables.Dispose();
-            System.Diagnostics.Debug.WriteLine("LogFilterProcessor Disposed.");
         }
     }
 }

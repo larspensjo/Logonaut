@@ -5,7 +5,78 @@
         xmlns:helpers="clr-namespace:Logonaut.UI.Helpers"
         xmlns:vm="clr-namespace:Logonaut.UI.ViewModels"
         Title="Logonaut" Height="600" Width="800"
+        xmlns:converters="clr-namespace:Logonaut.UI.Converters"
         Closing="Window_Closing">
+    <Window.Resources>
+        <!-- Existing resources like converters -->
+        <converters:StringToIntConverter x:Key="StringToIntConverter"/>
+        <converters:BooleanToHighlightConverter x:Key="BooleanToHighlightConverter"/>
+
+        <!-- Brushes needed for the Overview Ruler and its container -->
+        <!-- These should ideally move to theme dictionaries later -->
+        <SolidColorBrush x:Key="OverviewRuler.SearchMarkerBrush" Color="DarkCyan"/>
+        <SolidColorBrush x:Key="OverviewRuler.ThumbBrush" Color="#66808080"/> <!-- Semi-transparent Gray -->
+        <SolidColorBrush x:Key="OverviewRuler.Background" Color="#F0F0F0"/> <!-- Background matching scrollbar track -->
+        <SolidColorBrush x:Key="OverviewRuler.BorderBrush" Color="#D0D0D0"/> <!-- Border matching scrollbar track -->
+
+        <Style TargetType="{x:Type avalonEdit:TextEditor}" x:Key="TextEditorWithOverviewRulerStyle">
+            <!-- Inherit default properties (Optional but good practice) -->
+            <Setter Property="Foreground" Value="{DynamicResource TextEditor.Foreground}" />
+            <Setter Property="Background" Value="{DynamicResource TextEditor.Background}" />
+            <Setter Property="FontFamily" Value="Consolas" />
+            <Setter Property="FontSize" Value="12" />
+            <!-- Set the custom template -->
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type avalonEdit:TextEditor}">
+                        <!-- 1. Grid Structure: Divides space into editor area and ruler area -->
+                        <Grid Background="{TemplateBinding Background}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" /> <!-- Main editor area -->
+                                <ColumnDefinition Width="Auto" /> <!-- Overview Ruler column -->
+                            </Grid.ColumnDefinitions>
+
+                            <!-- 2. Original ScrollViewer (PART_ScrollViewer): Hosts the TextArea -->
+                            <!-- IMPORTANT: Hides the default vertical scrollbar -->
+                            <ScrollViewer x:Name="PART_ScrollViewer"
+                                          Grid.Column="0"
+                                          Focusable="False"
+                                          CanContentScroll="True"
+                                          VerticalScrollBarVisibility="Hidden"
+                                          HorizontalScrollBarVisibility="{TemplateBinding HorizontalScrollBarVisibility}"
+                                          Content="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=TextArea}"
+                                          />
+
+                            <!-- 3. Custom Overview Ruler: Placed in the second column.
+                                    Bind ruler properties to TextEditor properties
+                                    Bind ruler marker data to ViewModel
+                                    Bind appearance
+                            -->
+                            <!-- TODO: Optional: line separator -->
+                            <!-- VerticalOffset, ViewportHeight and ExtentHeight are bound directly to the internal ScrollViewer as the direct TextEditor properties aren't
+                                 updating reliably for the binding system. This is less ideal as it relies on the internal template structure. -->
+                            <helpers:OverviewRulerMargin
+                                x:Name="OverviewRuler"
+                                Grid.Column="1"
+                                Width="18"
+                                Background="{DynamicResource OverviewRuler.Background}"
+                                BorderBrush="{DynamicResource OverviewRuler.BorderBrush}"
+                                BorderThickness="1,0,0,0"
+                                VerticalOffset="{Binding Path=VerticalOffset, ElementName=PART_ScrollViewer, Mode=OneWay}"
+                                ViewportHeight="{Binding Path=ViewportHeight, ElementName=PART_ScrollViewer, Mode=OneWay}"
+                                ExtentHeight="{Binding Path=ExtentHeight, ElementName=PART_ScrollViewer, Mode=OneWay}"
+                                DocumentLength="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=Document.TextLength, Mode=OneWay, FallbackValue=0}"
+                                SearchMarkers="{Binding DataContext.SearchMarkers, RelativeSource={RelativeSource AncestorType=Window}, Mode=OneWay}"
+                                SearchMarkerBrush="{DynamicResource OverviewRuler.SearchMarkerBrush}"
+                                ThumbBrush="{DynamicResource OverviewRuler.ThumbBrush}"
+                                />
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+             <!-- Optional: Add triggers from default style if needed -->
+        </Style>
+    </Window.Resources>
     <!-- Main Layout: A Grid with three rows: Menu, Stats Panel, and Main Content -->
     <Grid>
         <Grid.RowDefinitions>
@@ -164,7 +235,7 @@
                                         IsReadOnly="True"
                                         SyntaxHighlighting="Log"
                                         WordWrap="False"
-                                        VerticalScrollBarVisibility="Visible"
+                                        VerticalScrollBarVisibility="Disabled"
                                         HorizontalScrollBarVisibility="Visible"
                                         Padding="3,0,0,0"
                                         Background="{DynamicResource EditorBackgroundBrush}"
@@ -173,6 +244,7 @@
                                         helpers:AvalonEditHelper.FilterSubstrings="{Binding FilterSubstrings, Mode=OneWay}"
                                         helpers:AvalonEditHelper.HighlightTimestamps="{Binding HighlightTimestamps, Mode=OneWay}"
                                         ShowLineNumbers="False"
+                                        Style="{StaticResource TextEditorWithOverviewRulerStyle}"
                                         helpers:AvalonEditHelper.SearchTerm="{Binding SearchText, Mode=OneWay}"
                                         helpers:AvalonEditHelper.SelectOffset="{Binding CurrentMatchOffset, Mode=OneWay}"
                                         helpers:AvalonEditHelper.SelectLength="{Binding CurrentMatchLength, Mode=OneWay}">
@@ -181,13 +253,11 @@
 
                 <!-- Search Panel -->
                 <StackPanel Orientation="Horizontal" Grid.Row="2" HorizontalAlignment="Center" Margin="5">
-                <StackPanel Orientation="Horizontal" Grid.Row="2" HorizontalAlignment="Center" Margin="5">
-                    <Button Content="Previous" Command="{Binding PreviousSearchCommand}" Margin="5"
-                            IsEnabled="{Binding PreviousSearchCommand.CanExecute}"/>
-                    <TextBox Width="200" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" Margin="5"/>
-                    <Button Content="Next" Command="{Binding NextSearchCommand}" Margin="5"
-                            IsEnabled="{Binding NextSearchCommand.CanExecute}"/>
-                </StackPanel>
+                    <StackPanel Orientation="Horizontal" Grid.Row="2" HorizontalAlignment="Center" Margin="5">
+                        <Button Content="Previous" Command="{Binding PreviousSearchCommand}" Margin="5" />
+                        <TextBox Width="200" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" Margin="5"/>
+                        <Button Content="Next" Command="{Binding NextSearchCommand}" Margin="5" />
+                    </StackPanel>
                 </StackPanel>
             </Grid>
         </Grid>
