@@ -146,13 +146,13 @@ namespace Logonaut.UI.Helpers
                 // No need for Math.Max(5, ...) here because if controlHeight < 5, something else is wrong.
             }
 
-
             // Draw the (now correctly sized) thumb
             drawingContext.DrawRectangle(ThumbBrush, null, new Rect(0, thumbTop, ActualWidth, thumbHeight));
 
             // --- Draw Search Markers ---
             // Marker drawing logic remains the same, but needs the check for docLength > 0
             var markers = SearchMarkers;
+            double markerWidth = ActualWidth/3.0; // Width of the marker rectangle. TOOD: When extending to custom markers, this may need to be changed.
             if (markers != null && docLength > 0 && extent > 0) // Check extent > 0 for scaling marker position too
             {
                 foreach (var marker in markers)
@@ -168,7 +168,7 @@ namespace Logonaut.UI.Helpers
                     yPos = Math.Min(yPos, controlHeight - 1.5); // Ensure marker fits within bounds
 
                     // Draw a small rectangle for the marker
-                    drawingContext.DrawRectangle(SearchMarkerBrush, null, new Rect(0, yPos, ActualWidth, 1.5));
+                    drawingContext.DrawRectangle(SearchMarkerBrush, null, new Rect(0, yPos, markerWidth, 1.5));
                 }
             }
             // else: No markers to draw or cannot scale them
