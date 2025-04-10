@@ -12,6 +12,7 @@ Logonaut is a Windows application written in C#. It functions as a log viewer, r
 ## 2. Core Functionality
 ### 2.1 Log File Handling
 - The application shall provide a menu where the user can select which log file to monitor.
+- The application shall support pasting log content directly from the clipboard using Ctrl+V.
 - It shall be possible to scroll up and down the filtered output.
 - If a log file is reset, the application shall notify the user and start a new tab.
 

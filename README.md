@@ -8,6 +8,8 @@ This is a WIP, not ready for use.
 
 - **Real-Time Log Tailing:**
   Continuously reads from a log file and updates the display asynchronously using Reactive Extensions and FileSystemWatcher.
+- **Flexible Log Input:**
+  Open log files via File menu or paste log content directly from clipboard using Ctrl+V.
 - **Advanced Filtering:**
   Supports substring matching, regex patterns, and composite logical (AND/OR/NOR) filter conditions. Filters are organized in a hierarchical tree for complex expressions like `(A or (B and not C))`. Includes context line display.
 - **Customizable Syntax Highlighting:**

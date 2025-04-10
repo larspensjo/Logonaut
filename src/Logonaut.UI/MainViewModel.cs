@@ -599,6 +599,29 @@ namespace Logonaut.UI.ViewModels
              OnPropertyChanged(nameof(SearchStatusText)); // Update match count display
         }
 
+        /// <summary>
+        /// Loads log content from a text string, similar to loading from a file
+        /// </summary>
+        /// <param name="text">The text content to load as log</param>
+        public void LoadLogFromText(string text)
+        {
+            try
+            {
+                // Clear existing log content
+                LogDoc.Clear();
+                FilteredLogLines.Clear();
+                LogText = string.Empty;
+                LogDoc.AddInitialLines(text);
+
+                // Trigger filter update to process the new content
+                TriggerFilterUpdate();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error loading log content: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
         #endregion // --- Log Display Text Generation ---
 
         #region // --- Highlighting Configuration ---

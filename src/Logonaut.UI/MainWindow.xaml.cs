@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -66,6 +66,33 @@ namespace Logonaut.UI
 
             // Hook up event handlers AFTER the template is applied
             LogOutputEditor.Loaded += LogOutputEditor_Loaded;
+            
+            // Enable clipboard paste functionality
+            LogOutputEditor.TextArea.PreviewKeyDown += LogOutputEditor_PreviewKeyDown;
+        }
+
+        private void LogOutputEditor_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            System.Diagnostics.Debug.WriteLine($"PreviewKey pressed: {e.Key}, Modifiers: {System.Windows.Input.Keyboard.Modifiers}");
+            if (e.Key == System.Windows.Input.Key.V && 
+                (System.Windows.Input.Keyboard.Modifiers & System.Windows.Input.ModifierKeys.Control) == System.Windows.Input.ModifierKeys.Control &&
+                !(System.Windows.Input.Keyboard.Modifiers.HasFlag(System.Windows.Input.ModifierKeys.Alt)))
+            {
+                if (System.Windows.Clipboard.ContainsText())
+                {
+                    string clipboardText = System.Windows.Clipboard.GetText();
+                    if (!string.IsNullOrEmpty(clipboardText))
+                    {
+                        // Get the MainViewModel
+                        if (DataContext is ViewModels.MainViewModel viewModel)
+                        {
+                            // Load the clipboard text as if it were a file
+                            viewModel.LoadLogFromText(clipboardText);
+                            e.Handled = true;
+                        }
+                    }
+                }
+            }
         }
 
         private void LogOutputEditor_Loaded(object sender, RoutedEventArgs e)
