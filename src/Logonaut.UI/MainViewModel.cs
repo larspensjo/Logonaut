@@ -1,15 +1,16 @@
-using System; // Added for Environment.NewLine, InvalidOperationException
+using System; 
 using System.Collections.ObjectModel;
 using System.Diagnostics;
-using System.Linq; // Added for Select, FirstOrDefault
-using System.Reactive.Disposables; // For CompositeDisposable
+using System.Linq; 
+using System.Reactive.Disposables; 
 using System.Text.RegularExpressions;
-using System.Threading; // For SynchronizationContext
-using System.Windows; // For Visibility, MessageBox
+using System.Text;
+using System.Threading; 
+using System.Windows; 
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Logonaut.Common;
-using Logonaut.Core;         // Added for ILogFilterProcessor, FilteredUpdate, UpdateType
+using Logonaut.Core;         
 using Logonaut.Filters;
 using Logonaut.LogTailing;
 using Logonaut.UI.Services;
@@ -549,9 +550,8 @@ namespace Logonaut.UI.ViewModels
         {
             try
             {
-                // Reads UI State (FilteredLogLines) and updates UI State (LogText)
-                var textOnly = FilteredLogLines.Select(line => line.Text).ToList();
-                LogText = string.Join(Environment.NewLine, textOnly);
+                // Simple case - just join all lines
+                LogText = string.Join(Environment.NewLine, FilteredLogLines.Select(line => line.Text));
 
                 // Update search matches and markers AFTER LogText is updated
                 UpdateSearchMatches();

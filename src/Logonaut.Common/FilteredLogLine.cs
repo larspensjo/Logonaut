@@ -17,7 +17,12 @@ namespace Logonaut.Common
         /// </summary>
         public string Text { get; }
 
-        public FilteredLogLine(int originalLineNumber, string text)
+        /// <summary>
+        /// Gets whether this line was included as a context line rather than a direct match.
+        /// </summary>
+        public bool IsContextLine { get; }
+
+        public FilteredLogLine(int originalLineNumber, string text, bool isContextLine = false)
         {
             if (originalLineNumber < 1)
             {
@@ -26,6 +31,7 @@ namespace Logonaut.Common
             }
             OriginalLineNumber = originalLineNumber;
             Text = text ?? string.Empty; // Ensure text is not null
+            IsContextLine = isContextLine;
         }
 
         // Optional: Override Equals and GetHashCode if needed for specific collection logic
@@ -33,12 +39,13 @@ namespace Logonaut.Common
         {
             return obj is FilteredLogLine line &&
                    OriginalLineNumber == line.OriginalLineNumber &&
-                   Text == line.Text;
+                   Text == line.Text &&
+                   IsContextLine == line.IsContextLine;
         }
 
         public override int GetHashCode()
         {
-            return HashCode.Combine(OriginalLineNumber, Text);
+            return HashCode.Combine(OriginalLineNumber, Text, IsContextLine);
         }
     }
 }

@@ -1,13 +1,19 @@
+﻿using System;
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
-using Logonaut.UI.ViewModels; // Ensure this using is present
-using System; // For EventArgs
+using ICSharpCode.AvalonEdit;
+using ICSharpCode.AvalonEdit.Editing;
+using ICSharpCode.AvalonEdit.Rendering;
+using Logonaut.UI.Helpers;
+using Logonaut.UI.ViewModels;
 
 namespace Logonaut.UI
 {
-    public partial class MainWindow : Window
+    public partial class MainWindow : Window, IDisposable
     {
         // --- Dark Title Bar Support ---
         private const int DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1 = 19;
@@ -18,47 +24,41 @@ namespace Logonaut.UI
 
         private static bool IsWindows10OrGreater(int build = -1)
         {
-            try {
-                 return Environment.OSVersion.Version.Major >= 10 && Environment.OSVersion.Version.Build >= build;
-            } catch { return false; } // Avoid potential exceptions
-        }
-
-        private void SetDarkTitleBar(IntPtr hwnd)
-        {
-            if (IsWindows10OrGreater(17763)) // Check for supported Windows 10 versions
+            try
             {
-                int attribute = DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1;
-                if (IsWindows10OrGreater(18985)) // Build 18985+ uses attribute 20
-                {
-                    attribute = DWMWA_USE_IMMERSIVE_DARK_MODE;
-                }
-
-                int useImmersiveDarkMode = 1; // 1 = True
-                try
-                {
-                    int result = DwmSetWindowAttribute(hwnd, attribute, ref useImmersiveDarkMode, sizeof(int));
-                    if (result != 0) // S_OK = 0
-                    {
-                        // TODO better error handling
-                        System.Diagnostics.Debug.WriteLine($"DwmSetWindowAttribute failed with result: {result}");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    // TODO: Better error handling
-                    System.Diagnostics.Debug.WriteLine($"Failed to set dark title bar attribute: {ex.Message}");
-                }
+                return Environment.OSVersion.Version.Major >= 10 && 
+                       (build == -1 || Environment.OSVersion.Version.Build >= build);
+            }
+            catch
+            {
+                return false; // Avoid potential exceptions
             }
         }
-        // --- End Dark Title Bar Support ---
 
-        private Logonaut.UI.Helpers.OverviewRulerMargin? _overviewRuler; // Field to hold the ruler instance
+        private readonly MainViewModel _viewModel;
+        private Logonaut.UI.Helpers.OverviewRulerMargin? _overviewRuler;
+        private ChunkSeparatorRenderer? _chunkSeparator;
+        private bool _disposed;
 
         public MainWindow()
         {
             // InitializeComponent() is the method generated from the XAML. When it runs, it parses the XAML, creates the UI elements, and wires them up.
             InitializeComponent();
             DataContext = new ViewModels.MainViewModel();
+            _viewModel = (MainViewModel)DataContext;
+
+            // Subscribe to model updates to update chunk separators
+            _viewModel.PropertyChanged += ViewModel_PropertyChanged;
+
+            // Apply dark title bar if supported
+            if (IsWindows10OrGreater())
+            {
+                EnableDarkTitleBar();
+            }
+
+            // Set up initial window state
+            Loaded += MainWindow_Loaded;
+
             this.SourceInitialized += MainWindow_SourceInitialized;
 
             // Add original line number and separator margins (code-behind approach)
@@ -72,6 +72,91 @@ namespace Logonaut.UI
 
             // Handle mouse clicks for search reference point
             LogOutputEditor.TextArea.MouseDown += LogOutputEditor_MouseDown;
+
+            this.Closing += MainWindow_Closing;
+        }
+
+        private void MainWindow_Closing(object? sender, CancelEventArgs e)
+        {
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!_disposed)
+            {
+                if (_chunkSeparator != null)
+                {
+                    LogOutputEditor.TextArea.TextView.BackgroundRenderers.Remove(_chunkSeparator);
+                    _chunkSeparator.Dispose();
+                    _chunkSeparator = null;
+                }
+
+                if (_overviewRuler != null)
+                {
+                    _overviewRuler.RequestScrollOffset -= OverviewRuler_RequestScrollOffset;
+                    _overviewRuler = null;
+                }
+
+                if (_viewModel != null)
+                {
+                    _viewModel.PropertyChanged -= ViewModel_PropertyChanged;
+                }
+
+                _disposed = true;
+            }
+        }
+
+        private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (_chunkSeparator != null && (e.PropertyName == nameof(MainViewModel.FilteredLogLines) || e.PropertyName == nameof(MainViewModel.ContextLines)))
+            {
+                _chunkSeparator.UpdateChunks(_viewModel.FilteredLogLines, _viewModel.ContextLines);
+            }
+        }
+
+        private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+        {
+            // The template should be applied now, try to find the ruler
+            // Use VisualTreeHelper to find the element within the template
+            _overviewRuler = FindVisualChild<Logonaut.UI.Helpers.OverviewRulerMargin>(LogOutputEditor);
+
+            if (_overviewRuler != null)
+            {
+                // Hook up the event handler
+                _overviewRuler.RequestScrollOffset += OverviewRuler_RequestScrollOffset;
+            }
+            else
+            {
+                // TODO: Log or handle the case where the ruler wasn't found
+                System.Diagnostics.Debug.WriteLine("OverviewRulerMargin not found in TextEditor template.");
+            }
+
+            // Unsubscribe when the editor unloads to prevent memory leaks
+            LogOutputEditor.Unloaded += (s, ev) => {
+                if (_overviewRuler != null)
+                {
+                    _overviewRuler.RequestScrollOffset -= OverviewRuler_RequestScrollOffset;
+                }
+                // Also unsubscribe from Loaded/Unloaded? Might not be necessary if window closes.
+            };
+
+            // Initialize chunk separator
+            _chunkSeparator = new ChunkSeparatorRenderer(LogOutputEditor.TextArea.TextView);
+            LogOutputEditor.TextArea.TextView.BackgroundRenderers.Add(_chunkSeparator);
+            _chunkSeparator.UpdateChunks(_viewModel.FilteredLogLines, _viewModel.ContextLines);
+
+            // Clean up when editor unloads
+            LogOutputEditor.Unloaded += (s, ev) => {
+                if (_overviewRuler != null)
+                {
+                    _overviewRuler.RequestScrollOffset -= OverviewRuler_RequestScrollOffset;
+                }
+                if (_chunkSeparator != null)
+                {
+                    LogOutputEditor.TextArea.TextView.BackgroundRenderers.Remove(_chunkSeparator);
+                }
+            };
         }
 
         private void LogOutputEditor_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
@@ -197,16 +282,29 @@ namespace Logonaut.UI
         }
 
 
-        private void MainWindow_SourceInitialized(object? sender, EventArgs e)
+        private void MainWindow_SourceInitialized(object sender, EventArgs e)
         {
-            IntPtr hwnd = new WindowInteropHelper(this).Handle;
-            if (hwnd != IntPtr.Zero)
+            // The window handle is now available
+            if (IsWindows10OrGreater())
             {
-                SetDarkTitleBar(hwnd); // Apply dark title bar if applicable
+                EnableDarkTitleBar();
             }
-            else {
-                // TODO: Better error handling
-                System.Diagnostics.Debug.WriteLine("Could not get window handle in SourceInitialized.");
+        }
+
+        private void EnableDarkTitleBar()
+        {
+            var windowHandle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+            if (windowHandle == IntPtr.Zero)
+                return;
+
+            int useImmersiveDarkMode = 1;
+            if (IsWindows10OrGreater(20180)) // Windows 10 20H1 or later
+            {
+                DwmSetWindowAttribute(windowHandle, DWMWA_USE_IMMERSIVE_DARK_MODE, ref useImmersiveDarkMode, sizeof(int));
+            }
+            else
+            {
+                DwmSetWindowAttribute(windowHandle, DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1, ref useImmersiveDarkMode, sizeof(int));
             }
         }
 
