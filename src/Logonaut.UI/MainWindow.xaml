@@ -257,6 +257,18 @@
                         <Button Content="Previous" Command="{Binding PreviousSearchCommand}" Margin="5" />
                         <TextBox Width="200" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" Margin="5"/>
                         <Button Content="Next" Command="{Binding NextSearchCommand}" Margin="5" />
+
+                        <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,2"/>
+
+                        <!-- Case Sensitive Search -->
+                        <CheckBox Content="Case Sensitive" 
+                                IsChecked="{Binding IsCaseSensitiveSearch}"
+                                VerticalAlignment="Center"
+                                Margin="5,0">
+                            <CheckBox.ToolTip>
+                                <ToolTip>Match case when searching</ToolTip>
+                            </CheckBox.ToolTip>
+                        </CheckBox>
                     </StackPanel>
                 </StackPanel>
             </Grid>

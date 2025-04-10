@@ -69,6 +69,9 @@ namespace Logonaut.UI
             
             // Enable clipboard paste functionality
             LogOutputEditor.TextArea.PreviewKeyDown += LogOutputEditor_PreviewKeyDown;
+
+            // Handle mouse clicks for search reference point
+            LogOutputEditor.TextArea.MouseDown += LogOutputEditor_MouseDown;
         }
 
         private void LogOutputEditor_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
@@ -122,6 +125,21 @@ namespace Logonaut.UI
              };
         }
 
+        private void LogOutputEditor_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (e.ChangedButton == System.Windows.Input.MouseButton.Left && DataContext is ViewModels.MainViewModel viewModel)
+            {
+                // Get the position in the text where the user clicked
+                var positionInfo = LogOutputEditor.TextArea.TextView.GetPositionFloor(e.GetPosition(LogOutputEditor.TextArea.TextView));
+                if (positionInfo.HasValue)
+                {
+                    // Convert TextLocation (line,column) to character offset in the document
+                    var textLocation = positionInfo.Value.Location;
+                    var characterOffset = LogOutputEditor.Document.GetOffset(textLocation);
+                    viewModel.UpdateSearchIndexFromCharacterOffset(characterOffset);
+                }
+            }
+        }
 
          // Handler for the ruler's request to scroll
          private void OverviewRuler_RequestScrollOffset(object? sender, double requestedOffset)

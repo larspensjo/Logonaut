@@ -158,6 +158,11 @@ namespace Logonaut.UI.ViewModels
         [ObservableProperty]
         private bool _isBusyFiltering = false;
 
+        // Controls whether search is case sensitive
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(SearchStatusText))]
+        private bool _isCaseSensitiveSearch = false;
+
         private void LoadPersistedSettings()
         {
             LogonautSettings settings;
@@ -176,6 +181,7 @@ namespace Logonaut.UI.ViewModels
             ContextLines = settings.ContextLines;
             ShowLineNumbers = settings.ShowLineNumbers;
             HighlightTimestamps = settings.HighlightTimestamps;
+            IsCaseSensitiveSearch = settings.IsCaseSensitiveSearch;
             // TODO: Apply theme based on settings.LastTheme
 
             // Rebuild the FilterProfiles collection from the loaded filter
@@ -199,7 +205,8 @@ namespace Logonaut.UI.ViewModels
                 RootFilter = GetCurrentFilter(), // Get the current filter tree
                 ContextLines = this.ContextLines,
                 ShowLineNumbers = this.ShowLineNumbers,
-                HighlightTimestamps = this.HighlightTimestamps
+                HighlightTimestamps = this.HighlightTimestamps,
+                IsCaseSensitiveSearch = this.IsCaseSensitiveSearch,
                 // TODO: Add theme, window state etc.
             };
 
@@ -573,7 +580,6 @@ namespace Logonaut.UI.ViewModels
              // Clear selection in editor immediately
              SelectAndScrollToCurrentMatch();
 
-
              if (string.IsNullOrEmpty(currentSearchTerm) || string.IsNullOrEmpty(textToSearch))
              {
                  OnPropertyChanged(nameof(SearchStatusText)); // Update status (e.g., clear it)
@@ -583,8 +589,12 @@ namespace Logonaut.UI.ViewModels
              int offset = 0;
              while (offset < textToSearch.Length)
              {
-                 // Case-insensitive search within the *visible* text (LogText)
-                 int foundIndex = textToSearch.IndexOf(currentSearchTerm, offset, StringComparison.OrdinalIgnoreCase);
+                 // Use case sensitivity setting for search
+                 int foundIndex = textToSearch.IndexOf(
+                     currentSearchTerm, 
+                     offset, 
+                     IsCaseSensitiveSearch ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase);
+
                  if (foundIndex == -1)
                  {
                      break; // No more matches
@@ -597,6 +607,12 @@ namespace Logonaut.UI.ViewModels
              }
 
              OnPropertyChanged(nameof(SearchStatusText)); // Update match count display
+        }
+
+        // Trigger search update when case sensitivity changes
+        partial void OnIsCaseSensitiveSearchChanged(bool value)
+        {
+            UpdateSearchMatches();
         }
 
         /// <summary>
@@ -619,6 +635,35 @@ namespace Logonaut.UI.ViewModels
             catch (Exception ex)
             {
                 MessageBox.Show($"Error loading log content: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        // Update search index based on clicked position in text
+        public void UpdateSearchIndexFromCharacterOffset(int characterOffset)
+        {
+            if (_searchMatches.Count == 0) return;
+
+            // Find the closest match before or at the clicked position
+            int newIndex = -1;
+            int minDistance = int.MaxValue;
+
+            for (int i = 0; i < _searchMatches.Count; i++)
+            {
+                var match = _searchMatches[i];
+                int distance = Math.Abs(match.Offset - characterOffset);
+                
+                if (distance < minDistance)
+                {
+                    minDistance = distance;
+                    newIndex = i;
+                }
+            }
+
+            if (newIndex != -1 && newIndex != _currentSearchIndex)
+            {
+                _currentSearchIndex = newIndex;
+                SelectAndScrollToCurrentMatch();
+                OnPropertyChanged(nameof(SearchStatusText));
             }
         }
 

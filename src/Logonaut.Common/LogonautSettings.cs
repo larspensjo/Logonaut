@@ -29,6 +29,11 @@ namespace Logonaut.Common
         /// </summary>
         public bool HighlightTimestamps { get; set; } = true; // Default value
 
+        /// <summary>
+        /// Whether to use case-sensitive search.
+        /// </summary>
+        public bool IsCaseSensitiveSearch { get; set; } = false; // Default value
+
         // Consider adding other settings here in the future, e.g.:
         // public string LastTheme { get; set; } = "Light";
         // public double MainWindowWidth { get; set; } = 1000;
