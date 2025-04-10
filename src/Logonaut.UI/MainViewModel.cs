@@ -504,12 +504,6 @@ namespace Logonaut.UI.ViewModels
              //}));
         }
 
-        // Handles property changes that require triggering a filter update.
-        partial void OnContextLinesChanged(int value)
-        {
-            TriggerFilterUpdate();
-        }
-
         // Handles errors reported by the processor's observable stream.
         private void HandleProcessorError(string contextMessage, Exception ex)
         {
@@ -751,6 +745,47 @@ namespace Logonaut.UI.ViewModels
         }
 
         #endregion // --- Lifecycle Management ---
+
+        #region // --- Context Lines Commands ---
+
+        [RelayCommand(CanExecute = nameof(CanDecrementContextLines))]
+        private void DecrementContextLines()
+        {
+            // Decrement but ensure it doesn't go below 0
+            ContextLines = Math.Max(0, ContextLines - 1);
+            // The OnContextLinesChanged partial method will automatically trigger the filter update.
+        }
+
+        private bool CanDecrementContextLines()
+        {
+            // Can only decrement if the value is greater than 0
+            return ContextLines > 0;
+        }
+
+        [RelayCommand]
+        private void IncrementContextLines()
+        {
+            // Increment the value
+            ContextLines++;
+            // The OnContextLinesChanged partial method will automatically trigger the filter update.
+        }
+
+        // Ensure the ContextLines property setter itself also guards against negative values
+        // (although the command prevents it now, this is good practice)
+        // Modify the existing [ObservableProperty] backing field access if needed,
+        // or rely on the converter/command logic. The current setup with the converter
+        // and the CanExecute on the command is sufficient.
+
+        // Also, ensure the OnContextLinesChanged partial method correctly triggers updates:
+        partial void OnContextLinesChanged(int value)
+        {
+            // Re-evaluate CanExecute for Decrement command whenever ContextLines changes
+            DecrementContextLinesCommand.NotifyCanExecuteChanged();
+            TriggerFilterUpdate();
+        }
+
+
+        #endregion // --- Context Lines Commands ---
     }
     /// <summary>
     /// Represents the position and length of a found search match within the text.

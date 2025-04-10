@@ -185,33 +185,47 @@
                                 Style="{StaticResource ToggleButtonStyle}"
                                 ToolTip="Highlight timestamp patterns in log entries"/>
 
-                    <!-- Optional: Add a separator for visual grouping -->
                     <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,2"/>
 
-                    <!-- Context Lines Control -->
-                    <TextBlock Text="Context Lines:" VerticalAlignment="Center" Margin="5,0,2,0"/>
-                    <TextBox Text="{Binding ContextLines, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource StringToIntConverter}}"
-                             Width="40"
-                             VerticalAlignment="Center"
-                             VerticalContentAlignment="Center"
-                             Margin="0,0,5,0">
-                        <TextBox.ToolTip>
-                            <ToolTip>
-                                Enter the number of lines to show before and after a matched line (0 = none).
-                                Filters will update automatically after changing the value.
-                            </ToolTip>
-                        </TextBox.ToolTip>
-                    </TextBox>
+                    <!-- Context Lines Control - Grouped with Buttons -->
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="Context Lines:" VerticalAlignment="Center" Margin="5,0,2,0"/>
+                        <TextBox Text="{Binding ContextLines, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource StringToIntConverter}}"
+                                Width="35"
+                                VerticalAlignment="Center"
+                                VerticalContentAlignment="Center"
+                                Margin="0,0,2,0">
+                            <TextBox.ToolTip>
+                                <ToolTip>
+                                    Enter the number of lines to show before and after a matched line (0 = none).
+                                    Filters will update automatically after changing the value.
+                                </ToolTip>
+                            </TextBox.ToolTip>
+                        </TextBox>
+                        <!-- Vertical StackPanel for the Up/Down Buttons -->
+                        <StackPanel Orientation="Vertical" VerticalAlignment="Center">
+                            <Button Content="▲"
+                                    Command="{Binding IncrementContextLinesCommand}"
+                                    Padding="3,0" Margin="0,0,0,1" FontSize="8" MinHeight="10" ToolTip="Increase Context Lines"/>
+                            <Button Content="▼"
+                                    Command="{Binding DecrementContextLinesCommand}"
+                                    Padding="3,0" Margin="0,1,0,0" FontSize="8" MinHeight="10" ToolTip="Decrease Context Lines"/>
+                            <!-- Optionally apply a specific small style -->
+                            <!-- Style="{StaticResource SpinnerButtonStyle}" -->
+                        </StackPanel>
+                    </StackPanel>
+
+
                     <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,2"/>
 
                     <!-- Busy Indicator -->
                     <!-- TODO: This should be some kind of spinner instead -->
                     <TextBlock Text="Processing..."
-                               VerticalAlignment="Center"
-                               Foreground="OrangeRed"
-                               FontWeight="Bold"
-                               Margin="10,0,5,0"
-                               Visibility="{Binding IsBusyFiltering, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            VerticalAlignment="Center"
+                            Foreground="OrangeRed"
+                            FontWeight="Bold"
+                            Margin="10,0,5,0"
+                            Visibility="{Binding IsBusyFiltering, Converter={StaticResource BooleanToVisibilityConverter}}">
                         <TextBlock.ToolTip>
                             <ToolTip>Applying filters or loading data...</ToolTip>
                         </TextBlock.ToolTip>
@@ -219,9 +233,9 @@
 
                     <!-- Search Status -->
                     <TextBlock Text="{Binding SearchStatusText}"
-                               VerticalAlignment="Center"
-                               Margin="10,0,5,0"
-                               FontStyle="Italic"/>
+                            VerticalAlignment="Center"
+                            Margin="10,0,5,0"
+                            FontStyle="Italic"/>
 
                 </StackPanel>
 
