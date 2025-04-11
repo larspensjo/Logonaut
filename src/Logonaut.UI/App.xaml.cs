@@ -14,7 +14,7 @@ public partial class App : Application
 
         // Create the theme manager with the loader.
         var themeManager = new ThemeManager();
-        // Apply the dark theme by default.
+        // Apply the dark theme by default. TODO: default theme is loaded by MainViewModel constructor also.
         themeManager.ApplyTheme(ThemeType.Light);
     }
 }

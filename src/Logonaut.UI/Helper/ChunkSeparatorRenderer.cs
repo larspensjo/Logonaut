@@ -8,39 +8,44 @@ using System.Collections.Generic; // For List
 
 namespace Logonaut.UI.Helpers
 {
-    /// <summary>
-    /// A custom renderer that draws thin lines between chunks of filtered log lines.
-    /// A chunk is a group of consecutive lines containing a matched line and its context.
-    /// </summary>
     public class ChunkSeparatorRenderer : IBackgroundRenderer, IDisposable
     {
         private readonly TextView _textView;
-        private readonly Pen _separatorPen;
+        private Pen? _separatorPen; // NEON: Make nullable, create based on theme
         private IReadOnlyList<FilteredLogLine>? _filteredLines;
-        // private int _contextLines; // ContextLines isn't directly needed for drawing logic if using gap > 1
 
         public ChunkSeparatorRenderer(TextView textView)
         {
             _textView = textView ?? throw new ArgumentNullException(nameof(textView));
-            // Create a light gray pen for the separator lines
-            var brush = new SolidColorBrush(Color.FromRgb(200, 200, 200));
-            brush.Freeze();
-            _separatorPen = new Pen(brush, 1);
-            _separatorPen.Freeze();
+            UpdatePen(); // NEON: Initialize pen based on current theme
 
-            // Subscribe to scroll events
             _textView.ScrollOffsetChanged += TextView_ScrollOffsetChanged;
+            // NEON: Consider listening for theme changes if TextView doesn't automatically trigger redraws
+            // For simplicity, we'll rely on redraws caused by other actions for now.
         }
+
+        // NEON: Method to update the pen based on theme resource
+        private void UpdatePen()
+        {
+             Brush defaultBrush = Brushes.LightGray; // Fallback
+             Brush? brush = _textView?.TryFindResource("DividerBrush") as Brush ?? defaultBrush;
+
+             var pen = new Pen(brush, 1.0);
+             if (pen.CanFreeze)
+             {
+                 pen.Freeze();
+             }
+             _separatorPen = pen;
+        }
+
 
         private void TextView_ScrollOffsetChanged(object? sender, EventArgs e)
         {
-            // Redraw when scrolling
             _textView.InvalidateLayer(Layer);
         }
 
         public void Dispose()
         {
-            // Unsubscribe from events
             _textView.ScrollOffsetChanged -= TextView_ScrollOffsetChanged;
         }
 
@@ -48,52 +53,44 @@ namespace Logonaut.UI.Helpers
 
         public void Draw(TextView textView, DrawingContext drawingContext)
         {
-            if (_filteredLines == null || _filteredLines.Count < 2 || !textView.VisualLinesValid) // Need at least 2 lines to have a gap
+            // NEON: Update pen in case theme changed without TextView change event (less likely needed but safer)
+            // This could be optimized by only updating if theme actually changed.
+            UpdatePen();
+
+            if (_filteredLines == null || _filteredLines.Count < 2 || !textView.VisualLinesValid || _separatorPen == null) // NEON: Check pen
                 return;
 
-            // This is the AvalonEdit.Rendering.VisualLine. They are a representation of a line in the text view.
-            // As long as the window is not resized, the VisualLines.Count is stable.
-            var avalonVisualLines = textView.VisualLines;
-            if (avalonVisualLines.Count < 1) // Need at least one VISIBLE line to potentially draw above it
+            // ... (rest of the drawing logic remains the same) ...
+             var avalonVisualLines = textView.VisualLines;
+            if (avalonVisualLines.Count < 1)
                 return;
 
-            // Cache properties for efficiency
             double viewPortHeight = textView.ActualHeight;
-            double verticalOffset = textView.VerticalOffset; // The amount scrolled down
+            double verticalOffset = textView.VerticalOffset;
 
-             // Create a quick lookup: DocumentLineNumber -> FilteredLogLine
-             // This avoids iterating _filteredLines inside the loop.
-             // DocumentLineNumber is the 1-based index in the *filtered* document.
              var filteredLineLookup = _filteredLines.Select((line, index) => new { Index = index + 1, Line = line })
                                                    .ToDictionary(item => item.Index, item => item.Line);
 
-            // Iterate through the VISIBLE visual lines, starting from the second one
             for (int i = 1; i < avalonVisualLines.Count; i++)
             {
                 VisualLine currentVisualLine = avalonVisualLines[i];
                 VisualLine previousVisualLine = avalonVisualLines[i - 1];
 
-                // Get the corresponding FilteredLogLine objects using the lookup
                 if (filteredLineLookup.TryGetValue(currentVisualLine.FirstDocumentLine.LineNumber, out var currentFilteredLine) &&
                     filteredLineLookup.TryGetValue(previousVisualLine.FirstDocumentLine.LineNumber, out var prevFilteredLine))
                 {
                     int gap = currentFilteredLine.OriginalLineNumber - prevFilteredLine.OriginalLineNumber;
 
-                    // Draw a line ABOVE the currentVisualLine if the gap indicates a new chunk
                     if (gap > 1)
                     {
-                        // VisualTop is relative to the whole document. Subtract VerticalOffset for viewport coordinates.
                         double y = currentVisualLine.VisualTop - verticalOffset;
-
-                        // Align to pixel center for sharpness
                         y = Math.Floor(y) + 0.5;
 
-                        // --- Draw only if within viewport bounds ---
                         if (y >= 0 && y <= viewPortHeight)
                         {
                             var startPoint = new Point(0, y);
                             var endPoint = new Point(textView.ActualWidth, y);
-                            drawingContext.DrawLine(_separatorPen, startPoint, endPoint);
+                            drawingContext.DrawLine(_separatorPen, startPoint, endPoint); // NEON: Use the potentially themed pen
                         }
                     }
                 }
@@ -103,7 +100,6 @@ namespace Logonaut.UI.Helpers
         public void UpdateChunks(IReadOnlyList<FilteredLogLine> filteredLines, int contextLines)
         {
             _filteredLines = filteredLines;
-            // _contextLines = contextLines; // Store if needed later, but gap logic is sufficient
             _textView.InvalidateLayer(Layer);
         }
     }

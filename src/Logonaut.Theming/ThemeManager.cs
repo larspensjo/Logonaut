@@ -19,8 +19,7 @@ namespace Logonaut.Theming
             {
                 var path = GetDictionaryPath(theme);
                 Uri themeDictUri = new Uri($"/Logonaut.Theming;component/Themes/{path}", UriKind.Relative);
-                ResourceDictionary newTheme = (ResourceDictionary)Application.LoadComponent(themeDictUri);
-                newTheme.Source = themeDictUri;
+                ResourceDictionary newTheme = new ResourceDictionary { Source = themeDictUri };
 
                 // Add the new theme dictionary.
                 var mergedDictionaries = Application.Current.Resources.MergedDictionaries;

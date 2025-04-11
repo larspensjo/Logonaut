@@ -67,18 +67,17 @@ namespace Logonaut.UI.Helpers
                 Foreground = new SimpleHighlightingBrush(Colors.Green)
             };
             
-            // Add a special color for filter matches
-            _namedColors["filter"] = new HighlightingColor 
-            { 
-                Background = new SimpleHighlightingBrush(Colors.Yellow),
-                Foreground = new SimpleHighlightingBrush(Colors.Black)
+            // Ensure the 'filter' and 'searchMatch' colors use theme resources
+            _namedColors["filter"] = new HighlightingColor
+            {
+                Background = new SimpleHighlightingBrush(((Application.Current.TryFindResource("Highlighting.FilterMatch.Background") as SolidColorBrush)?.Color ?? Colors.Yellow)), // Fallback
+                Foreground = new SimpleHighlightingBrush(((Application.Current.TryFindResource("Highlighting.FilterMatch.Foreground") as SolidColorBrush)?.Color ?? Colors.Black)) // Fallback
             };
 
             _namedColors["searchMatch"] = new HighlightingColor
             {
-                // Choose a suitable background - LightCyan is often distinct
-                Background = new SimpleHighlightingBrush(Colors.LightCyan),
-                Foreground = new SimpleHighlightingBrush(Colors.Black) // Ensure readable text
+                Background = new SimpleHighlightingBrush(((Application.Current.TryFindResource("Highlighting.SearchMatch.Background") as SolidColorBrush)?.Color ?? Colors.LightCyan)), // Fallback
+                Foreground = new SimpleHighlightingBrush(((Application.Current.TryFindResource("Highlighting.SearchMatch.Foreground") as SolidColorBrush)?.Color ?? Colors.Black)) // Fallback
             };
         }
 

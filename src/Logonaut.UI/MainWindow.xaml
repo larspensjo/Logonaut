@@ -4,57 +4,42 @@
         xmlns:avalonEdit="http://icsharpcode.net/sharpdevelop/avalonedit"
         xmlns:helpers="clr-namespace:Logonaut.UI.Helpers"
         xmlns:vm="clr-namespace:Logonaut.UI.ViewModels"
-        Title="Logonaut" Height="600" Width="800"
         xmlns:converters="clr-namespace:Logonaut.UI.Converters"
-        Closing="Window_Closing">
+        xmlns:local="clr-namespace:Logonaut.UI"
+        Title="Logonaut" Height="600" Width="900"
+        Closing="Window_Closing"
+        Style="{DynamicResource {x:Type Window}}"> <!-- NEON: Apply base window style -->
+
+    <!-- NEON: Removed styles previously here - they are now in theme files -->
     <Window.Resources>
-        <!-- Existing resources like converters -->
+        <!-- Only keep resources specific to this window or needed directly by styles below -->
         <converters:StringToIntConverter x:Key="StringToIntConverter"/>
-        <converters:BooleanToHighlightConverter x:Key="BooleanToHighlightConverter"/>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
 
-        <!-- Brushes needed for the Overview Ruler and its container -->
-        <!-- These should ideally move to theme dictionaries later -->
-        <SolidColorBrush x:Key="OverviewRuler.SearchMarkerBrush" Color="DarkCyan"/>
-        <SolidColorBrush x:Key="OverviewRuler.ThumbBrush" Color="#66808080"/> <!-- Semi-transparent Gray -->
-        <SolidColorBrush x:Key="OverviewRuler.Background" Color="#F0F0F0"/> <!-- Background matching scrollbar track -->
-        <SolidColorBrush x:Key="OverviewRuler.BorderBrush" Color="#D0D0D0"/> <!-- Border matching scrollbar track -->
-
+        <!-- NEON: Define the TextEditor style locally as it uses PART_ScrollViewer -->
         <Style TargetType="{x:Type avalonEdit:TextEditor}" x:Key="TextEditorWithOverviewRulerStyle">
-            <!-- Inherit default properties (Optional but good practice) -->
-            <Setter Property="Foreground" Value="{DynamicResource TextEditor.Foreground}" />
-            <Setter Property="Background" Value="{DynamicResource TextEditor.Background}" />
+            <!-- Use DynamicResource for theme properties -->
+            <Setter Property="Foreground" Value="{DynamicResource EditorForegroundBrush}" />
+            <Setter Property="Background" Value="{DynamicResource EditorBackgroundBrush}" />
             <Setter Property="FontFamily" Value="Consolas" />
             <Setter Property="FontSize" Value="12" />
-            <!-- Set the custom template -->
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="{x:Type avalonEdit:TextEditor}">
-                        <!-- 1. Grid Structure: Divides space into editor area and ruler area -->
                         <Grid Background="{TemplateBinding Background}">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" /> <!-- Main editor area -->
-                                <ColumnDefinition Width="Auto" /> <!-- Overview Ruler column -->
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-
-                            <!-- 2. Original ScrollViewer (PART_ScrollViewer): Hosts the TextArea -->
-                            <!-- IMPORTANT: Hides the default vertical scrollbar -->
                             <ScrollViewer x:Name="PART_ScrollViewer"
                                           Grid.Column="0"
                                           Focusable="False"
                                           CanContentScroll="True"
                                           VerticalScrollBarVisibility="Hidden"
                                           HorizontalScrollBarVisibility="{TemplateBinding HorizontalScrollBarVisibility}"
-                                          Content="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=TextArea}"
-                                          />
-
-                            <!-- 3. Custom Overview Ruler: Placed in the second column.
-                                    Bind ruler properties to TextEditor properties
-                                    Bind ruler marker data to ViewModel
-                                    Bind appearance
-                            -->
-                            <!-- TODO: Optional: line separator -->
-                            <!-- VerticalOffset, ViewportHeight and ExtentHeight are bound directly to the internal ScrollViewer as the direct TextEditor properties aren't
-                                 updating reliably for the binding system. This is less ideal as it relies on the internal template structure. -->
+                                          Content="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=TextArea}">
+                            </ScrollViewer>
+                            <!-- NEON: Use DynamicResource for ruler appearance -->
                             <helpers:OverviewRulerMargin
                                 x:Name="OverviewRuler"
                                 Grid.Column="1"
@@ -74,149 +59,106 @@
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
-             <!-- Optional: Add triggers from default style if needed -->
         </Style>
     </Window.Resources>
-    <!-- Main Layout: A Grid with three rows: Menu, Stats Panel, and Main Content -->
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>  <!-- Menu row -->
-            <RowDefinition Height="Auto"/>  <!-- Stats bar row -->
-            <RowDefinition Height="*"/>     <!-- Main content row -->
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <!-- Menu at the top -->
-        <Menu Grid.Row="0" Style="{StaticResource CustomMenuStyle}">
-            <MenuItem Header="_File" Style="{StaticResource CustomTopLevelMenuItemStyle}">
-                <MenuItem Header="Open Log File" Command="{Binding OpenLogFileCommand}" 
-                          Style="{StaticResource CustomSubMenuItemStyle}"/>
+        <!-- Menu - Use default style which should inherit from theme -->
+        <Menu Grid.Row="0">
+            <MenuItem Header="_File">
+                <MenuItem Header="Open Log File" Command="{Binding OpenLogFileCommand}" />
             </MenuItem>
-            <MenuItem Header="_Theme" Style="{StaticResource CustomTopLevelMenuItemStyle}">
-                <MenuItem Header="Dark Mode" Command="{Binding Theme.SwitchToDarkCommand}" 
-                          Style="{StaticResource CustomSubMenuItemStyle}"/>
-                <MenuItem Header="Light Mode" Command="{Binding Theme.SwitchToLightCommand}" 
-                          Style="{StaticResource CustomSubMenuItemStyle}"/>
+            <MenuItem Header="_Theme">
+                <MenuItem Header="Dark Mode" Command="{Binding Theme.SwitchToDarkCommand}" />
+                <MenuItem Header="Light Mode" Command="{Binding Theme.SwitchToLightCommand}" />
             </MenuItem>
-            <MenuItem Header="E_xit"
-                    Click="ExitMenuItem_Click"
-                    Style="{StaticResource CustomSubMenuItemStyle}"/>
+            <MenuItem Header="E_xit" Click="ExitMenuItem_Click"/>
         </Menu>
 
-        <!-- Stats Bar in Grid.Row="1" -->
-        <Border Grid.Row="1" Style="{StaticResource CardPanelStyle}">
+        <!-- Stats Bar -->
+        <Border Grid.Row="1" Style="{DynamicResource CardPanelStyle}">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock Text="Log Stats: " Margin="0,0,10,0" />
-                <TextBlock Text="Errors: 10" Margin="0,0,10,0" />
-                <TextBlock Text="Warnings: 5" Margin="0,0,10,0" />
-                <TextBlock Text="Info: 20" Margin="0,0,10,0" />
+                <!-- TODO: Bind Stats dynamically -->
+                <TextBlock Text="Log Stats: " Margin="0,0,10,0" Foreground="{DynamicResource SecondaryTextBrush}"/>
+                <TextBlock Text="Errors: 10" Margin="0,0,10,0" Foreground="{DynamicResource ErrorBrush}" FontWeight="Bold"/>
+                <TextBlock Text="Warnings: 5" Margin="0,0,10,0" Foreground="{DynamicResource WarningBrush}"/>
+                <TextBlock Text="Info: 20" Margin="0,0,10,0" Foreground="{DynamicResource InfoBrush}"/>
             </StackPanel>
         </Border>
 
         <!-- Main content -->
         <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="250"/>
+                 <!-- NEON: Adjusted width -->
+                <ColumnDefinition Width="300"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
             <!-- Left Panel: Filter Management -->
-            <Border Style="{StaticResource CardPanelStyle}">
-                <StackPanel>
-                    <TextBlock Text="Filters" FontWeight="Bold" Margin="0,0,0,5"/>
-                    <TreeView ItemsSource="{Binding FilterProfiles}" Margin="0,0,0,5"
-                            SelectedItemChanged="TreeView_SelectedItemChanged">
-                        <TreeView.ItemTemplate>
-                            <HierarchicalDataTemplate DataType="{x:Type vm:FilterViewModel}" ItemsSource="{Binding Children}">
-                                <Border x:Name="ItemBorder" Background="Transparent">
-                                    <ContentPresenter Content="{Binding}">
-                                        <ContentPresenter.Style>
-                                            <Style TargetType="ContentPresenter">
-                                                <Setter Property="Opacity" Value="1.0"/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding Enabled}" Value="False">
-                                                        <Setter Property="Opacity" Value="0.5"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </ContentPresenter.Style>
-                                    </ContentPresenter>
-                                </Border>
-                                <HierarchicalDataTemplate.Triggers>
-                                    <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                                        <Setter TargetName="ItemBorder" Property="Background" Value="LightGray"/>
-                                    </DataTrigger>
-                                </HierarchicalDataTemplate.Triggers>
-                            </HierarchicalDataTemplate>
-                        </TreeView.ItemTemplate>
-                    </TreeView>
-                    
-                    <!-- Buttons for adding specific filters -->
-                    <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
-                        <Button Content="Substring" Command="{Binding AddSubstringFilterCommand}" Margin="0,0,5,0"/>
-                        <Button Content="Regex" Command="{Binding AddRegexFilterCommand}" Margin="0,0,5,0"/>
-                        <Button Content="AND" Command="{Binding AddAndFilterCommand}" Margin="0,0,5,0"/>
-                        <Button Content="OR" Command="{Binding AddOrFilterCommand}" Margin="0,0,5,0"/>
-                        <Button Content="NOR" Command="{Binding AddNorFilterCommand}" Margin="0,0,5,0"/>
-                    </StackPanel>
-
-                    <!-- Button for removing the selected filter -->
-                    <Button Content="Edit" Command="{Binding ToggleEditCommand}" Margin="0,10,0,0"/>
-                    <Button Content="Remove" Command="{Binding RemoveFilterCommand}" Margin="0,10,0,0"/>
-                </StackPanel>
+            <Border Grid.Column="0" Style="{DynamicResource CardPanelStyle}">
+                <DockPanel>
+                     <TextBlock DockPanel.Dock="Top" Text="Filters" FontWeight="Bold" Margin="0,0,0,5"/>
+                      <!-- Buttons below TreeView -->
+                     <StackPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
+                        <WrapPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,10">
+                            <Button Content="Substring" Command="{Binding AddSubstringFilterCommand}" Margin="2"/>
+                            <Button Content="Regex" Command="{Binding AddRegexFilterCommand}" Margin="2"/>
+                            <Button Content="AND" Command="{Binding AddAndFilterCommand}" Margin="2"/>
+                            <Button Content="OR" Command="{Binding AddOrFilterCommand}" Margin="2"/>
+                            <Button Content="NOR" Command="{Binding AddNorFilterCommand}" Margin="2"/>
+                        </WrapPanel>
+                         <Button Content="Edit" Command="{Binding ToggleEditCommand}" Margin="0,5,0,0"/>
+                        <Button Content="Remove" Command="{Binding RemoveFilterCommand}" Margin="0,5,0,0"/>
+                     </StackPanel>
+                     <!-- TreeView takes remaining space -->
+                    <TreeView ItemsSource="{Binding FilterProfiles}"
+                              Margin="0,0,0,0"
+                              SelectedItemChanged="TreeView_SelectedItemChanged"
+                              Background="Transparent"/> <!-- NEON: Make background transparent -->
+                </DockPanel>
             </Border>
 
             <!-- Right Panel: Log Display and Search -->
             <Grid Grid.Column="1">
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/> <!-- Row for toolbar -->
-                    <RowDefinition Height="*"/>    <!-- Row for log display -->
-                    <RowDefinition Height="Auto"/> <!-- Row for search bar -->
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <!-- Toolbar with toggle buttons -->
-                <StackPanel Grid.Row="0" Orientation="Horizontal" Background="{DynamicResource CardBackgroundBrush}" VerticalAlignment="Center">
-                    <TextBlock Text="Display Options:" VerticalAlignment="Center" Margin="5,0,10,0"/>
-                    <ToggleButton Content="Line Numbers"
-                                IsChecked="{Binding ShowLineNumbers}"
-                                Style="{StaticResource ToggleButtonStyle}"
-                                ToolTip="Show or hide line numbers"/>
-                    <ToggleButton Content="Highlight Timestamps"
-                                IsChecked="{Binding HighlightTimestamps}"
-                                Style="{StaticResource ToggleButtonStyle}"
-                                ToolTip="Highlight timestamp patterns in log entries"/>
+                <!-- Toolbar -->
+                <Border Grid.Row="0" Style="{DynamicResource CardPanelStyle}" Padding="5" Margin="5,5,5,0">
+                    <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="Display Options:" VerticalAlignment="Center" Margin="5,0,10,0"/>
+                         <!-- NEON: Use ToggleSwitchStyle -->
+                        <ToggleButton Content="Line Numbers" IsChecked="{Binding ShowLineNumbers}"
+                                      Style="{DynamicResource ToggleSwitchStyle}"
+                                      ToolTip="Show or hide original line numbers" Margin="3"/>
+                        <ToggleButton Content="Highlight Timestamps" IsChecked="{Binding HighlightTimestamps}"
+                                      Style="{DynamicResource ToggleSwitchStyle}"
+                                      ToolTip="Highlight timestamp patterns in log entries" Margin="3"/>
 
-                    <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,2"/>
+                        <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,2"/>
 
-                    <!-- Context Lines Control - Grouped with Buttons -->
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <TextBlock Text="Context Lines:" VerticalAlignment="Center" Margin="5,0,2,0"/>
-                        <TextBox Text="{Binding ContextLines, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource StringToIntConverter}}"
-                                Width="35"
-                                VerticalAlignment="Center"
-                                VerticalContentAlignment="Center"
-                                Margin="0,0,2,0">
-                            <TextBox.ToolTip>
-                                <ToolTip>
-                                    Enter the number of lines to show before and after a matched line (0 = none).
-                                    Filters will update automatically after changing the value.
-                                </ToolTip>
-                            </TextBox.ToolTip>
-                        </TextBox>
-                        <!-- Vertical StackPanel for the Up/Down Buttons -->
-                        <StackPanel Orientation="Vertical" VerticalAlignment="Center">
-                            <Button Content="▲"
-                                    Command="{Binding IncrementContextLinesCommand}"
-                                    Padding="3,0" Margin="0,0,0,1" FontSize="8" MinHeight="10" ToolTip="Increase Context Lines"/>
-                            <Button Content="▼"
-                                    Command="{Binding DecrementContextLinesCommand}"
-                                    Padding="3,0" Margin="0,1,0,0" FontSize="8" MinHeight="10" ToolTip="Decrease Context Lines"/>
-                            <!-- Optionally apply a specific small style -->
-                            <!-- Style="{StaticResource SpinnerButtonStyle}" -->
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="Context Lines:" VerticalAlignment="Center" Margin="5,0,2,0"/>
+                            <TextBox Text="{Binding ContextLines, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource StringToIntConverter}}"
+                                    Width="35" VerticalAlignment="Center" VerticalContentAlignment="Center" Margin="0,0,2,0">
+                                <TextBox.ToolTip><ToolTip>Enter the number of lines to show before and after a matched line (0 = none).</ToolTip></TextBox.ToolTip>
+                            </TextBox>
+                            <StackPanel Orientation="Vertical" VerticalAlignment="Center">
+                                <!-- NEON: Use base Button style, maybe adjust padding/fontsize -->
+                                <Button Content="▲" Command="{Binding IncrementContextLinesCommand}" Padding="3,0" Margin="0,0,0,1" FontSize="8" MinHeight="10" ToolTip="Increase Context Lines"/>
+                                <Button Content="▼" Command="{Binding DecrementContextLinesCommand}" Padding="3,0" Margin="0,1,0,0" FontSize="8" MinHeight="10" ToolTip="Decrease Context Lines"/>
+                            </StackPanel>
                         </StackPanel>
-                    </StackPanel>
 
-
-                    <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,2"/>
+                        <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,2"/>
 
                     <!-- Busy Indicator -->
                     <!-- TODO: This should be some kind of spinner instead -->
@@ -231,60 +173,45 @@
                         </TextBlock.ToolTip>
                     </TextBlock>
 
-                    <!-- Search Status -->
-                    <TextBlock Text="{Binding SearchStatusText}"
-                            VerticalAlignment="Center"
-                            Margin="10,0,5,0"
-                            FontStyle="Italic"/>
+                        <TextBlock Text="{Binding SearchStatusText}" VerticalAlignment="Center" Margin="10,0,5,0" FontStyle="Italic" Foreground="{DynamicResource SecondaryTextBrush}"/>
+                    </WrapPanel>
+                </Border>
 
-                </StackPanel>
-
-                <!-- Log Display using AvalonEdit with syntax highlighting -->
-                <Border Grid.Row="1" Style="{StaticResource CardPanelStyle}">
-                    <avalonedit:TextEditor x:Name="LogOutputEditor"
-                                        xmlns:avalonedit="http://icsharpcode.net/sharpdevelop/avalonedit"
+                <!-- Log Display -->
+                <Border Grid.Row="1" Style="{DynamicResource CardPanelStyle}" Padding="5">
+                     <!-- NEON: Apply the locally defined style -->
+                    <avalonEdit:TextEditor x:Name="LogOutputEditor"
+                                        xmlns:avalonEdit="http://icsharpcode.net/sharpdevelop/avalonedit"
                                         xmlns:helpers="clr-namespace:Logonaut.UI.Helpers"
-                                        FontFamily="Consolas"
-                                        FontSize="12pt"
-                                        IsReadOnly="True"
-                                        SyntaxHighlighting="Log"
+                                        FontFamily="Consolas" FontSize="12pt" IsReadOnly="True"
+                                        SyntaxHighlighting="{x:Null}"
                                         WordWrap="False"
                                         VerticalScrollBarVisibility="Disabled"
-                                        HorizontalScrollBarVisibility="Visible"
+                                        HorizontalScrollBarVisibility="Auto"
                                         Padding="3,0,0,0"
-                                        Background="{DynamicResource EditorBackgroundBrush}"
-                                        Foreground="{DynamicResource EditorForegroundBrush}"
+                                        Style="{StaticResource TextEditorWithOverviewRulerStyle}"
                                         helpers:AvalonEditHelper.BindableText="{Binding LogText, Mode=OneWay}"
                                         helpers:AvalonEditHelper.FilterSubstrings="{Binding FilterSubstrings, Mode=OneWay}"
                                         helpers:AvalonEditHelper.HighlightTimestamps="{Binding HighlightTimestamps, Mode=OneWay}"
                                         ShowLineNumbers="False"
-                                        Style="{StaticResource TextEditorWithOverviewRulerStyle}"
                                         helpers:AvalonEditHelper.SearchTerm="{Binding SearchText, Mode=OneWay}"
                                         helpers:AvalonEditHelper.SelectOffset="{Binding CurrentMatchOffset, Mode=OneWay}"
                                         helpers:AvalonEditHelper.SelectLength="{Binding CurrentMatchLength, Mode=OneWay}">
-                    </avalonedit:TextEditor>
+                    </avalonEdit:TextEditor>
                 </Border>
 
                 <!-- Search Panel -->
-                <StackPanel Orientation="Horizontal" Grid.Row="2" HorizontalAlignment="Center" Margin="5">
-                    <StackPanel Orientation="Horizontal" Grid.Row="2" HorizontalAlignment="Center" Margin="5">
-                        <Button Content="Previous" Command="{Binding PreviousSearchCommand}" Margin="5" />
-                        <TextBox Width="200" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" Margin="5"/>
-                        <Button Content="Next" Command="{Binding NextSearchCommand}" Margin="5" />
-
-                        <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,2"/>
-
-                        <!-- Case Sensitive Search -->
-                        <CheckBox Content="Case Sensitive" 
-                                IsChecked="{Binding IsCaseSensitiveSearch}"
-                                VerticalAlignment="Center"
-                                Margin="5,0">
-                            <CheckBox.ToolTip>
-                                <ToolTip>Match case when searching</ToolTip>
-                            </CheckBox.ToolTip>
+                 <Border Grid.Row="2" Style="{DynamicResource CardPanelStyle}" Padding="5" Margin="5,0,5,5">
+                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Button Content="Previous" Command="{Binding PreviousSearchCommand}" Margin="5,0"/>
+                        <TextBox Width="250" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" Margin="5,0"/>
+                        <Button Content="Next" Command="{Binding NextSearchCommand}" Margin="5,0" />
+                        <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,0"/>
+                        <CheckBox Content="Case Sensitive" IsChecked="{Binding IsCaseSensitiveSearch}" VerticalAlignment="Center" Margin="5,0">
+                            <CheckBox.ToolTip><ToolTip>Match case when searching</ToolTip></CheckBox.ToolTip>
                         </CheckBox>
                     </StackPanel>
-                </StackPanel>
+                 </Border>
             </Grid>
         </Grid>
     </Grid>
