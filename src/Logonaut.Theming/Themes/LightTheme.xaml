@@ -36,6 +36,8 @@
     <SolidColorBrush x:Key="HighlightFilterBackgroundBrush" Color="{StaticResource HighlightFilterBackgroundColor}"/>
     <SolidColorBrush x:Key="HighlightSearchBackgroundBrush" Color="{StaticResource HighlightSearchBackgroundColor}"/>
     <SolidColorBrush x:Key="DividerBrush" Color="{StaticResource BorderColor}" /> <!-- For VerticalLineMargin/Separators -->
+    <SolidColorBrush x:Key="ButtonHoverBackgroundBrush" Color="{StaticResource ButtonHoverBackgroundColor}" />
+    <SolidColorBrush x:Key="ButtonPressedBackgroundBrush" Color="{StaticResource ButtonPressedBackgroundColor}" />
 
     <!-- NEON: Subtle Shadow Effect -->
     <DropShadowEffect x:Key="PanelShadowEffect" Color="#FFAAAAAA" ShadowDepth="2" BlurRadius="6" Opacity="0.15"/>
@@ -98,11 +100,11 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource ButtonHoverBackgroundColor}" />
+                            <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource ButtonHoverBackgroundBrush}" />
                             <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource ButtonPressedBackgroundColor}" />
+                            <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource ButtonPressedBackgroundBrush}" />
                             <Setter TargetName="InnerHighlight" Property="Visibility" Value="Visible" />
                             <Setter TargetName="InnerShadow" Property="Visibility" Value="Visible" />
                         </Trigger>
