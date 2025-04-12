@@ -6,7 +6,8 @@
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <!-- There is no need to refer to a theme here, as it is loaded by runtime -->
+                <!-- Load default theme -->
+                <ResourceDictionary Source="/Logonaut.Theming;component/Themes/DarkTheme.xaml"/>
                 <ResourceDictionary Source="FilterTemplates.xaml"/>
             </ResourceDictionary.MergedDictionaries>
             <converters:StringToIntConverter x:Key="StringToIntConverter" />

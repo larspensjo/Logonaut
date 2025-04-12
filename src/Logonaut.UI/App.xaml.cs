@@ -1,4 +1,4 @@
-﻿using Logonaut.Theming;
+using Logonaut.Theming;
 using System.Windows;
 
 namespace Logonaut.UI;
@@ -12,9 +12,10 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
+        // This is loaded by App.xaml
         // Create the theme manager with the loader.
-        var themeManager = new ThemeManager();
-        // Apply the dark theme by default. TODO: default theme is loaded by MainViewModel constructor also.
-        themeManager.ApplyTheme(ThemeType.Light);
+        //var themeManager = new ThemeManager();
+        // Apply the dark theme by default.
+        //themeManager.ApplyTheme(ThemeType.Light);
     }
 }

@@ -11,8 +11,8 @@ namespace Logonaut.UI.ViewModels
         public ThemeViewModel()
         {
             _themeManager = new ThemeManager();
-            // Assume default theme is Light
-            _themeManager.ApplyTheme(ThemeType.Light);
+            // Default is loaded elsehwere
+            // _themeManager.ApplyTheme(ThemeType.Light);
         }
 
         [RelayCommand]
