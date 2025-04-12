@@ -35,6 +35,16 @@
     <SolidColorBrush x:Key="DividerBrush" Color="{StaticResource BorderColor}" /> <!-- For VerticalLineMargin/Separators -->
     <SolidColorBrush x:Key="ChunkSeparatorBrush" Color="#307070"/>
 
+    <!-- CheckBox Specific Brushes -->
+    <SolidColorBrush x:Key="CheckBox.Static.Background" Color="Transparent"/>
+    <!-- Make the static border visible against the dark background -->
+    <SolidColorBrush x:Key="CheckBox.Static.BorderBrush" Color="#888888"/> <!-- A visible gray -->
+    <SolidColorBrush x:Key="CheckBox.MouseOver.Background" Color="#303030"/> <!-- Subtle hover background -->
+    <SolidColorBrush x:Key="CheckBox.Pressed.Background" Color="#404040"/>
+    <SolidColorBrush x:Key="CheckBox.Disabled.Foreground" Color="#666666"/>
+    <SolidColorBrush x:Key="CheckBox.Disabled.Background" Color="#202020"/>
+    <SolidColorBrush x:Key="CheckBox.Disabled.BorderBrush" Color="#444444"/>
+
     <!-- NEON: Glow Effect -->
     <DropShadowEffect x:Key="FocusGlowEffect" Color="{StaticResource GlowColor}" ShadowDepth="0" BlurRadius="8" Opacity="0.9"/>
     <DropShadowEffect x:Key="PanelShadowEffect" Color="#FF000000" ShadowDepth="3" BlurRadius="8" Opacity="0.4"/>
@@ -173,35 +183,73 @@
     <!-- NEON: CheckBox Style -->
     <Style TargetType="CheckBox">
         <Setter Property="Foreground" Value="{DynamicResource TextForegroundBrush}"/>
-        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
-        <Setter Property="Background" Value="Transparent"/>
         <Setter Property="Padding" Value="4,0,0,0"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="CheckBox">
-                    <BulletDecorator Background="Transparent" SnapsToDevicePixels="true">
+                    <BulletDecorator Background="Transparent" SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}">
                         <BulletDecorator.Bullet>
-                            <Border x:Name="OuterBorder" Width="13" Height="13" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" Background="{TemplateBinding Background}" CornerRadius="2">
-                                <Path x:Name="CheckMark" Width="7" Height="7" SnapsToDevicePixels="False" Stroke="{DynamicResource AccentBrush}" StrokeThickness="2" Data="M 0 0 L 7 7 M 0 7 L 7 0" Visibility="Collapsed"/>
+                            <Border x:Name="OuterBorder"
+                                    Width="13" Height="13"
+                                    BorderBrush="{DynamicResource CheckBox.Static.BorderBrush}"
+                                    Background="{DynamicResource CheckBox.Static.Background}"
+                                    BorderThickness="1"
+                                    CornerRadius="2">
+                                <Path x:Name="CheckMark"
+                                    Width="7" Height="7"
+                                    SnapsToDevicePixels="False"
+                                    Stroke="{DynamicResource AccentBrush}"
+                                    StrokeThickness="2"
+                                    Data="M 0 0 L 7 7 M 0 7 L 7 0"
+                                    Visibility="Collapsed"/>
                             </Border>
                         </BulletDecorator.Bullet>
-                        <ContentPresenter Margin="{TemplateBinding Padding}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" RecognizesAccessKey="True"/>
+                        <ContentPresenter Margin="{TemplateBinding Padding}"
+                                        VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                        HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                        RecognizesAccessKey="True"/>
                     </BulletDecorator>
                     <ControlTemplate.Triggers>
+                        <!-- Trigger for Checked state -->
                         <Trigger Property="IsChecked" Value="True">
                             <Setter TargetName="CheckMark" Property="Visibility" Value="Visible"/>
+                            <!-- Optional: Change background/border when checked if desired -->
+                            <!-- <Setter TargetName="OuterBorder" Property="Background" Value="{DynamicResource CheckBox.Checked.Background}"/> -->
+                            <!-- <Setter TargetName="OuterBorder" Property="BorderBrush" Value="{DynamicResource CheckBox.Checked.BorderBrush}"/> -->
                         </Trigger>
+                        <!-- Null state (Indeterminate) - Optional -->
+                        <Trigger Property="IsChecked" Value="{x:Null}">
+                            <!-- Style for indeterminate state if needed -->
+                            <!-- <Setter TargetName="CheckMark" Property="Data" Value="M 0 3.5 L 7 3.5" /> -->
+                            <!-- <Setter TargetName="CheckMark" Property="Visibility" Value="Visible"/> -->
+                        </Trigger>
+                        <!-- Trigger for MouseOver -->
                         <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="OuterBorder" Property="Background" Value="{DynamicResource CheckBox.MouseOver.Background}"/>
                             <Setter TargetName="OuterBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
                             <Setter TargetName="OuterBorder" Property="Effect" Value="{StaticResource FocusGlowEffect}"/>
                         </Trigger>
+                        <!-- Trigger for Pressed -->
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="OuterBorder" Property="Background" Value="{DynamicResource CheckBox.Pressed.Background}"/>
+                            <Setter TargetName="OuterBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                        </Trigger>
+                        <!-- Trigger for Focused -->
                         <Trigger Property="IsFocused" Value="True">
+                            <!-- Use AccentBrush for focus indication -->
                             <Setter TargetName="OuterBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
                             <Setter TargetName="OuterBorder" Property="Effect" Value="{StaticResource FocusGlowEffect}"/>
                         </Trigger>
+                        <!-- Trigger for Disabled -->
                         <Trigger Property="IsEnabled" Value="False">
-                             <Setter Property="Opacity" Value="0.5" />
+                            <Setter Property="Opacity" Value="0.7" /> <!-- Adjust opacity if needed -->
+                            <Setter Property="Foreground" Value="{DynamicResource CheckBox.Disabled.Foreground}"/>
+                            <Setter TargetName="OuterBorder" Property="Background" Value="{DynamicResource CheckBox.Disabled.Background}"/>
+                            <Setter TargetName="OuterBorder" Property="BorderBrush" Value="{DynamicResource CheckBox.Disabled.BorderBrush}"/>
+                            <!-- Checkmark uses foreground, so it gets dimmed too -->
+                            <!-- <Setter TargetName="CheckMark" Property="Stroke" Value="{DynamicResource CheckBox.Disabled.Foreground}"/> -->
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
