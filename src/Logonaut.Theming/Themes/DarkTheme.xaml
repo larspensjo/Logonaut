@@ -33,6 +33,7 @@
     <SolidColorBrush x:Key="HighlightFilterBackgroundBrush" Color="{StaticResource HighlightFilterBackgroundColor}"/>
     <SolidColorBrush x:Key="HighlightSearchBackgroundBrush" Color="{StaticResource HighlightSearchBackgroundColor}"/>
     <SolidColorBrush x:Key="DividerBrush" Color="{StaticResource BorderColor}" /> <!-- For VerticalLineMargin/Separators -->
+    <SolidColorBrush x:Key="ChunkSeparatorBrush" Color="#307070"/>
 
     <!-- NEON: Glow Effect -->
     <DropShadowEffect x:Key="FocusGlowEffect" Color="{StaticResource GlowColor}" ShadowDepth="0" BlurRadius="8" Opacity="0.9"/>

@@ -38,6 +38,7 @@
     <SolidColorBrush x:Key="DividerBrush" Color="{StaticResource BorderColor}" /> <!-- For VerticalLineMargin/Separators -->
     <SolidColorBrush x:Key="ButtonHoverBackgroundBrush" Color="{StaticResource ButtonHoverBackgroundColor}" />
     <SolidColorBrush x:Key="ButtonPressedBackgroundBrush" Color="{StaticResource ButtonPressedBackgroundColor}" />
+    <SolidColorBrush x:Key="ChunkSeparatorBrush" Color="#A0B0D0"/>
 
     <!-- NEON: Subtle Shadow Effect -->
     <DropShadowEffect x:Key="PanelShadowEffect" Color="#FFAAAAAA" ShadowDepth="2" BlurRadius="6" Opacity="0.15"/>

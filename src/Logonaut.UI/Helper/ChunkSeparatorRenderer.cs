@@ -1,41 +1,80 @@
-using System.Windows;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Windows; // Required for DependencyObject, DependencyProperty etc.
 using System.Windows.Media;
 using ICSharpCode.AvalonEdit.Rendering;
 using Logonaut.Common;
-using System; // For Math
-using System.Linq; // For FirstOrDefault
-using System.Collections.Generic; // For List
 
 namespace Logonaut.UI.Helpers
 {
-    public class ChunkSeparatorRenderer : IBackgroundRenderer, IDisposable
+    /// <summary>
+    /// A custom renderer that draws theme-aware lines between chunks of filtered log lines.
+    /// </summary>
+    // Inherit from DependencyObject to support Dependency Properties
+    public class ChunkSeparatorRenderer : DependencyObject, IBackgroundRenderer, IDisposable
     {
         private readonly TextView _textView;
-        private Pen? _separatorPen; // NEON: Make nullable, create based on theme
+        private Pen? _separatorPen; // Pen is now created based on the brush DP
         private IReadOnlyList<FilteredLogLine>? _filteredLines;
+
+        #region SeparatorBrush Dependency Property
+
+        public static readonly DependencyProperty SeparatorBrushProperty =
+            DependencyProperty.Register(
+                nameof(SeparatorBrush),
+                typeof(Brush),
+                typeof(ChunkSeparatorRenderer),
+                new FrameworkPropertyMetadata(
+                    Brushes.Gray, // Default value if binding fails
+                    FrameworkPropertyMetadataOptions.AffectsRender,
+                    OnSeparatorBrushChanged)); // Callback when the brush changes
+
+        public Brush SeparatorBrush
+        {
+            get => (Brush)GetValue(SeparatorBrushProperty);
+            set => SetValue(SeparatorBrushProperty, value);
+        }
+
+        private static void OnSeparatorBrushChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            var renderer = (ChunkSeparatorRenderer)d;
+            renderer.UpdatePen();
+            // Invalidation is handled by AffectsRender flag, but can force redraw if needed:
+            // renderer._textView?.InvalidateLayer(renderer.Layer);
+        }
+
+        #endregion
 
         public ChunkSeparatorRenderer(TextView textView)
         {
             _textView = textView ?? throw new ArgumentNullException(nameof(textView));
-            UpdatePen(); // NEON: Initialize pen based on current theme
+            // Initial pen update based on potentially already set DP value (or default)
+            UpdatePen();
 
+            // Subscribe to scroll events
             _textView.ScrollOffsetChanged += TextView_ScrollOffsetChanged;
-            // NEON: Consider listening for theme changes if TextView doesn't automatically trigger redraws
-            // For simplicity, we'll rely on redraws caused by other actions for now.
         }
 
-        // NEON: Method to update the pen based on theme resource
+        // Method to create/update the pen based on the SeparatorBrush DP
         private void UpdatePen()
         {
-             Brush defaultBrush = Brushes.LightGray; // Fallback
-             Brush? brush = _textView?.TryFindResource("DividerBrush") as Brush ?? defaultBrush;
+            Brush brush = SeparatorBrush;
 
-             var pen = new Pen(brush, 1.0);
-             if (pen.CanFreeze)
-             {
-                 pen.Freeze();
-             }
-             _separatorPen = pen;
+            // Try to freeze the brush for performance if it's not already
+            if (brush.CanFreeze && !brush.IsFrozen)
+            {
+                brush.Freeze();
+            }
+
+            var newPen = new Pen(brush, 1);
+
+            // Try to freeze the pen
+            if (newPen.CanFreeze)
+            {
+                newPen.Freeze();
+            }
+            _separatorPen = newPen;
         }
 
 
@@ -47,29 +86,28 @@ namespace Logonaut.UI.Helpers
         public void Dispose()
         {
             _textView.ScrollOffsetChanged -= TextView_ScrollOffsetChanged;
+            // Clear dependency property bindings if necessary (usually handled by GC)
+            // this.ClearValue(SeparatorBrushProperty);
         }
 
         public KnownLayer Layer => KnownLayer.Background;
 
         public void Draw(TextView textView, DrawingContext drawingContext)
         {
-            // NEON: Update pen in case theme changed without TextView change event (less likely needed but safer)
-            // This could be optimized by only updating if theme actually changed.
-            UpdatePen();
-
-            if (_filteredLines == null || _filteredLines.Count < 2 || !textView.VisualLinesValid || _separatorPen == null) // NEON: Check pen
+            // Use the _separatorPen created from the DP
+            Pen pen = _separatorPen;
+            if (pen == null || _filteredLines == null || _filteredLines.Count < 2 || !textView.VisualLinesValid)
                 return;
 
-            // ... (rest of the drawing logic remains the same) ...
-             var avalonVisualLines = textView.VisualLines;
+            var avalonVisualLines = textView.VisualLines;
             if (avalonVisualLines.Count < 1)
                 return;
 
             double viewPortHeight = textView.ActualHeight;
             double verticalOffset = textView.VerticalOffset;
 
-             var filteredLineLookup = _filteredLines.Select((line, index) => new { Index = index + 1, Line = line })
-                                                   .ToDictionary(item => item.Index, item => item.Line);
+            var filteredLineLookup = _filteredLines.Select((line, index) => new { Index = index + 1, Line = line })
+                                                  .ToDictionary(item => item.Index, item => item.Line);
 
             for (int i = 1; i < avalonVisualLines.Count; i++)
             {
@@ -81,16 +119,17 @@ namespace Logonaut.UI.Helpers
                 {
                     int gap = currentFilteredLine.OriginalLineNumber - prevFilteredLine.OriginalLineNumber;
 
-                    if (gap > 1)
+                    // Draw line ABOVE current line if gap > 1 (indicates new chunk)
+                    if (gap > 1) // <<< Ensure this is gap > 1 for chunk boundaries
+                    // if (gap > 0) // Use for testing drawing between *every* line
                     {
                         double y = currentVisualLine.VisualTop - verticalOffset;
-                        y = Math.Floor(y) + 0.5;
+                        y = Math.Floor(y) + 0.5; // Pixel snapping
 
                         if (y >= 0 && y <= viewPortHeight)
                         {
-                            var startPoint = new Point(0, y);
-                            var endPoint = new Point(textView.ActualWidth, y);
-                            drawingContext.DrawLine(_separatorPen, startPoint, endPoint); // NEON: Use the potentially themed pen
+                            drawingContext.DrawLine(pen, new Point(0, y), new Point(textView.ActualWidth, y));
+                            // System.Diagnostics.Debug.WriteLine($"Gap={gap}. Draw above OrigLine:{currentFilteredLine.OriginalLineNumber} at Y={y}");
                         }
                     }
                 }

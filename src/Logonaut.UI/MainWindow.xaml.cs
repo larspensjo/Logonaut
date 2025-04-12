@@ -2,6 +2,7 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Data; // Required for Binding
 using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -94,25 +95,17 @@ namespace Logonaut.UI
         {
             if (!_disposed)
             {
-                if (_chunkSeparator != null)
-                {
-                    LogOutputEditor.TextArea.TextView.BackgroundRenderers.Remove(_chunkSeparator);
-                    _chunkSeparator.Dispose();
-                    _chunkSeparator = null;
-                }
+                // Ensure editor unload cleanup runs if window closes before unload fires
+                LogOutputEditor_Unloaded(null, null);
 
-                if (_overviewRuler != null)
-                {
-                    _overviewRuler.RequestScrollOffset -= OverviewRuler_RequestScrollOffset;
-                    _overviewRuler = null;
-                }
+                // Dispose ViewModel
+                _viewModel?.Cleanup(); // Use existing cleanup which includes Dispose
 
                 if (_viewModel != null)
-                {
                     _viewModel.PropertyChanged -= ViewModel_PropertyChanged;
-                }
 
                 _disposed = true;
+                GC.SuppressFinalize(this); // If you add a finalizer
             }
         }
 
@@ -151,21 +144,58 @@ namespace Logonaut.UI
             };
 
             // Initialize chunk separator
-            _chunkSeparator = new ChunkSeparatorRenderer(LogOutputEditor.TextArea.TextView);
-            LogOutputEditor.TextArea.TextView.BackgroundRenderers.Add(_chunkSeparator);
+            TextView textView = LogOutputEditor.TextArea.TextView;
+            _chunkSeparator = new ChunkSeparatorRenderer(textView);
+
+            // Bind the SeparatorBrush property to the Dynamic Resource
+            // We need to do this in code as TextView is internal to AvalonEdit's template
+            textView.SetResourceReference(
+                TextView.TagProperty,
+                "ChunkSeparatorBrush"); // The key defined in theme XAML files
+
+            // Bind ChunkSeparatorRenderer.SeparatorBrush to TextView.Tag
+            // This creates a standard one-way WPF binding. It binds the SeparatorBrush property of our _chunkSeparator instance to the Tag property
+            // of the textView. Now, whenever textView.Tag changes (because the dynamic resource updated), this binding will push the new Brush
+            // value into _chunkSeparator.SeparatorBrush.
+            var brushBinding = new Binding("Tag")
+            {
+                Source = textView, // Bind to the TextView instance
+                Mode = BindingMode.OneWay // Get the value from TextView.Tag
+            };
+            BindingOperations.SetBinding(
+                _chunkSeparator,
+                ChunkSeparatorRenderer.SeparatorBrushProperty,
+                brushBinding);
+            textView.BackgroundRenderers.Add(_chunkSeparator);
             _chunkSeparator.UpdateChunks(_viewModel.FilteredLogLines, _viewModel.ContextLines);
 
             // Clean up when editor unloads
-            LogOutputEditor.Unloaded += (s, ev) => {
-                if (_overviewRuler != null)
-                {
-                    _overviewRuler.RequestScrollOffset -= OverviewRuler_RequestScrollOffset;
-                }
-                if (_chunkSeparator != null)
-                {
-                    LogOutputEditor.TextArea.TextView.BackgroundRenderers.Remove(_chunkSeparator);
-                }
-            };
+            LogOutputEditor.Unloaded += LogOutputEditor_Unloaded;
+        }
+
+        private void LogOutputEditor_Unloaded(object? sender, RoutedEventArgs e)
+        {
+            // Clean up Overview Ruler binding
+            if (_overviewRuler != null)
+                _overviewRuler.RequestScrollOffset -= OverviewRuler_RequestScrollOffset;
+
+            // Clean up Chunk Separator
+            if (_chunkSeparator != null)
+            {
+                 TextView textView = LogOutputEditor.TextArea.TextView;
+                 // Clear bindings
+                 BindingOperations.ClearBinding(_chunkSeparator, ChunkSeparatorRenderer.SeparatorBrushProperty);
+                 textView.ClearValue(TextView.TagProperty); // Clear the resource reference on Tag
+
+                 // Remove renderer and dispose
+                 if(textView.BackgroundRenderers.Contains(_chunkSeparator))
+                 {
+                    textView.BackgroundRenderers.Remove(_chunkSeparator);
+                 }
+                 _chunkSeparator.Dispose();
+            }
+            _overviewRuler = null; // Release reference
+            _chunkSeparator = null; // Release reference
         }
 
         private void LogOutputEditor_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
