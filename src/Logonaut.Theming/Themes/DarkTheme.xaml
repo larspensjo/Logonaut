@@ -37,6 +37,15 @@
     <!-- NEON: Glow Effect -->
     <DropShadowEffect x:Key="FocusGlowEffect" Color="{StaticResource GlowColor}" ShadowDepth="0" BlurRadius="8" Opacity="0.9"/>
     <DropShadowEffect x:Key="PanelShadowEffect" Color="#FF000000" ShadowDepth="3" BlurRadius="8" Opacity="0.4"/>
+    <DropShadowEffect x:Key="InnerShadowEffect" Color="#AA000000" ShadowDepth="1" BlurRadius="2" Opacity="0.5"/>
+
+    <!-- NEON: Define Subtle Resting Shadow for Buttons -->
+    <DropShadowEffect x:Key="ButtonRestingShadowEffect" Color="#7F000000" ShadowDepth="2" BlurRadius="4" Opacity="0.3"/>
+    <!-- NEON: Update Gradient for Button Background -->
+    <LinearGradientBrush x:Key="ButtonRestingGradientBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#FF444444" Offset="0.0"/> <!-- Slightly lighter top -->
+        <GradientStop Color="#FF333333" Offset="1.0"/> <!-- Target resting color at bottom -->
+    </LinearGradientBrush>
 
     <!-- NEON: Global Styles -->
     <Style TargetType="Window">
@@ -60,11 +69,12 @@
 
     <!-- NEON: Button Style -->
     <Style TargetType="Button">
-        <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}" />
+        <!-- NEON: Use Subtle Gradient for resting background -->
+        <Setter Property="Background" Value="{StaticResource ButtonRestingGradientBrush}" />
         <Setter Property="Foreground" Value="{DynamicResource TextForegroundBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Padding" Value="10,5" />
+        <Setter Property="Padding" Value="12,7" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
@@ -73,20 +83,56 @@
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
                             CornerRadius="4">
-                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True" />
+                        <Border.Effect>
+                             <!-- NEON: Apply resting shadow by default -->
+                             <StaticResource ResourceKey="ButtonRestingShadowEffect"/>
+                         </Border.Effect>
+                        <ContentPresenter x:Name="contentPresenter"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          RecognizesAccessKey="True">
+                             <ContentPresenter.RenderTransform>
+                                 <TranslateTransform X="0" Y="0" />
+                             </ContentPresenter.RenderTransform>
+                        </ContentPresenter>
                     </Border>
                     <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
+                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                            <!-- NEON: Glow replaces resting shadow on hover -->
                             <Setter TargetName="ButtonBorder" Property="Effect" Value="{StaticResource FocusGlowEffect}" />
+                            <Setter TargetName="contentPresenter" Property="RenderTransform">
+                                <Setter.Value><TranslateTransform X="0" Y="0" /></Setter.Value>
+                            </Setter>
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="ButtonBorder" Property="Background" Value="#FF383838" /> <!-- Slightly lighter pressed -->
+                            <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource ControlBackgroundBrush}" />
+                            <!-- NEON: Keep Glow, replaces resting shadow -->
                             <Setter TargetName="ButtonBorder" Property="Effect" Value="{StaticResource FocusGlowEffect}" />
+                            <Setter TargetName="contentPresenter" Property="RenderTransform">
+                                <Setter.Value><TranslateTransform X="1" Y="1" /></Setter.Value>
+                            </Setter>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.5" />
+                            <Setter TargetName="ButtonBorder" Property="Effect" Value="{x:Null}" />
+                            <Setter TargetName="contentPresenter" Property="RenderTransform">
+                                <Setter.Value><TranslateTransform X="0" Y="0" /></Setter.Value>
+                            </Setter>
                         </Trigger>
+                         <!-- NEON: Explicitly restore resting shadow when not hovered/pressed/disabled -->
+                         <MultiTrigger>
+                             <MultiTrigger.Conditions>
+                                 <Condition Property="IsMouseOver" Value="False"/>
+                                 <Condition Property="IsPressed" Value="False"/>
+                                 <Condition Property="IsEnabled" Value="True"/>
+                             </MultiTrigger.Conditions>
+                            <!-- NEON: Restore resting shadow -->
+                            <Setter TargetName="ButtonBorder" Property="Effect" Value="{StaticResource ButtonRestingShadowEffect}"/>
+                            <Setter TargetName="contentPresenter" Property="RenderTransform">
+                                <Setter.Value><TranslateTransform X="0" Y="0" /></Setter.Value>
+                            </Setter>
+                        </MultiTrigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
@@ -273,18 +319,92 @@
     </Style>
 
     <Style TargetType="MenuItem">
+        <!-- Default state -->
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Foreground" Value="{DynamicResource TextForegroundBrush}" />
-        <Setter Property="Padding" Value="6,4"/>
-        <Style.Triggers>
-            <Trigger Property="IsHighlighted" Value="True">
-                <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
-                <Setter Property="Foreground" Value="{DynamicResource WindowBackgroundBrush}"/>
-            </Trigger>
-            <Trigger Property="IsEnabled" Value="False">
-                <Setter Property="Opacity" Value="0.5" />
-            </Trigger>
-        </Style.Triggers>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="1"/>
+         <!-- NEON: Increased Padding slightly -->
+        <Setter Property="Padding" Value="8,5"/>
+        <!-- NEON: Add Template for more control -->
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="MenuItem">
+                    <!-- Use Border for background, corners, and effects -->
+                    <Border x:Name="Bd"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            Padding="{TemplateBinding Padding}"
+                            SnapsToDevicePixels="true"
+                            CornerRadius="3"> <!-- NEON: Added CornerRadius -->
+                         <Border.Effect>
+                             <!-- Placeholder for Glow -->
+                              <DropShadowEffect ShadowDepth="0" BlurRadius="0" Opacity="0"/>
+                         </Border.Effect>
+                        <!-- Standard MenuItem content structure -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" SharedSizeGroup="MenuItemIconColumnGroup"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto" SharedSizeGroup="MenuItemIGTColumnGroup"/>
+                                <ColumnDefinition Width="14"/>
+                            </Grid.ColumnDefinitions>
+                             <!-- Icon Area -->
+                            <ContentPresenter x:Name="Icon" Grid.Column="0" Margin="1" VerticalAlignment="Center" ContentSource="Icon"/>
+                             <!-- Checkmark for IsChecked -->
+                             <Grid x:Name="GlyphPanel" Grid.Column="0" Visibility="Hidden" Margin="1" VerticalAlignment="Center" HorizontalAlignment="Center" Width="16" Height="16">
+                                 <Path x:Name="Glyph" Data="M0,5 L3,8 L8,0" Stroke="{TemplateBinding Foreground}" StrokeThickness="2" />
+                             </Grid>
+                             <!-- Header Content -->
+                            <ContentPresenter Grid.Column="1" Margin="{TemplateBinding Padding}" ContentSource="Header" RecognizesAccessKey="True" VerticalAlignment="Center"/>
+                             <!-- Input Gesture Text (e.g., Ctrl+O) -->
+                             <TextBlock Grid.Column="2" Margin="{TemplateBinding Padding}" Text="{TemplateBinding InputGestureText}" VerticalAlignment="Center"/>
+                            <!-- Arrow for Submenu -->
+                             <Path x:Name="RightArrow" Grid.Column="3" Data="M0,0 L4,3.5 L0,7 Z" Fill="{TemplateBinding Foreground}" Margin="4,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"/>
+                             <!-- Submenu Popup -->
+                             <Popup x:Name="PART_Popup" AllowsTransparency="true" Focusable="false" IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}" PopupAnimation="{DynamicResource {x:Static SystemParameters.MenuPopupAnimationKey}}" Placement="Right">
+                                <!-- NEON: Use PanelBackground for Popup -->
+                                <Border x:Name="SubMenuBorder" Background="{DynamicResource PanelBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="3">
+                                    <ScrollViewer CanContentScroll="true" Style="{DynamicResource {ComponentResourceKey ResourceId=MenuScrollViewer, TypeInTargetAssembly={x:Type FrameworkElement}}}">
+                                        <ItemsPresenter x:Name="ItemsPresenter" KeyboardNavigation.DirectionalNavigation="Cycle" Grid.IsSharedSizeScope="true" SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" KeyboardNavigation.TabNavigation="Cycle"/>
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <!-- Handle Icon Visibility -->
+                        <Trigger Property="Icon" Value="{x:Null}">
+                            <Setter TargetName="Icon" Property="Visibility" Value="Collapsed"/>
+                        </Trigger>
+                         <!-- Handle Checkmark Visibility -->
+                         <Trigger Property="IsChecked" Value="true">
+                            <Setter TargetName="GlyphPanel" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="Icon" Property="Visibility" Value="Collapsed"/>
+                        </Trigger>
+                         <!-- Handle Submenu Arrow Visibility -->
+                        <Trigger Property="Role" Value="SubmenuHeader">
+                            <Setter TargetName="RightArrow" Property="Visibility" Value="Visible"/>
+                        </Trigger>
+                         <!-- Highlighted/Hover State -->
+                        <Trigger Property="IsHighlighted" Value="True">
+                             <!-- NEON: Apply Accent Background, matching Text, and Glow -->
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentBrush}"/>
+                            <!-- CORRECT: Use WindowBackgroundBrush (which uses BaseBackgroundColor) -->
+                            <Setter Property="Foreground" Value="{DynamicResource WindowBackgroundBrush}"/>
+                            <Setter TargetName="Bd" Property="Effect" Value="{StaticResource FocusGlowEffect}" />
+                            <!-- Ensure Popup border matches highlight -->
+                             <Setter TargetName="SubMenuBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                        </Trigger>
+                        <!-- Disabled State -->
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <!-- NEON: TreeView Styles -->
