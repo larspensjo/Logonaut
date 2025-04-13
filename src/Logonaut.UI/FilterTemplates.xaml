@@ -12,7 +12,9 @@
     <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
 
     <!-- DataTemplate for FilterViewModel in TreeView -->
-    <DataTemplate DataType="{x:Type vm:FilterViewModel}">
+    <!-- Explicitly bind to the child collection. This important, or the children will not be displayed -->
+    <HierarchicalDataTemplate DataType="{x:Type vm:FilterViewModel}"
+                              ItemsSource="{Binding Children}">
         <!-- NEON: Item Border - Subtle background difference based on type -->
         <Border x:Name="ItemBorder" Background="Transparent" Padding="0" CornerRadius="3">
             <StackPanel Orientation="Horizontal">
@@ -80,6 +82,6 @@
                 </Style>
             </Border.Style>
         </Border>
-    </DataTemplate>
+    </HierarchicalDataTemplate>
 
 </ResourceDictionary>

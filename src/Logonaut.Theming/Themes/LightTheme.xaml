@@ -338,51 +338,76 @@
 
     <Style TargetType="TreeViewItem">
         <Setter Property="Background" Value="Transparent"/>
-        <Setter Property="Padding" Value="3"/>
+        <Setter Property="Padding" Value="1"/> <!-- Adjust padding as needed, maybe less than 3 -->
+        <!-- Bind IsExpanded to the ViewModel -->
+        <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="TreeViewItem">
-                    <StackPanel>
+                    <!-- Use Grid as root -->
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/> <!-- Row for the header -->
+                            <RowDefinition Height="*"/>    <!-- Row for the items (children), takes remaining space -->
+                        </Grid.RowDefinitions>
+
+                        <!-- Header Border (stays in Row 0) -->
                         <Border Name="Bd"
+                                Grid.Row="0"
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 Padding="{TemplateBinding Padding}">
+                            <!-- The inner Grid for Expander/Header Content -->
                             <Grid Margin="{Binding RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource TreeViewIndentConverter}}">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="19" />
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="19" /> <!-- Expander -->
+                                    <ColumnDefinition Width="Auto" /> <!-- Icon/Content Presenter -->
+                                    <ColumnDefinition Width="*" /> <!-- Takes rest of header width -->
                                 </Grid.ColumnDefinitions>
                                 <ToggleButton x:Name="Expander" Style="{StaticResource ExpandCollapseToggleStyle}" IsChecked="{Binding Path=IsExpanded, RelativeSource={RelativeSource TemplatedParent}}" ClickMode="Press"/>
-                                <ContentPresenter x:Name="PART_Header" Grid.Column="1" ContentSource="Header" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
-                             </Grid>
-                         </Border>
-                         <ItemsPresenter x:Name="ItemsHost" Visibility="Collapsed" />
-                     </StackPanel>
-                     <ControlTemplate.Triggers>
-                         <Trigger Property="IsExpanded" Value="true">
-                            <Setter TargetName="ItemsHost" Property="Visibility" Value="Visible"/>
-                         </Trigger>
+                                <ContentPresenter x:Name="PART_Header" Grid.Column="1" ContentSource="Header" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+
+                        <!-- ItemsPresenter (for children) goes in Row 1 -->
+                        <!-- It needs its own margin for indentation, handled by its children's templates -->
+                        <ItemsPresenter x:Name="ItemsHost" Grid.Row="1" Visibility="Collapsed" />
+
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsExpanded" Value="true">
+                        <Setter TargetName="ItemsHost" Property="Visibility" Value="Visible"/>
+                        </Trigger>
                         <Trigger Property="HasItems" Value="false">
                             <Setter TargetName="Expander" Property="Visibility" Value="Hidden"/>
                         </Trigger>
                         <Trigger Property="IsSelected" Value="true">
-                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentBrush}" /> <!-- Fill selection -->
-                            <Setter Property="Foreground" Value="{DynamicResource BaseBackgroundColor}" />
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentBrush}" />
+                            <!-- Use theme-appropriate foreground for selected item -->
+                            <Setter Property="Foreground" Value="{DynamicResource WindowBackgroundBrush}"/>
+                            <Setter TargetName="Bd" Property="Effect">
+                                <Setter.Value>
+                                    <!-- Apply Glow/Focus Effect from Theme -->
+                                    <DynamicResource ResourceKey="FocusGlowEffect"/>
+                                </Setter.Value>
+                            </Setter>
                         </Trigger>
                         <MultiTrigger>
                             <MultiTrigger.Conditions>
                                 <Condition Property="IsSelected" Value="true"/>
                                 <Condition Property="IsSelectionActive" Value="false"/>
                             </MultiTrigger.Conditions>
-                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource BorderBrush}" /> <!-- Grey out inactive selection -->
+                            <!-- Style for inactive selection -->
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource BorderBrush}" />
                             <Setter Property="Foreground" Value="{DynamicResource TextForegroundBrush}" />
+                            <Setter TargetName="Bd" Property="Effect" Value="{x:Null}" /> <!-- Remove glow on inactive -->
                         </MultiTrigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.5" />
+                            <Setter TargetName="Bd" Property="Effect" Value="{x:Null}" /> <!-- Remove effect on disabled -->
                         </Trigger>
-                     </ControlTemplate.Triggers>
+                    </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>

@@ -396,6 +396,8 @@ namespace Logonaut.UI.ViewModels
             {
                 // AddChildFilter internally adds to FilterViewModel's Children collection.
                 SelectedFilter.AddChildFilter(filter);
+                // We want composite filter to be expanded when a child is added.
+                SelectedFilter.IsExpanded = true;
             }
             else
             {

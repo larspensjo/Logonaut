@@ -15,10 +15,12 @@ namespace Logonaut.UI.ViewModels
         [ObservableProperty] private bool _isEditing = false;
         [ObservableProperty] private bool _isNotEditing = true;
 
+        [ObservableProperty]private bool _isExpanded; // Relevant for CompositeFilters
+
         public bool IsEditable => FilterModel.IsEditable;
 
         // Callback to notify owner (MainViewModel) that filter config requires re-evaluation
-        private readonly Action? _filterConfigurationChangedCallback; // <<< RENAME? More like "TriggerRefilterCallback"
+        private readonly Action? _filterConfigurationChangedCallback; // TODO: RENAME? More like "TriggerRefilterCallback"
 
         public FilterViewModel(IFilter filter, Action? filterConfigurationChangedCallback = null, FilterViewModel? parent = null)
         {
