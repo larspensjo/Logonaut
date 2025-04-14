@@ -7,6 +7,10 @@ using Logonaut.UI.Services;
 using Logonaut.Common; // Required for FilterProfile
 using System.Collections.Generic; // Required for List
 using System.Collections.ObjectModel; // Required for ObservableCollection
+using System.Windows; // Required for DependencyObject
+using System.Windows.Media; // Required for VisualTreeHelper
+using System.Windows.Controls; // Required for TreeView
+using System.Windows.Threading; // Required for DispatcherPriority
 
 namespace Logonaut.UI.Tests.ViewModels
 {
@@ -43,7 +47,134 @@ namespace Logonaut.UI.Tests.ViewModels
             );
         }
 
+        // --- Helper Function to Find Visual Child ---
+        private static T? FindVisualChild<T>(DependencyObject parent, string? name = null) where T : FrameworkElement
+        {
+            if (parent == null) return null;
+
+            T? foundChild = null;
+            int childrenCount = VisualTreeHelper.GetChildrenCount(parent);
+
+            for (int i = 0; i < childrenCount; i++)
+            {
+                var child = VisualTreeHelper.GetChild(parent, i);
+
+                if (child is not T childType)
+
+                {
+                    // Recurse deeper
+                    foundChild = FindVisualChild<T>(child, name);
+                    if (foundChild != null) break; // Found in recursion
+                }
+                else
+                {
+                    // Check name if provided
+                    if (!string.IsNullOrEmpty(name))
+                    {
+                        if (childType.Name == name)
+                        {
+                            foundChild = childType;
+                            break; // Found by name
+                        }
+                        else
+                        {
+                            // Continue searching siblings or recurse if name doesn't match
+                             foundChild = FindVisualChild<T>(child, name);
+                             if (foundChild != null) break;
+                        }
+                    }
+                    else
+                    {
+                        // Found the first instance of the type T
+                        foundChild = childType;
+                        break;
+                    }
+                }
+            }
+            return foundChild;
+        }
+
         // --- Test Methods ---
+        // Note: This test requires running in an environment that can instantiate WPF controls
+        // and process the dispatcher queue. MSTest might require specific configuration
+        // or attributes like [STATestMethod] if encountering threading issues.
+        [TestMethod]
+        public void AddFilter_WhenActiveProfileIsEmpty_ShouldUpdateTreeViewItems()
+        {
+            // Arrange - Requires running potentially on STA thread and using Dispatcher
+            MainViewModel? vmMock = null;
+            MainWindow? window = null;
+            TreeView? filterTreeView = null;
+            Exception? threadException = null;
+
+            // Use a dedicated STA thread for WPF components
+            var t = new Thread(() =>
+            {
+                try
+                {
+                    vmMock = CreateViewModel();
+                    window = new MainWindow(vmMock);
+
+                    // We need to load the window components but not show it.
+                    // Calling Measure/Arrange/UpdateLayout forces template application and binding setup.
+                    window.Measure(new Size(800, 600));
+                    window.Arrange(new Rect(0, 0, 800, 600));
+                    window.UpdateLayout(); // Initial layout pass
+
+                    // Ensure the TreeView is found after initial layout
+                    filterTreeView = FindVisualChild<TreeView>(window, "FilterTreeViewNameForTesting");
+                    if (filterTreeView == null) throw new AssertFailedException("FilterTreeViewNameForTesting not found in MainWindow visual tree.");
+
+
+                    // Pre-condition checks (on UI thread)
+                    Assert.IsNotNull(vmMock.ActiveFilterProfile, "Pre-condition: Active profile is null.");
+                    vmMock.ActiveFilterProfile.SetModelRootFilter(null); // Ensure tree is empty
+                    vmMock.ActiveTreeRootNodes.Clear();
+                    Assert.AreEqual(0, filterTreeView.Items.Count, "Pre-condition: TreeView should be empty initially.");
+
+                    // Act - Execute command that modifies the ViewModel collection
+                    vmMock.AddFilterCommand.Execute("Substring");
+
+                    // Crucially, wait for the dispatcher to process binding updates and layout changes
+                    // Use DispatcherPriority.Loaded or DataBind to ensure bindings have propagated
+                     window.Dispatcher.Invoke(() => { }, DispatcherPriority.DataBind); // Process bindings
+                     window.Dispatcher.Invoke(() => { window.UpdateLayout(); }, DispatcherPriority.Loaded); // Process layout
+
+
+                    // Assert - Check the Items collection of the actual TreeView control
+                    Assert.AreEqual(1, filterTreeView.Items.Count, "TreeView Items collection should have one item.");
+                    Assert.IsNotNull(filterTreeView.Items[0], "TreeView item should not be null.");
+                    Assert.IsInstanceOfType(filterTreeView.Items[0], typeof(FilterViewModel), "TreeView item should be a FilterViewModel.");
+
+                    var itemViewModel = (FilterViewModel)filterTreeView.Items[0];
+                    Assert.IsInstanceOfType(itemViewModel.FilterModel, typeof(SubstringFilter), "Filter model of the TreeView item should be SubstringFilter.");
+
+                }
+                catch (Exception ex)
+                {
+                    threadException = ex; // Capture exception to rethrow on main thread
+                }
+                finally
+                {
+                     // Ensure Dispatcher processing stops if the test window wasn't shown
+                     if (window != null && window.Dispatcher.HasShutdownStarted == false)
+                     {
+                        window.Dispatcher.InvokeShutdown();
+                     }
+                }
+            });
+
+            t.SetApartmentState(ApartmentState.STA); // Set the thread to STA
+            t.Start();
+            t.Join(); // Wait for the STA thread to finish
+
+            // Rethrow any exception caught on the STA thread
+            if (threadException != null)
+            {
+                throw new AssertFailedException($"Exception occurred on STA thread: {threadException.Message}", threadException);
+            }
+        }
+
         [TestMethod]
         public void AddFilterCommand_WhenActiveProfileIsEmpty_UpdatesActiveTreeRootNodes()
         {
