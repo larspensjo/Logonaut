@@ -41,7 +41,11 @@ namespace Logonaut.UI
         private ChunkSeparatorRenderer? _chunkSeparator;
         private bool _disposed;
 
-        public MainWindow()
+        // It seems as if an constructor without parameters is required for XAML to work properly.
+        public MainWindow() : this(new MainViewModel()) {}
+
+        // Enable injection of the ViewModel for testing purposes
+        public MainWindow(MainViewModel viewModel)
         {
             // InitializeComponent() is the method generated from the XAML. When it runs, it parses the XAML, creates the UI elements, and wires them up.
             try 
@@ -54,8 +58,8 @@ namespace Logonaut.UI
                 MessageBox.Show($"Error initializing the UI: {ex.Message}", "Initialization Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 throw; // Rethrow the exception to ensure the application doesn't continue in an invalid state
             }
-            DataContext = new ViewModels.MainViewModel();
-            _viewModel = (MainViewModel)DataContext;
+            DataContext = viewModel;
+            _viewModel = viewModel;
 
             // Subscribe to model updates to update chunk separators
             _viewModel.PropertyChanged += ViewModel_PropertyChanged;
