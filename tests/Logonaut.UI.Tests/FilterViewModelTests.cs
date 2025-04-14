@@ -107,7 +107,7 @@ namespace Logonaut.UI.Tests.ViewModels
 
             Assert.AreEqual(initialModelCount + 1, compositeFilter.SubFilters.Count, "Child filter should be added to the model.");
             Assert.AreEqual(initialVMCount + 1, parentVM.Children.Count, "Child ViewModel should be added.");
-            Assert.AreEqual(childFilter, parentVM.Children.Last().FilterModel, "ViewModel's model should match added filter.");
+            Assert.AreEqual(childFilter, parentVM.Children.Last().Filter, "ViewModel's model should match added filter.");
             Assert.AreEqual(parentVM, parentVM.Children.Last().Parent, "Child ViewModel should have correct parent reference.");
         }
 
@@ -159,9 +159,9 @@ namespace Logonaut.UI.Tests.ViewModels
 
             // Assert
             Assert.AreEqual(2, parentVM.Children.Count, "ViewModel should initialize with correct number of children.");
-            Assert.AreEqual(child1, parentVM.Children[0].FilterModel);
+            Assert.AreEqual(child1, parentVM.Children[0].Filter);
             Assert.AreEqual(parentVM, parentVM.Children[0].Parent);
-            Assert.AreEqual(child2, parentVM.Children[1].FilterModel);
+            Assert.AreEqual(child2, parentVM.Children[1].Filter);
             Assert.AreEqual(parentVM, parentVM.Children[1].Parent);
         }
 
@@ -226,7 +226,7 @@ namespace Logonaut.UI.Tests.ViewModels
         }
 
         [TestMethod]
-        [ExpectedException(typeof(NotSupportedException))]
+        [ExpectedException(typeof(InvalidOperationException))]
         public void FilterText_Set_ShouldThrow_ForNonEditableFilter()
         {
             var andVM = new FilterViewModel(new AndFilter());

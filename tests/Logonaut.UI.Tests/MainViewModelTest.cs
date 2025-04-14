@@ -148,7 +148,7 @@ namespace Logonaut.UI.Tests.ViewModels
                     Assert.IsInstanceOfType(filterTreeView.Items[0], typeof(FilterViewModel), "TreeView item should be a FilterViewModel.");
 
                     var itemViewModel = (FilterViewModel)filterTreeView.Items[0];
-                    Assert.IsInstanceOfType(itemViewModel.FilterModel, typeof(SubstringFilter), "Filter model of the TreeView item should be SubstringFilter.");
+                    Assert.IsInstanceOfType(itemViewModel.Filter, typeof(SubstringFilter), "Filter model of the TreeView item should be SubstringFilter.");
 
                 }
                 catch (Exception ex)
@@ -200,7 +200,7 @@ namespace Logonaut.UI.Tests.ViewModels
             // 1. Check the collection bound to the TreeView
             Assert.AreEqual(1, viewModel.ActiveTreeRootNodes.Count, "ActiveTreeRootNodes should contain one item (the new root).");
             Assert.IsNotNull(viewModel.ActiveTreeRootNodes[0], "The item in ActiveTreeRootNodes should not be null.");
-            Assert.IsInstanceOfType(viewModel.ActiveTreeRootNodes[0].FilterModel, typeof(SubstringFilter), "The filter model of the root node should be SubstringFilter.");
+            Assert.IsInstanceOfType(viewModel.ActiveTreeRootNodes[0].Filter, typeof(SubstringFilter), "The filter model of the root node should be SubstringFilter.");
 
             // 2. Check if the ActiveFilterProfile's RootFilterViewModel was also updated (should be the same instance)
             Assert.IsNotNull(viewModel.ActiveFilterProfile.RootFilterViewModel, "Active profile's RootFilterViewModel should now be set.");
@@ -255,7 +255,7 @@ namespace Logonaut.UI.Tests.ViewModels
 
             // Assert
             Assert.AreEqual(1, rootNode.Children.Count, "Child node should be added to the composite node.");
-            Assert.IsInstanceOfType(rootNode.Children[0].FilterModel, typeof(SubstringFilter), "Child node should be SubstringFilter.");
+            Assert.IsInstanceOfType(rootNode.Children[0].Filter, typeof(SubstringFilter), "Child node should be SubstringFilter.");
             Assert.AreEqual(rootNode.Children[0], viewModel.SelectedFilterNode, "Newly added child node should be selected."); // Check if selection moves to child
         }
 

@@ -7,7 +7,7 @@ namespace Logonaut.UI.ViewModels
 {
     public partial class FilterViewModel : ObservableObject
     {
-        public IFilter FilterModel { get; }
+        public IFilter Filter { get; }
         public FilterViewModel? Parent { get; }
         public ObservableCollection<FilterViewModel> Children { get; } = new();
 
@@ -15,16 +15,16 @@ namespace Logonaut.UI.ViewModels
         [ObservableProperty] private bool _isEditing = false;
         [ObservableProperty] private bool _isNotEditing = true;
 
-        [ObservableProperty]private bool _isExpanded; // Relevant for CompositeFilters
+        [ObservableProperty] private bool _isExpanded; // Relevant for CompositeFilters
 
-        public bool IsEditable => FilterModel.IsEditable;
+        public bool IsEditable => Filter.IsEditable;
 
         // Callback to notify owner (MainViewModel) that filter config requires re-evaluation
         private readonly Action? _filterConfigurationChangedCallback; // TODO: RENAME? More like "TriggerRefilterCallback"
 
         public FilterViewModel(IFilter filter, Action? filterConfigurationChangedCallback = null, FilterViewModel? parent = null)
         {
-            FilterModel = filter;
+            Filter = filter;
             Parent = parent;
             _filterConfigurationChangedCallback = filterConfigurationChangedCallback;
 
@@ -40,7 +40,7 @@ namespace Logonaut.UI.ViewModels
         [RelayCommand]
         public void AddChildFilter(IFilter childFilter)
         {
-            if (FilterModel is CompositeFilter composite)
+            if (Filter is CompositeFilter composite)
             {
                 composite.Add(childFilter);
                 // Ensure the callback is passed down
@@ -52,9 +52,9 @@ namespace Logonaut.UI.ViewModels
 
         public void RemoveChild(FilterViewModel child)
         {
-            if (FilterModel is CompositeFilter composite)
+            if (Filter is CompositeFilter composite)
             {
-                if (composite.Remove(child.FilterModel))
+                if (composite.Remove(child.Filter))
                 {
                     Children.Remove(child);
                     NotifyFilterConfigurationChanged(); // Notify after structural change
@@ -64,39 +64,34 @@ namespace Logonaut.UI.ViewModels
 
         public bool Enabled
         {
-            get => FilterModel.Enabled;
+            get => Filter.Enabled;
             set
             {
-                if (FilterModel.Enabled != value)
+                if (Filter.Enabled != value)
                 {
-                    FilterModel.Enabled = value;
+                    Filter.Enabled = value;
                     OnPropertyChanged();
                     NotifyFilterConfigurationChanged(); // <<< Notify on Enabled change
                 }
             }
         }
 
-        public string DisplayText => FilterModel.DisplayText;
-        public string FilterType => FilterModel.TypeText;
+        public string DisplayText => Filter.DisplayText;
+        public string FilterType => Filter.TypeText;
 
         public string FilterText
         {
-            get => FilterModel.Value;
+            get => Filter.Value;
             set
             {
-                try
+                if (!Filter.IsEditable)
+                    throw new InvalidOperationException("Filter is not editable.");
+                if (Filter.Value != value)
                 {
-                    if (FilterModel.Value != value)
-                    {
-                        FilterModel.Value = value;
-                        OnPropertyChanged();
-                        OnPropertyChanged(nameof(DisplayText)); // DisplayText depends on Value for some types
-                        // DO NOT notify on every keystroke. Notification happens on EndEdit or Enabled change.
-                    }
-                }
-                catch (NotSupportedException)
-                {
-                    // Ignore attempts to set Value on filters that don't support it.
+                    Filter.Value = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(DisplayText)); // DisplayText depends on Value for some types
+                    // DO NOT notify on every keystroke. Notification happens on EndEdit or Enabled change.
                 }
             }
         }

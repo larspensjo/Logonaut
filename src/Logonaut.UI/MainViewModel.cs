@@ -394,7 +394,7 @@ namespace Logonaut.UI.ViewModels
                 // No profile active OR tree is empty and nothing selected - target the profile root
                 if (ActiveFilterProfile == null) return; // Should not happen if CanExecute is right
             }
-            else if (SelectedFilterNode != null && !(SelectedFilterNode.FilterModel is CompositeFilter))
+            else if (SelectedFilterNode != null && !(SelectedFilterNode.Filter is CompositeFilter))
             {
                 // Node selected, but it's not composite - cannot add child
                 MessageBox.Show("Cannot add a child node to the selected filter type. Select a composite filter (AND, OR, NOR) or add a new root.", "Add Filter Node", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -427,14 +427,14 @@ namespace Logonaut.UI.ViewModels
                  SelectedFilterNode = ActiveFilterProfile?.RootFilterViewModel; // Select the new root
              }
              // Case 2: A composite node is selected - add as child
-             else if (SelectedFilterNode != null && SelectedFilterNode.FilterModel is CompositeFilter)
+             else if (SelectedFilterNode != null && SelectedFilterNode.Filter is CompositeFilter)
              {
                  // AddChildFilter takes the MODEL, adds it, creates the child VM, and adds to Children collection
                  SelectedFilterNode.AddChildFilter(newFilterNodeModel);
                  SelectedFilterNode.IsExpanded = true; // Expand parent
 
                  // Find and select the newly created child VM
-                 var addedVM = SelectedFilterNode.Children.LastOrDefault(vm => vm.FilterModel == newFilterNodeModel);
+                 var addedVM = SelectedFilterNode.Children.LastOrDefault(vm => vm.Filter == newFilterNodeModel);
                  if (addedVM != null) SelectedFilterNode = addedVM;
              }
              // Case 3: No node selected (but tree exists), or non-composite selected - Replace root? Show Error?
@@ -858,12 +858,12 @@ namespace Logonaut.UI.ViewModels
             string? pattern = null;
             bool isRegex = false;
 
-            if (filterViewModel.FilterModel is SubstringFilter sf && !string.IsNullOrEmpty(sf.Value))
+            if (filterViewModel.Filter is SubstringFilter sf && !string.IsNullOrEmpty(sf.Value))
             {
                 pattern = Regex.Escape(sf.Value); // Escape for regex highlighting
                 isRegex = false;
             }
-            else if (filterViewModel.FilterModel is RegexFilter rf && !string.IsNullOrEmpty(rf.Value))
+            else if (filterViewModel.Filter is RegexFilter rf && !string.IsNullOrEmpty(rf.Value))
             {
                 pattern = rf.Value; // Use raw regex pattern
                 isRegex = true;
