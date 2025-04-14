@@ -70,14 +70,14 @@ namespace Logonaut.UI.Helpers
             // Ensure the 'filter' and 'searchMatch' colors use theme resources
             _namedColors["filter"] = new HighlightingColor
             {
-                Background = new SimpleHighlightingBrush(((Application.Current.TryFindResource("Highlighting.FilterMatch.Background") as SolidColorBrush)?.Color ?? Colors.Yellow)), // Fallback
-                Foreground = new SimpleHighlightingBrush(((Application.Current.TryFindResource("Highlighting.FilterMatch.Foreground") as SolidColorBrush)?.Color ?? Colors.Black)) // Fallback
+                Background = new SimpleHighlightingBrush(((Application.Current?.TryFindResource("Highlighting.FilterMatch.Background") as SolidColorBrush)?.Color ?? Colors.Yellow)), // Fallback
+                Foreground = new SimpleHighlightingBrush(((Application.Current?.TryFindResource("Highlighting.FilterMatch.Foreground") as SolidColorBrush)?.Color ?? Colors.Black)) // Fallback
             };
 
             _namedColors["searchMatch"] = new HighlightingColor
             {
-                Background = new SimpleHighlightingBrush(((Application.Current.TryFindResource("Highlighting.SearchMatch.Background") as SolidColorBrush)?.Color ?? Colors.LightCyan)), // Fallback
-                Foreground = new SimpleHighlightingBrush(((Application.Current.TryFindResource("Highlighting.SearchMatch.Foreground") as SolidColorBrush)?.Color ?? Colors.Black)) // Fallback
+                Background = new SimpleHighlightingBrush(((Application.Current?.TryFindResource("Highlighting.SearchMatch.Background") as SolidColorBrush)?.Color ?? Colors.LightCyan)), // Fallback
+                Foreground = new SimpleHighlightingBrush(((Application.Current?.TryFindResource("Highlighting.SearchMatch.Foreground") as SolidColorBrush)?.Color ?? Colors.Black)) // Fallback
             };
         }
 

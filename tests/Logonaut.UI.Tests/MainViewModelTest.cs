@@ -34,7 +34,7 @@ namespace Logonaut.UI.Tests.ViewModels
         }
 
         // Helper to create a view model with mocks
-       private MainViewModel CreateViewModel(IFileDialogService? fileDialog = null, IInputPromptService? prompt = null)
+       private MainViewModel CreateMockViewModel(IFileDialogService? fileDialog = null, IInputPromptService? prompt = null)
         {
             // Provide a basic SynchronizationContext for the test environment
             var testSyncContext = new SynchronizationContext();
@@ -48,10 +48,8 @@ namespace Logonaut.UI.Tests.ViewModels
         }
 
         // --- Helper Function to Find Visual Child ---
-        private static T? FindVisualChild<T>(DependencyObject parent, string? name = null) where T : FrameworkElement
+        private static T? FindVisualChild<T>(DependencyObject parent, string name) where T : FrameworkElement
         {
-            if (parent == null) return null;
-
             T? foundChild = null;
             int childrenCount = VisualTreeHelper.GetChildrenCount(parent);
 
@@ -98,8 +96,7 @@ namespace Logonaut.UI.Tests.ViewModels
         // Note: This test requires running in an environment that can instantiate WPF controls
         // and process the dispatcher queue. MSTest might require specific configuration
         // or attributes like [STATestMethod] if encountering threading issues.
-        [TestMethod]
-        public void AddFilter_WhenActiveProfileIsEmpty_ShouldUpdateTreeViewItems()
+        [TestMethod] public void AddFilter_WhenActiveProfileIsEmpty_ShouldUpdateTreeViewItems()
         {
             // Arrange - Requires running potentially on STA thread and using Dispatcher
             MainViewModel? vmMock = null;
@@ -112,7 +109,7 @@ namespace Logonaut.UI.Tests.ViewModels
             {
                 try
                 {
-                    vmMock = CreateViewModel();
+                    vmMock = CreateMockViewModel();
                     window = new MainWindow(vmMock);
 
                     // We need to load the window components but not show it.
@@ -121,8 +118,12 @@ namespace Logonaut.UI.Tests.ViewModels
                     window.Arrange(new Rect(0, 0, 800, 600));
                     window.UpdateLayout(); // Initial layout pass
 
-                    // Ensure the TreeView is found after initial layout
-                    filterTreeView = FindVisualChild<TreeView>(window, "FilterTreeViewNameForTesting");
+                    // ***** Start search from window.Content *****
+                    var windowContentElement = window.Content as UIElement;
+                    Assert.IsNotNull(windowContentElement, "Window Content is null or not a UIElement after layout.");
+
+                     // Ensure the TreeView is found after initial layout
+                    filterTreeView = FindVisualChild<TreeView>(windowContentElement, "FilterTreeViewNameForTesting");
                     if (filterTreeView == null) throw new AssertFailedException("FilterTreeViewNameForTesting not found in MainWindow visual tree.");
 
 
@@ -175,11 +176,10 @@ namespace Logonaut.UI.Tests.ViewModels
             }
         }
 
-        [TestMethod]
-        public void AddFilterCommand_WhenActiveProfileIsEmpty_UpdatesActiveTreeRootNodes()
+        [TestMethod] public void AddFilterCommand_WhenActiveProfileIsEmpty_UpdatesActiveTreeRootNodes()
         {
             // Arrange
-            var viewModel = CreateViewModel();
+            var viewModel = CreateMockViewModel();
 
             // Ensure we have an active profile to work with
             Assert.IsNotNull(viewModel.ActiveFilterProfile, "Test setup failed: No active profile found after initialization.");
@@ -211,11 +211,10 @@ namespace Logonaut.UI.Tests.ViewModels
             Assert.AreSame(viewModel.ActiveTreeRootNodes[0], viewModel.SelectedFilterNode, "SelectedFilterNode should be the newly added root node.");
         }
 
-        [TestMethod]
-        public void Constructor_InitializesWithDefaultProfile()
+        [TestMethod] public void Constructor_InitializesWithDefaultProfile()
         {
             // Arrange & Act
-            var viewModel = CreateViewModel();
+            var viewModel = CreateMockViewModel();
 
             // Assert
             Assert.AreEqual(1, viewModel.AvailableProfiles.Count, "Should initialize with one default profile.");
@@ -225,11 +224,10 @@ namespace Logonaut.UI.Tests.ViewModels
             Assert.IsNotNull(viewModel.ActiveFilterProfile.RootFilterViewModel, "RootFilterViewModel should be created for the active profile.");
         }
 
-        [TestMethod]
-        public void AddFilterCommand_WithNoRootFilterInActiveProfile_CreatesRootNode()
+        [TestMethod] public void AddFilterCommand_WithNoRootFilterInActiveProfile_CreatesRootNode()
         {
             // Arrange
-            var viewModel = CreateViewModel();
+            var viewModel = CreateMockViewModel();
             // Ensure the default profile starts empty (or create a new empty one)
             viewModel.ActiveFilterProfile?.SetModelRootFilter(null); // Make the active profile empty
 
@@ -243,11 +241,10 @@ namespace Logonaut.UI.Tests.ViewModels
             Assert.AreEqual(viewModel.ActiveFilterProfile.RootFilterViewModel, viewModel.SelectedFilterNode, "Newly added root node should be selected.");
         }
 
-        [TestMethod]
-        public void AddFilterCommand_WithCompositeNodeSelected_AddsChildNode()
+        [TestMethod] public void AddFilterCommand_WithCompositeNodeSelected_AddsChildNode()
         {
             // Arrange
-            var viewModel = CreateViewModel();
+            var viewModel = CreateMockViewModel();
             viewModel.AddFilterCommand.Execute("And"); // Create an AND root
             var rootNode = viewModel.ActiveFilterProfile?.RootFilterViewModel;
             Assert.IsNotNull(rootNode, "Root node setup failed.");
@@ -262,11 +259,10 @@ namespace Logonaut.UI.Tests.ViewModels
             Assert.AreEqual(rootNode.Children[0], viewModel.SelectedFilterNode, "Newly added child node should be selected."); // Check if selection moves to child
         }
 
-         [TestMethod]
-        public void AddFilterCommand_WithNonCompositeNodeSelected_ShowsMessage()
+        [TestMethod] public void AddFilterCommand_WithNonCompositeNodeSelected_ShowsMessage()
         {
              // Arrange
-             var viewModel = CreateViewModel();
+             var viewModel = CreateMockViewModel();
              viewModel.AddFilterCommand.Execute("Substring"); // Create a Substring root
              var rootNode = viewModel.ActiveFilterProfile?.RootFilterViewModel;
              Assert.IsNotNull(rootNode, "Root node setup failed.");
@@ -284,11 +280,10 @@ namespace Logonaut.UI.Tests.ViewModels
         }
 
 
-        [TestMethod]
-        public void RemoveFilterNodeCommand_WithRootNodeSelected_ClearsActiveTree()
+        [TestMethod] public void RemoveFilterNodeCommand_WithRootNodeSelected_ClearsActiveTree()
         {
             // Arrange
-            var viewModel = CreateViewModel();
+            var viewModel = CreateMockViewModel();
             viewModel.AddFilterCommand.Execute("Substring"); // Add a root node
             viewModel.SelectedFilterNode = viewModel.ActiveFilterProfile?.RootFilterViewModel; // Select the root
             Assert.IsNotNull(viewModel.SelectedFilterNode, "Setup failed: Root node not selected.");
@@ -302,11 +297,10 @@ namespace Logonaut.UI.Tests.ViewModels
             Assert.IsNull(viewModel.SelectedFilterNode, "SelectedFilterNode should be cleared.");
         }
 
-        [TestMethod]
-        public void RemoveFilterNodeCommand_WithChildNodeSelected_RemovesChildAndSelectsParent()
+        [TestMethod] public void RemoveFilterNodeCommand_WithChildNodeSelected_RemovesChildAndSelectsParent()
         {
             // Arrange
-            var viewModel = CreateViewModel();
+            var viewModel = CreateMockViewModel();
             viewModel.AddFilterCommand.Execute("And"); // Add AND root
             var rootNode = viewModel.ActiveFilterProfile?.RootFilterViewModel;
             viewModel.SelectedFilterNode = rootNode;
@@ -324,11 +318,10 @@ namespace Logonaut.UI.Tests.ViewModels
             Assert.AreEqual(rootNode, viewModel.SelectedFilterNode, "Parent node (root) should be selected.");
         }
 
-        [TestMethod]
-        public void ToggleEditNodeCommand_OnEditableNode_TogglesEditState()
+        [TestMethod] public void ToggleEditNodeCommand_OnEditableNode_TogglesEditState()
         {
              // Arrange
-             var viewModel = CreateViewModel();
+             var viewModel = CreateMockViewModel();
              viewModel.AddFilterCommand.Execute("Substring");
              var node = viewModel.ActiveFilterProfile?.RootFilterViewModel;
              Assert.IsNotNull(node, "Node setup failed.");
@@ -349,11 +342,10 @@ namespace Logonaut.UI.Tests.ViewModels
              Assert.AreEqual(initialState, node.IsEditing, "IsEditing state should toggle back.");
         }
 
-         [TestMethod]
-        public void ToggleEditNodeCommand_OnNonEditableNode_DoesNothing()
+        [TestMethod] public void ToggleEditNodeCommand_OnNonEditableNode_DoesNothing()
         {
              // Arrange
-             var viewModel = CreateViewModel();
+             var viewModel = CreateMockViewModel();
              viewModel.AddFilterCommand.Execute("And");
              var node = viewModel.ActiveFilterProfile?.RootFilterViewModel;
              Assert.IsNotNull(node, "Node setup failed.");
@@ -369,8 +361,7 @@ namespace Logonaut.UI.Tests.ViewModels
         }
 
 #if false // Keep this inactive for now as it requires deeper mocking
-        [TestMethod]
-        public void ActiveFilterProfile_Set_TriggersFilterUpdateAndClearsNodeSelection()
+        [TestMethod] public void ActiveFilterProfile_Set_TriggersFilterUpdateAndClearsNodeSelection()
         {
              // Arrange
              var viewModel = CreateViewModel();
@@ -406,11 +397,10 @@ namespace Logonaut.UI.Tests.ViewModels
 
         // --- Tests for Profile Management Commands ---
 
-        [TestMethod]
-        public void CreateNewProfileCommand_AddsProfileAndSelectsIt()
+        [TestMethod] public void CreateNewProfileCommand_AddsProfileAndSelectsIt()
         {
             // Arrange
-            var viewModel = CreateViewModel();
+            var viewModel = CreateMockViewModel();
             int initialCount = viewModel.AvailableProfiles.Count;
 
             // Act
@@ -422,12 +412,11 @@ namespace Logonaut.UI.Tests.ViewModels
             Assert.IsTrue(viewModel.ActiveFilterProfile.Name.StartsWith("New Profile"), "New profile should have default name pattern.");
         }
 
-        [TestMethod]
-        public void RenameProfileCommand_WithValidNewName_UpdatesProfileName()
+        [TestMethod] public void RenameProfileCommand_WithValidNewName_UpdatesProfileName()
         {
             // Arrange
             var mockPrompter = new MockInputPromptService { InputToReturn = "Renamed Profile" };
-            var viewModel = CreateViewModel(prompt: mockPrompter);
+            var viewModel = CreateMockViewModel(prompt: mockPrompter);
             var profileToRename = viewModel.ActiveFilterProfile;
             Assert.IsNotNull(profileToRename, "Setup failed: No active profile.");
             string oldName = profileToRename.Name;
@@ -440,12 +429,11 @@ namespace Logonaut.UI.Tests.ViewModels
             Assert.AreEqual("Renamed Profile", profileToRename.Model.Name, "Profile name should be updated in Model.");
         }
 
-        [TestMethod]
-        public void RenameProfileCommand_WithExistingName_ShowsErrorAndDoesNotRename()
+        [TestMethod] public void RenameProfileCommand_WithExistingName_ShowsErrorAndDoesNotRename()
         {
              // Arrange
              var mockPrompter = new MockInputPromptService();
-             var viewModel = CreateViewModel(prompt: mockPrompter);
+             var viewModel = CreateMockViewModel(prompt: mockPrompter);
              viewModel.CreateNewProfileCommand.Execute(null); // Now have "Default" and "New Profile 1"
              var profile1 = viewModel.AvailableProfiles[0];
              var profile2 = viewModel.AvailableProfiles[1];
@@ -462,11 +450,10 @@ namespace Logonaut.UI.Tests.ViewModels
              Assert.Inconclusive("Need framework/mocking to verify MessageBox call.");
         }
 
-        [TestMethod]
-        public void DeleteProfileCommand_RemovesProfileAndSelectsAnother()
+        [TestMethod] public void DeleteProfileCommand_RemovesProfileAndSelectsAnother()
         {
             // Arrange
-            var viewModel = CreateViewModel();
+            var viewModel = CreateMockViewModel();
             viewModel.CreateNewProfileCommand.Execute(null); // Profile 1
             viewModel.CreateNewProfileCommand.Execute(null); // Profile 2 (now active)
             Assert.AreEqual(3, viewModel.AvailableProfiles.Count); // Default + 2 new
@@ -486,11 +473,10 @@ namespace Logonaut.UI.Tests.ViewModels
             Assert.Inconclusive("Need framework/mocking to verify MessageBox confirmation.");
         }
 
-        [TestMethod]
-        public void DeleteProfileCommand_CannotDeleteLastProfile()
+        [TestMethod] public void DeleteProfileCommand_CannotDeleteLastProfile()
         {
              // Arrange
-             var viewModel = CreateViewModel();
+             var viewModel = CreateMockViewModel();
              Assert.AreEqual(1, viewModel.AvailableProfiles.Count); // Should start with Default
              viewModel.ActiveFilterProfile = viewModel.AvailableProfiles[0];
 
@@ -506,11 +492,10 @@ namespace Logonaut.UI.Tests.ViewModels
 
         // --- Existing Tests (Review and keep if still valid) ---
 
-        [TestMethod]
-        public void PreviousSearch_WithNonEmptySearchText_ShouldNavigate() // Simplified - just checks execution
+        [TestMethod] public void PreviousSearch_WithNonEmptySearchText_ShouldNavigate() // Simplified - just checks execution
         {
             // Arrange
-            var viewModel = CreateViewModel();
+            var viewModel = CreateMockViewModel();
             viewModel.SearchText = "test";
              // Add some dummy matches if needed for CanExecute or internal logic
             // viewModel.SearchMatches.Add(new SearchResult(0, 4));
@@ -522,11 +507,10 @@ namespace Logonaut.UI.Tests.ViewModels
              Assert.IsTrue(true, "Command executed without error."); // Basic check
         }
 
-        [TestMethod]
-        public void NextSearch_WithNonEmptySearchText_ShouldNavigate() // Simplified
+        [TestMethod] public void NextSearch_WithNonEmptySearchText_ShouldNavigate() // Simplified
         {
             // Arrange
-            var viewModel = CreateViewModel();
+            var viewModel = CreateMockViewModel();
             viewModel.SearchText = "test";
             // viewModel.SearchMatches.Add(new SearchResult(0, 4));
 
@@ -537,12 +521,11 @@ namespace Logonaut.UI.Tests.ViewModels
             Assert.IsTrue(true, "Command executed without error.");
         }
 
-        [TestMethod]
-        public void OpenLogFile_ShouldSetCurrentLogFilePath()
+        [TestMethod] public void OpenLogFile_ShouldSetCurrentLogFilePath()
         {
             // Arrange
             var fakeService = new MockFileDialogService { FileToReturn = "C:\\fake\\log.txt" };
-            var viewModel = CreateViewModel(fakeService);
+            var viewModel = CreateMockViewModel(fakeService);
             // Mocking LogTailerManager/LogFilterProcessor interactions would be needed for full test.
 
             // Act
