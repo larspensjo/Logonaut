@@ -389,7 +389,10 @@ namespace Logonaut.UI.ViewModels
         [RelayCommand(CanExecute = nameof(CanAddFilterNode))]
         private void AddFilter(object? filterTypeParam) // Parameter likely string like "Substring", "And", etc.
         {
-            if (ActiveFilterProfile?.RootFilterViewModel == null && SelectedFilterNode == null)
+            if (ActiveFilterProfile == null)
+                throw new InvalidOperationException("No active profile"); // Should not happen if CanExecute is right
+
+            if (ActiveFilterProfile.RootFilterViewModel == null && SelectedFilterNode == null)
             {
                 // No profile active OR tree is empty and nothing selected - target the profile root
                 if (ActiveFilterProfile == null) return; // Should not happen if CanExecute is right
@@ -417,14 +420,14 @@ namespace Logonaut.UI.ViewModels
              // Note: The callback passed down when creating FilterViewModel ensures TriggerFilterUpdate is called
              FilterViewModel newFilterNodeVM = new FilterViewModel(newFilterNodeModel, TriggerFilterUpdate);
 
-             FilterViewModel? targetParentVM = SelectedFilterNode ?? ActiveFilterProfile?.RootFilterViewModel;
+             FilterViewModel? targetParentVM = SelectedFilterNode ?? ActiveFilterProfile.RootFilterViewModel;
 
              // Case 1: Active profile's tree is currently empty
-             if (ActiveFilterProfile?.RootFilterViewModel == null)
+             if (ActiveFilterProfile.RootFilterViewModel == null)
              {
-                 ActiveFilterProfile?.SetModelRootFilter(newFilterNodeModel); // This sets model and refreshes RootFilterViewModel
+                 ActiveFilterProfile.SetModelRootFilter(newFilterNodeModel); // This sets model and refreshes RootFilterViewModel
                  UpdateActiveTreeRootNodes(ActiveFilterProfile); // Explicitly update the collection bound to the TreeView
-                 SelectedFilterNode = ActiveFilterProfile?.RootFilterViewModel; // Select the new root
+                 SelectedFilterNode = ActiveFilterProfile.RootFilterViewModel; // Select the new root
              }
              // Case 2: A composite node is selected - add as child
              else if (SelectedFilterNode != null && SelectedFilterNode.Filter is CompositeFilter)
@@ -441,8 +444,7 @@ namespace Logonaut.UI.ViewModels
              // Current Requirement: Select a composite node first. Let's enforce this.
              else // No node selected or non-composite selected
              {
-                  MessageBox.Show("Please select a composite filter node (AND, OR, NOR) in the tree to add a child, or remove the existing root to start over.", "Add Filter Node", MessageBoxButton.OK, MessageBoxImage.Information);
-                  return; // Do nothing further
+                throw new InvalidOperationException("Unexpected state: No node selected or non-composite selected. This should not happen with current logic.");
              }
 
             // Editing logic: If the new node is editable, start editing
@@ -453,9 +455,23 @@ namespace Logonaut.UI.ViewModels
              // TriggerFilterUpdate() is handled by callbacks within AddChildFilter/SetModelRootFilter
              SaveCurrentSettings();
         }
-        // Can add if a profile is active. Adding logic handles where it goes.
-        private bool CanAddFilterNode() => ActiveFilterProfile != null;
 
+        // Can add if a profile is active. Adding logic handles where it goes.
+        private bool CanAddFilterNode()
+        {
+            // Condition 0: Must have an active profile
+            if (ActiveFilterProfile == null)
+                return false;
+
+            // Condition A: Active profile's tree is empty?
+            bool isTreeEmpty = ActiveFilterProfile.RootFilterViewModel == null;
+
+            // Condition B: Is a composite node selected?
+            bool isCompositeNodeSelected = SelectedFilterNode != null &&
+                                           SelectedFilterNode.Filter is CompositeFilter; // Check if the *selected node's model* is composite
+
+            return isTreeEmpty || isCompositeNodeSelected;
+        }
 
         [RelayCommand(CanExecute = nameof(CanRemoveFilterNode))]
         private void RemoveFilterNode()
@@ -619,10 +635,10 @@ namespace Logonaut.UI.ViewModels
         {
             ActiveTreeRootNodes.Clear();
             if (activeProfile?.RootFilterViewModel != null)
-            {
                 ActiveTreeRootNodes.Add(activeProfile.RootFilterViewModel);
-            }
-             OnPropertyChanged(nameof(ActiveTreeRootNodes)); // Explicitly notify if needed, though ObservableCollection handles it
+
+            // I don't think a notification is generated when we don't assign to the property directly.
+             OnPropertyChanged(nameof(ActiveTreeRootNodes));
         }
 
         // Central method to signal the processor that filters or context may have changed.
@@ -635,7 +651,7 @@ namespace Logonaut.UI.ViewModels
         {
             // Simple check to avoid queuing multiple simultaneous updates. More robust
             // handling might involve cancellation or ensuring only the latest runs.
-            if (_isBusyFiltering)
+            if (IsBusyFiltering)
             {
                 Debug.WriteLine("TriggerFilterUpdate skipped: Already busy.");
                 return;
