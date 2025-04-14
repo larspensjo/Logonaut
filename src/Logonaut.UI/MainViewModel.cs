@@ -1,31 +1,63 @@
-using System; 
+using System;
+using System.Collections.Generic; // For List
 using System.Collections.ObjectModel;
 using System.Diagnostics;
-using System.Linq; 
-using System.Reactive.Disposables; 
+using System.Linq;
+using System.Reactive.Disposables;
+using System.Text; // Required for StringBuilder
 using System.Text.RegularExpressions;
-using System.Text;
-using System.Threading; 
-using System.Windows; 
+using System.Threading;
+using System.Windows; // For MessageBox, Visibility
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Logonaut.Common;
-using Logonaut.Core;         
+using Logonaut.Core;
 using Logonaut.Filters;
 using Logonaut.LogTailing;
-using Logonaut.UI.Services;
+using Logonaut.UI.Services; // Assuming IInputPromptService will be added here
 
 namespace Logonaut.UI.ViewModels
 {
-    // MainViewModel now acts as a true mediator between the View, the UI data structures (FilterViewModel tree), and the core processing logic (ILogFilterProcessor).
-    // It focuses on managing the UI state, handling user input via commands, and coordinating the flow of data and triggers between the UI and the background processing service,
-    // without containing the complex reactive pipeline logic itself.
+    // --- Placeholder/Example Interface and Service for Input Dialog ---
+    // In a real app, implement this using a proper custom dialog window.
+    public interface IInputPromptService
+    {
+        string? ShowInputDialog(string title, string prompt, string defaultValue = "");
+    }
+
+    public class InputPromptService : IInputPromptService
+    {
+        public string? ShowInputDialog(string title, string prompt, string defaultValue = "")
+        {
+            // Requires adding a reference to Microsoft.VisualBasic:
+            // try
+            // {
+            //    return Microsoft.VisualBasic.Interaction.InputBox(prompt, title, defaultValue);
+            // }
+            // catch (Exception ex) // Handle potential errors if VB Interaction not available/allowed
+            // {
+            //    Debug.WriteLine($"Error showing InputBox: {ex.Message}");
+            //    MessageBox.Show("Error displaying input prompt. Please implement a custom dialog.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+            //    return null;
+            // }
+
+            // --- TEMPORARY PLACEHOLDER ---
+            // Replace this with a real dialog implementation
+            var result = MessageBox.Show($"Placeholder for Input Dialog:\n'{prompt}'\n\nClick OK to simulate entering '{defaultValue}_modified'.\nClick Cancel to simulate cancelling.", title, MessageBoxButton.OKCancel);
+            return (result == MessageBoxResult.OK) ? defaultValue + "_modified" : null;
+            // --- END TEMPORARY PLACEHOLDER ---
+        }
+    }
+    // --- End Placeholder ---
+
+
     public partial class MainViewModel : ObservableObject, IDisposable
     {
         #region // --- Fields ---
 
         // --- UI Services & Context ---
         private readonly IFileDialogService _fileDialogService;
+        private readonly IInputPromptService _inputPromptService; // For renaming
         private readonly SynchronizationContext _uiContext;
 
         // --- Core Processing Service ---
@@ -50,13 +82,15 @@ namespace Logonaut.UI.ViewModels
 
         #region // --- Constructor ---
 
-        public MainViewModel(IFileDialogService? fileDialogService = null, ILogFilterProcessor? logFilterProcessor = null)
+        public MainViewModel(
+            IFileDialogService? fileDialogService = null,
+            IInputPromptService? inputPromptService = null, // Inject input service
+            ILogFilterProcessor? logFilterProcessor = null)
         {
-            // --- Interaction with UI Services ---
             _fileDialogService = fileDialogService ?? new FileDialogService();
+            _inputPromptService = inputPromptService ?? new InputPromptService(); // Use default/placeholder
             _uiContext = SynchronizationContext.Current ?? throw new InvalidOperationException("Could not capture SynchronizationContext. Ensure ViewModel is created on the UI thread.");
 
-            // --- Orchestration with ILogFilterProcessor ---
             // Initialize and own the processor
             _logFilterProcessor = logFilterProcessor ?? new LogFilterProcessor(
                 LogTailerManager.Instance.LogLines,
@@ -74,11 +108,11 @@ namespace Logonaut.UI.ViewModels
             _disposables.Add(_logFilterProcessor);
             _disposables.Add(filterSubscription);
 
-            LoadPersistedSettings();
-
             // --- Initial State Setup ---
             Theme = new ThemeViewModel(); // Part of UI State
-            TriggerFilterUpdate(); // Initial filter application
+            LoadPersistedSettings(); // Load profiles and settings
+
+            // Initial filter trigger is handled by setting ActiveFilterProfile in LoadPersistedSettings
         }
 
         #endregion // --- Constructor ---
@@ -106,10 +140,8 @@ namespace Logonaut.UI.ViewModels
         private string _searchText = "";
 
         // Properties for target selection in AvalonEdit
-        [ObservableProperty]
-        private int _currentMatchOffset = -1;
-        [ObservableProperty]
-        private int _currentMatchLength = 0;
+        [ObservableProperty] private int _currentMatchOffset = -1;
+        [ObservableProperty] private int _currentMatchLength = 0;
 
         // Status text for search
         public string SearchStatusText
@@ -117,7 +149,6 @@ namespace Logonaut.UI.ViewModels
             get
             {
                 if (string.IsNullOrEmpty(SearchText)) return "";
-                // Use _searchMatches for status count, SearchMarkers is just for the ruler display
                 if (_searchMatches.Count == 0) return "Phrase not found";
                 if (_currentSearchIndex == -1) return $"{_searchMatches.Count} matches found";
                 return $"Match {_currentSearchIndex + 1} of {_searchMatches.Count}";
@@ -127,15 +158,6 @@ namespace Logonaut.UI.ViewModels
         // Path of the currently monitored log file.
         [ObservableProperty]
         private string? _currentLogFilePath;
-
-        // Hierarchical structure of FilterViewModel objects for the filter tree UI.
-        public ObservableCollection<FilterViewModel> FilterProfiles { get; } = new();
-
-        // Currently selected node in the filter tree UI.
-        [ObservableProperty]
-        [NotifyCanExecuteChangedFor(nameof(RemoveFilterCommand))]
-        [NotifyCanExecuteChangedFor(nameof(ToggleEditCommand))]
-        private FilterViewModel? _selectedFilter;
 
         // Configured number of context lines to display around filter matches.
         [ObservableProperty]
@@ -152,7 +174,7 @@ namespace Logonaut.UI.ViewModels
         private bool _highlightTimestamps = true;
 
         // Collection of filter patterns (substrings/regex) for highlighting.
-        // Note: This state is derived by traversing FilterProfiles (see Highlighting Configuration).
+        // Note: This state is derived by traversing the *active* FilterProfile.
         [ObservableProperty]
         private ObservableCollection<string> _filterSubstrings = new();
 
@@ -164,46 +186,98 @@ namespace Logonaut.UI.ViewModels
         [NotifyPropertyChangedFor(nameof(SearchStatusText))]
         private bool _isCaseSensitiveSearch = false;
 
+
+        /// <summary>
+        /// Collection of all available filter profiles (VMs) for the ComboBox.
+        /// </summary>
+        public ObservableCollection<FilterProfileViewModel> AvailableProfiles { get; } = new();
+
+        /// <summary>
+        /// The currently selected filter profile VM in the ComboBox.
+        /// Setting this property triggers updates to the TreeView and filtering.
+        /// </summary>
+        [ObservableProperty]
+        [NotifyCanExecuteChangedFor(nameof(RenameProfileCommand))]
+        [NotifyCanExecuteChangedFor(nameof(DeleteProfileCommand))]
+        [NotifyCanExecuteChangedFor(nameof(AddFilterCommand))] // Enable adding nodes if profile selected
+        [NotifyCanExecuteChangedFor(nameof(RemoveFilterNodeCommand))] // Depends on node selection *within* active tree
+        [NotifyCanExecuteChangedFor(nameof(ToggleEditNodeCommand))] // Depends on node selection *within* active tree
+        private FilterProfileViewModel? _activeFilterProfile;
+
+        /// <summary>
+        /// The filter node currently selected within the TreeView of the ActiveFilterProfile.
+        /// </summary>
+        [ObservableProperty]
+        [NotifyCanExecuteChangedFor(nameof(AddFilterCommand))] // Enable adding if composite selected
+        [NotifyCanExecuteChangedFor(nameof(RemoveFilterNodeCommand))] // Enable removing selected node
+        [NotifyCanExecuteChangedFor(nameof(ToggleEditNodeCommand))] // Enable editing selected node
+        private FilterViewModel? _selectedFilterNode;
+
+        /// <summary>
+        /// Collection exposed specifically for the TreeView's ItemsSource.
+        /// Contains only the root node of the ActiveFilterProfile's tree.
+        /// </summary>
+        public ObservableCollection<FilterViewModel> ActiveTreeRootNodes { get; } = new();
+
+        // --- Persistence Methods ---
         private void LoadPersistedSettings()
         {
             LogonautSettings settings;
             try
             {
                 settings = SettingsManager.LoadSettings();
+                // SettingsManager now ensures at least one profile exists and LastActiveProfileName is valid
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error loading settings: {ex.Message}", "Settings Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                return;
+                MessageBox.Show($"Fatal error loading settings: {ex.Message}\nWill proceed with defaults.", "Settings Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                settings = new LogonautSettings(); // Use defaults
+                // Ensure default profile exists
+                if (!settings.FilterProfiles.Any())
+                {
+                    settings.FilterProfiles.Add(new FilterProfile("Default", null));
+                    settings.LastActiveProfileName = "Default";
+                }
             }
 
             // Apply loaded settings to ViewModel properties
-            // Use SetProperty directly or let ObservableProperty handle notifications
             ContextLines = settings.ContextLines;
             ShowLineNumbers = settings.ShowLineNumbers;
             HighlightTimestamps = settings.HighlightTimestamps;
             IsCaseSensitiveSearch = settings.IsCaseSensitiveSearch;
             // TODO: Apply theme based on settings.LastTheme
 
-            // Rebuild the FilterProfiles collection from the loaded filter
-            FilterProfiles.Clear(); // Clear any default/existing
-            if (settings.RootFilter != null)
+            // Rebuild the AvailableProfiles collection from the loaded filter profile models
+            AvailableProfiles.Clear();
+            FilterProfileViewModel? profileToSelect = null;
+            foreach (var profileModel in settings.FilterProfiles)
             {
-                // The callback passed here ensures changes trigger updates later
-                var rootFilterViewModel = new FilterViewModel(settings.RootFilter, TriggerFilterUpdate);
-                FilterProfiles.Add(rootFilterViewModel);
-                // Optionally select the root filter automatically
-                // SelectedFilter = rootFilterViewModel;
+                // Pass the TriggerFilterUpdate method as the callback for changes *within* the profile tree
+                var profileVM = new FilterProfileViewModel(profileModel, TriggerFilterUpdate);
+                AvailableProfiles.Add(profileVM);
+                // Identify the one to select based on the saved name
+                if (profileModel.Name == settings.LastActiveProfileName)
+                {
+                    profileToSelect = profileVM;
+                }
             }
-            // If settings.RootFilter was null, FilterProfiles remains empty.
+
+            // Set the active profile. Should always find one due to validation in SettingsManager.
+            // This assignment will trigger OnActiveFilterProfileChanged.
+            ActiveFilterProfile = profileToSelect ?? AvailableProfiles.FirstOrDefault(); // Fallback just in case
         }
 
         private void SaveCurrentSettings()
         {
-            // Create a settings object from the current ViewModel state
+            // Ensure ActiveFilterProfile is up-to-date before saving its name
+            string? activeProfileName = ActiveFilterProfile?.Name;
+
             var settingsToSave = new LogonautSettings
             {
-                RootFilter = GetCurrentFilter(), // Get the current filter tree
+                // Extract the models from the ViewModels
+                FilterProfiles = AvailableProfiles.Select(vm => vm.Model).ToList(),
+                LastActiveProfileName = activeProfileName, // Save the name of the active one
+                // --- Other settings ---
                 ContextLines = this.ContextLines,
                 ShowLineNumbers = this.ShowLineNumbers,
                 HighlightTimestamps = this.HighlightTimestamps,
@@ -224,212 +298,374 @@ namespace Logonaut.UI.ViewModels
         #endregion // --- UI State Management ---
 
         #region // --- Command Handling ---
-        // Defines RelayCommands executed in response to user interactions.
 
-        // --- Filter Manipulation Commands ---
-        [RelayCommand] private void AddSubstringFilter() => AddFilter(new SubstringFilter(""));
-        [RelayCommand] private void AddRegexFilter() => AddFilter(new RegexFilter(".*"));
-        [RelayCommand] private void AddAndFilter() => AddFilter(new AndFilter());
-        [RelayCommand] private void AddOrFilter() => AddFilter(new OrFilter());
-        [RelayCommand] private void AddNorFilter() => AddFilter(new NorFilter());
-
-        [RelayCommand(CanExecute = nameof(CanRemoveFilter))]
-        private void RemoveFilter()
+        // === Profile Management Commands ===
+        [RelayCommand]
+        private void CreateNewProfile()
         {
-            if (SelectedFilter == null) return;
-
-            FilterViewModel? parent = SelectedFilter.Parent;
-            bool removed = false;
-
-            if (FilterProfiles.Contains(SelectedFilter))
+            int counter = 1;
+            string baseName = "New Profile ";
+            string newName = baseName + counter;
+            // Ensure generated name is unique
+            while (AvailableProfiles.Any(p => p.Name.Equals(newName, StringComparison.OrdinalIgnoreCase)))
             {
-                FilterProfiles.Remove(SelectedFilter);
-                removed = true;
-                SelectedFilter = null; // Clear selection if root was removed
+                counter++;
+                newName = baseName + counter;
             }
+
+            // Create the underlying model and its ViewModel wrapper
+            var newProfileModel = new FilterProfile(newName, null); // Start with a simple root
+            var newProfileVM = new FilterProfileViewModel(newProfileModel, TriggerFilterUpdate);
+
+            AvailableProfiles.Add(newProfileVM);
+            ActiveFilterProfile = newProfileVM; // Select the new profile (this triggers update via OnChanged)
+            SaveCurrentSettings(); // Save changes immediately
+        }
+
+        [RelayCommand(CanExecute = nameof(CanManageActiveProfile))]
+        private void RenameProfile()
+        {
+            if (ActiveFilterProfile == null) return;
+
+            string currentName = ActiveFilterProfile.Name;
+            // Use IInputPromptService to get new name
+            string? newName = _inputPromptService.ShowInputDialog("Rename Filter Profile", $"Enter new name for '{currentName}':", currentName);
+
+            if (!string.IsNullOrWhiteSpace(newName) && newName != currentName)
+            {
+                // Check for name conflicts (case-insensitive)
+                if (AvailableProfiles.Any(p => p != ActiveFilterProfile && p.Name.Equals(newName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    MessageBox.Show($"A profile named '{newName}' already exists.", "Rename Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+                // Update the ViewModel property, which updates the Model property via its OnChanged handler
+                ActiveFilterProfile.Name = newName;
+                // Force ComboBox refresh if binding doesn't update automatically when DisplayMemberPath source changes
+                // This typically requires replacing the item or using a more complex VM structure if inline update needed.
+                // A simpler way is often to just rely on the user re-selecting if the ComboBox doesn't update visually.
+                // Or, re-sort/refresh the AvailableProfiles collection if necessary.
+                SaveCurrentSettings(); // Save changes
+            }
+        }
+
+        [RelayCommand(CanExecute = nameof(CanManageActiveProfile))]
+        private void DeleteProfile()
+        {
+            if (ActiveFilterProfile == null) return;
+
+            // Prevent deleting the last profile? Or ensure a default is created.
+            if (AvailableProfiles.Count <= 1)
+            {
+                MessageBox.Show("Cannot delete the last filter profile.", "Delete Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+
+            var result = MessageBox.Show($"Are you sure you want to delete the profile '{ActiveFilterProfile.Name}'?",
+                                         "Confirm Deletion", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+
+            if (result == MessageBoxResult.Yes)
+            {
+                var profileToRemove = ActiveFilterProfile;
+                int currentIndex = AvailableProfiles.IndexOf(profileToRemove);
+                AvailableProfiles.Remove(profileToRemove);
+
+                // Select another profile (e.g., the previous one or the first one)
+                ActiveFilterProfile = AvailableProfiles.ElementAtOrDefault(Math.Max(0, currentIndex - 1)) ?? AvailableProfiles.First();
+                // Setting ActiveFilterProfile triggers the update
+
+                SaveCurrentSettings(); // Save changes
+            }
+        }
+
+        private bool CanManageActiveProfile() => ActiveFilterProfile != null;
+
+        // === Filter Node Manipulation Commands (Operate on Active Profile's Tree) ===
+
+        // Combined Add Filter command - type determined by parameter
+        [RelayCommand(CanExecute = nameof(CanAddFilterNode))]
+        private void AddFilter(object? filterTypeParam) // Parameter likely string like "Substring", "And", etc.
+        {
+            if (ActiveFilterProfile?.RootFilterViewModel == null && SelectedFilterNode == null)
+            {
+                // No profile active OR tree is empty and nothing selected - target the profile root
+                if (ActiveFilterProfile == null) return; // Should not happen if CanExecute is right
+            }
+            else if (SelectedFilterNode != null && !(SelectedFilterNode.FilterModel is CompositeFilter))
+            {
+                // Node selected, but it's not composite - cannot add child
+                MessageBox.Show("Cannot add a child node to the selected filter type. Select a composite filter (AND, OR, NOR) or add a new root.", "Add Filter Node", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+             IFilter newFilterNodeModel;
+             string type = filterTypeParam as string ?? string.Empty;
+
+             switch(type)
+             {
+                 case "Substring": newFilterNodeModel = new SubstringFilter(""); break;
+                 case "Regex": newFilterNodeModel = new RegexFilter(".*"); break;
+                 case "And": newFilterNodeModel = new AndFilter(); break;
+                 case "Or": newFilterNodeModel = new OrFilter(); break;
+                 case "Nor": newFilterNodeModel = new NorFilter(); break;
+                 default: return; // Unknown type
+             }
+
+             // Note: The callback passed down when creating FilterViewModel ensures TriggerFilterUpdate is called
+             FilterViewModel newFilterNodeVM = new FilterViewModel(newFilterNodeModel, TriggerFilterUpdate);
+
+             FilterViewModel? targetParentVM = SelectedFilterNode ?? ActiveFilterProfile?.RootFilterViewModel;
+
+             // Case 1: Active profile's tree is currently empty
+             if (ActiveFilterProfile?.RootFilterViewModel == null)
+             {
+                 ActiveFilterProfile?.SetModelRootFilter(newFilterNodeModel); // This sets model and refreshes RootFilterViewModel
+                 UpdateActiveTreeRootNodes(ActiveFilterProfile); // Explicitly update the collection bound to the TreeView
+                 SelectedFilterNode = ActiveFilterProfile?.RootFilterViewModel; // Select the new root
+             }
+             // Case 2: A composite node is selected - add as child
+             else if (SelectedFilterNode != null && SelectedFilterNode.FilterModel is CompositeFilter)
+             {
+                 // AddChildFilter takes the MODEL, adds it, creates the child VM, and adds to Children collection
+                 SelectedFilterNode.AddChildFilter(newFilterNodeModel);
+                 SelectedFilterNode.IsExpanded = true; // Expand parent
+
+                 // Find and select the newly created child VM
+                 var addedVM = SelectedFilterNode.Children.LastOrDefault(vm => vm.FilterModel == newFilterNodeModel);
+                 if (addedVM != null) SelectedFilterNode = addedVM;
+             }
+             // Case 3: No node selected (but tree exists), or non-composite selected - Replace root? Show Error?
+             // Current Requirement: Select a composite node first. Let's enforce this.
+             else // No node selected or non-composite selected
+             {
+                  MessageBox.Show("Please select a composite filter node (AND, OR, NOR) in the tree to add a child, or remove the existing root to start over.", "Add Filter Node", MessageBoxButton.OK, MessageBoxImage.Information);
+                  return; // Do nothing further
+             }
+
+            // Editing logic: If the new node is editable, start editing
+             if (SelectedFilterNode != null && SelectedFilterNode.IsEditable)
+             {
+                SelectedFilterNode.BeginEditCommand.Execute(null);
+             }
+             // TriggerFilterUpdate() is handled by callbacks within AddChildFilter/SetModelRootFilter
+             SaveCurrentSettings();
+        }
+        // Can add if a profile is active. Adding logic handles where it goes.
+        private bool CanAddFilterNode() => ActiveFilterProfile != null;
+
+
+        [RelayCommand(CanExecute = nameof(CanRemoveFilterNode))]
+        private void RemoveFilterNode()
+        {
+            if (SelectedFilterNode == null || ActiveFilterProfile?.RootFilterViewModel == null) return;
+
+            FilterViewModel? parent = SelectedFilterNode.Parent;
+
+            // Case 1: Removing the root node of the active profile
+            if (SelectedFilterNode == ActiveFilterProfile.RootFilterViewModel)
+            {
+                ActiveFilterProfile.SetModelRootFilter(null); // Clears the model and VM tree
+                SelectedFilterNode = null; // Clear selection
+            }
+            // Case 2: Removing a child node
             else if (parent != null)
             {
-                parent.RemoveChild(SelectedFilter); // RemoveChild internally uses callback
-                removed = true;
-                SelectedFilter = parent; // Select parent after removing child
+                var nodeToRemove = SelectedFilterNode; // Keep reference
+                SelectedFilterNode = parent; // Select parent *before* removing child
+                parent.RemoveChild(nodeToRemove); // RemoveChild uses callback internally
             }
-
-            if (removed)
-            {
-                TriggerFilterUpdate(); // Orchestration: Signal processor after change
-            }
+            // TriggerFilterUpdate(); // Handled by callbacks
+            SaveCurrentSettings();
         }
-        private bool CanRemoveFilter() => SelectedFilter != null;
+        private bool CanRemoveFilterNode() => SelectedFilterNode != null && ActiveFilterProfile != null;
 
-        [RelayCommand(CanExecute = nameof(CanToggleEdit))]
-        private void ToggleEdit()
+        [RelayCommand(CanExecute = nameof(CanToggleEditNode))]
+        private void ToggleEditNode()
         {
-            // Logic relies on FilterViewModel's BeginEdit/EndEdit which uses the callback
-            // to trigger TriggerFilterUpdate indirectly.
-            if (SelectedFilter?.IsEditable ?? false)
+            if (SelectedFilterNode?.IsEditable ?? false)
             {
-                if (SelectedFilter.IsNotEditing)
-                    SelectedFilter.BeginEdit();
+                if (SelectedFilterNode.IsNotEditing)
+                    SelectedFilterNode.BeginEditCommand.Execute(null);
                 else
-                    SelectedFilter.EndEdit();
+                    SelectedFilterNode.EndEditCommand.Execute(null); // EndEdit uses callback, which triggers save
             }
         }
-        private bool CanToggleEdit() => SelectedFilter?.IsEditable ?? false;
+        private bool CanToggleEditNode() => SelectedFilterNode?.IsEditable ?? false;
 
-        // --- File Handling Command ---
+        // === Other Commands (File, Search, Context Lines) ===
+        // Ensure they interact correctly with the Active Profile concept if needed
+
         [RelayCommand]
         private void OpenLogFile()
         {
-            // Interaction with UI Services:
             string? selectedFile = _fileDialogService.OpenFile("Select a log file", "Log Files|*.log;*.txt|All Files|*.*");
-            if (string.IsNullOrEmpty(selectedFile))
-                return;
+            if (string.IsNullOrEmpty(selectedFile)) return;
 
-            // Orchestration & State Update:
-            _logFilterProcessor.Reset(); // Reset processor first
-            FilteredLogLines.Clear();    // Clear UI collection
-            ScheduleLogTextUpdate();     // Update text display to empty
+            _logFilterProcessor.Reset(); // Reset processor state (clears doc, etc.)
+            FilteredLogLines.Clear();    // Clear UI collection immediately
+            ScheduleLogTextUpdate();     // Update AvalonEdit to empty
             CurrentLogFilePath = selectedFile; // Update state
 
             try
             {
-                // Interaction with Log Tailing Service:
-                LogTailerManager.Instance.ChangeFile(selectedFile);
-
-                // After successfully changing the file and resetting the processor,
-                // tell the processor to apply the filters currently defined in the UI.
+                LogTailerManager.Instance.ChangeFile(selectedFile); // Start tailing new file
+                // After starting tailer and resetting processor, trigger processing using the *current* active filter
                 TriggerFilterUpdate();
             }
             catch (Exception ex)
             {
-                IsBusyFiltering = false; // Hide busy on error
+                IsBusyFiltering = false; // Ensure busy indicator off on error
                 MessageBox.Show($"Error opening or monitoring log file '{selectedFile}':\n{ex.Message}", "File Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                CurrentLogFilePath = null; // Reset state on error
-                _logFilterProcessor.Reset(); // Also reset processor
+                CurrentLogFilePath = null; // Reset state
+                _logFilterProcessor.Reset(); // Ensure processor is reset on error too
             }
         }
 
-        // --- Search Commands ---
         [RelayCommand(CanExecute = nameof(CanSearch))]
         private void PreviousSearch()
         {
             if (_searchMatches.Count == 0) return;
-
-            _currentSearchIndex--;
-            if (_currentSearchIndex < 0)
-            {
-                _currentSearchIndex = _searchMatches.Count - 1; // Wrap around to the end
-            }
+            _currentSearchIndex = (_currentSearchIndex - 1 + _searchMatches.Count) % _searchMatches.Count; // Wrap around
             SelectAndScrollToCurrentMatch();
-            OnPropertyChanged(nameof(SearchStatusText)); // Update status
+            OnPropertyChanged(nameof(SearchStatusText));
         }
 
         [RelayCommand(CanExecute = nameof(CanSearch))]
         private void NextSearch()
         {
             if (_searchMatches.Count == 0) return;
-
-            _currentSearchIndex++;
-            if (_currentSearchIndex >= _searchMatches.Count)
-            {
-                _currentSearchIndex = 0; // Wrap around to the start
-            }
+            _currentSearchIndex = (_currentSearchIndex + 1) % _searchMatches.Count; // Wrap around
             SelectAndScrollToCurrentMatch();
-            OnPropertyChanged(nameof(SearchStatusText)); // Update status
+            OnPropertyChanged(nameof(SearchStatusText));
         }
         private bool CanSearch() => !string.IsNullOrWhiteSpace(SearchText);
 
-        // Helper to update selection properties based on current index
         private void SelectAndScrollToCurrentMatch()
         {
             if (_currentSearchIndex >= 0 && _currentSearchIndex < _searchMatches.Count)
             {
                 var match = _searchMatches[_currentSearchIndex];
-                // Update properties bound to AvalonEditHelper
                 CurrentMatchOffset = match.Offset;
                 CurrentMatchLength = match.Length;
             }
             else
             {
-                // Clear selection if index is invalid
                 CurrentMatchOffset = -1;
                 CurrentMatchLength = 0;
             }
         }
 
-        // Trigger search update when SearchText changes
-        partial void OnSearchTextChanged(string value)
-        {
-            // Delay slightly or use async if searching becomes slow
-            UpdateSearchMatches();
-        }
+        partial void OnSearchTextChanged(string value) => UpdateSearchMatches(); // Trigger search update
 
-        // --- Highlighting Command ---
         [RelayCommand]
         private void UpdateFilterSubstrings() // Triggered by TriggerFilterUpdate
         {
             var newFilterSubstrings = new ObservableCollection<string>();
-            if (FilterProfiles.Count > 0)
+            // Traverse the tree of the *currently active* profile
+            if (ActiveFilterProfile?.RootFilterViewModel != null)
             {
-                TraverseFilterTreeForHighlighting(FilterProfiles[0], newFilterSubstrings);
+                TraverseFilterTreeForHighlighting(ActiveFilterProfile.RootFilterViewModel, newFilterSubstrings);
             }
-            FilterSubstrings = newFilterSubstrings; // Update the UI State property
+            FilterSubstrings = newFilterSubstrings; // Update the property bound to AvalonEditHelper
+        }
+
+        [RelayCommand(CanExecute = nameof(CanDecrementContextLines))]
+        private void DecrementContextLines()
+        {
+            ContextLines = Math.Max(0, ContextLines - 1);
+            // OnContextLinesChanged triggers TriggerFilterUpdate
+        }
+        private bool CanDecrementContextLines() => ContextLines > 0;
+
+        [RelayCommand]
+        private void IncrementContextLines()
+        {
+            ContextLines++;
+            // OnContextLinesChanged triggers TriggerFilterUpdate
+        }
+
+        partial void OnContextLinesChanged(int value)
+        {
+            DecrementContextLinesCommand.NotifyCanExecuteChanged();
+            TriggerFilterUpdate(); // Trigger re-filter when context changes
         }
 
         #endregion // --- Command Handling ---
 
-        #region // --- Filter Tree Management (UI Representation) ---
-        // Manages the FilterProfiles collection and interaction logic for the filter tree UI.
+        #region // --- Orchestration & Updates ---
 
-        // Helper method used by Add*Filter commands.
-        private void AddFilter(IFilter filter)
+        // This method is automatically called by the CommunityToolkit.Mvvm generator
+        // when the ActiveFilterProfile property's value changes.
+        partial void OnActiveFilterProfileChanged(FilterProfileViewModel? oldValue, FilterProfileViewModel? newValue)
         {
-            // Creates the ViewModel, passing the callback for orchestration.
-            var newFilterVM = new FilterViewModel(filter, TriggerFilterUpdate);
-
-            if (FilterProfiles.Count == 0)
-            {
-                FilterProfiles.Add(newFilterVM);
-                SelectedFilter = newFilterVM; // Update UI State: Auto-select the new root
-            }
-            else if (SelectedFilter != null && SelectedFilter.FilterModel is CompositeFilter)
-            {
-                // AddChildFilter internally adds to FilterViewModel's Children collection.
-                SelectedFilter.AddChildFilter(filter);
-                // We want composite filter to be expanded when a child is added.
-                SelectedFilter.IsExpanded = true;
-            }
-            else
-            {
-                // UI Feedback / Interaction Logic:
-                MessageBox.Show(
-                    SelectedFilter == null
-                    ? "Please select a composite filter node (And, Or, Nor) first to add a child."
-                    : "Selected filter is not a composite filter (And, Or, Nor). Cannot add a child filter here.",
-                    "Add Filter Information", MessageBoxButton.OK, MessageBoxImage.Information);
-                return; // Don't trigger update if nothing was added
-            }
-            // Orchestration: Signal processor after structure change.
+            // When the active profile changes:
+            // 1. Update the collection bound to the TreeView
+            UpdateActiveTreeRootNodes(newValue);
+            // 2. Clear the node selection within the TreeView
+            SelectedFilterNode = null;
+            // 3. Trigger a re-filter using the new profile's rules.
             TriggerFilterUpdate();
+            // 4. Save the settings
+            SaveCurrentSettings();
         }
 
-        // Handles changes to the SelectedFilter property (UI State).
-        partial void OnSelectedFilterChanged(FilterViewModel? oldValue, FilterViewModel? newValue)
+        /// <summary>
+        /// Updates the ActiveTreeRootNodes collection based on the new active profile.
+        /// </summary>
+        private void UpdateActiveTreeRootNodes(FilterProfileViewModel? activeProfile) // <-- NEW HELPER
         {
-            // Ensure edit mode is ended if selection moves away.
-            if (oldValue != null && oldValue.IsEditing)
+            ActiveTreeRootNodes.Clear();
+            if (activeProfile?.RootFilterViewModel != null)
             {
-                oldValue.EndEditCommand.Execute(null);
+                ActiveTreeRootNodes.Add(activeProfile.RootFilterViewModel);
             }
-            // Update IsSelected state on ViewModels for visual feedback (if needed by template).
-            if (oldValue != null) oldValue.IsSelected = false;
-            if (newValue != null) newValue.IsSelected = true;
+             OnPropertyChanged(nameof(ActiveTreeRootNodes)); // Explicitly notify if needed, though ObservableCollection handles it
         }
 
-        #endregion // --- Filter Tree Management (UI Representation) ---
+        // Central method to signal the processor that filters or context may have changed.
+        // Called by:
+        // - OnActiveFilterProfileChanged
+        // - OnContextLinesChanged
+        // - Callbacks passed to FilterViewModel instances (triggered by Enable toggle, EndEdit)
+        // - Callbacks from FilterProfileViewModel (e.g., SetModelRootFilter)
+        private void TriggerFilterUpdate()
+        {
+            // Simple check to avoid queuing multiple simultaneous updates. More robust
+            // handling might involve cancellation or ensuring only the latest runs.
+            if (_isBusyFiltering)
+            {
+                Debug.WriteLine("TriggerFilterUpdate skipped: Already busy.");
+                return;
+            }
+            IsBusyFiltering = true;
 
-        #region // --- Orchestration with ILogFilterProcessor ---
-        // Coordinates interactions with the background filtering service.
+            // Post the work to the UI thread's dispatcher queue. This allows the
+            // IsBusyFiltering = true change to render before potentially blocking work.
+            _uiContext.Post(_ =>
+            {
+                try
+                {
+                    // Get the filter model from the *currently selected* profile VM
+                    IFilter? filterToApply = ActiveFilterProfile?.Model?.RootFilter ?? new TrueFilter();
+
+                    // Send the filter and context lines to the background processor
+                    _logFilterProcessor.UpdateFilterSettings(filterToApply, ContextLines);
+
+                    // Update highlighting rules based on the *active* filter tree
+                    UpdateFilterSubstringsCommand.Execute(null);
+                }
+                catch (Exception ex)
+                {
+                     // Handle errors during the setup phase on the UI thread
+                     Debug.WriteLine($"Error preparing filter update: {ex}");
+                     IsBusyFiltering = false; // Ensure busy indicator is turned off on error
+                     MessageBox.Show($"Error updating filter: {ex.Message}", "Filter Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+                // IsBusyFiltering is turned off by ApplyFilteredUpdate when the Replace operation completes.
+            }, null);
+        }
+
 
         // Called by the processor subscription to apply incoming updates.
         private void ApplyFilteredUpdate(FilteredUpdate update)
@@ -439,22 +675,17 @@ namespace Logonaut.UI.ViewModels
             if (wasReplace)
             {
                 ReplaceFilteredLines(update.Lines); // Updates UI State (FilteredLogLines)
-                SearchMarkers.Clear(); // Clear markers when replacing content
-                _searchMatches.Clear(); // Clear internal match list
-                _currentSearchIndex = -1; // Reset search index
+                // Search markers are cleared and updated after LogText changes
             }
             else // Append
             {
                 AddFilteredLines(update.Lines); // Updates UI State (FilteredLogLines)
-                // Appending might invalidate existing marker offsets if done simply.
-                // For now, we'll let the next search update handle markers correctly.
-                // TODO: A more advanced approach might try to update marker offsets, but
-                // re-running search on the updated LogText is safer.
             }
 
             // Schedule the LogText update AFTER updating FilteredLogLines
             ScheduleLogTextUpdate(); // This now also triggers UpdateSearchMatches
 
+            // Turn off busy indicator only after a full Replace operation completes
             if (wasReplace)
             {
                  _uiContext.Post(_ => { IsBusyFiltering = false; }, null);
@@ -462,63 +693,29 @@ namespace Logonaut.UI.ViewModels
         }
 
         // Helper methods called by ApplyFilteredUpdate to modify UI collections.
-        // These also trigger the Log Display Text Generation.
         private void AddFilteredLines(IReadOnlyList<FilteredLogLine> linesToAdd)
         {
             foreach (var line in linesToAdd)
             {
                 FilteredLogLines.Add(line);
             }
-            ScheduleLogTextUpdate(); // Trigger text update
+            // ScheduleLogTextUpdate(); // Schedule is called by ApplyFilteredUpdate now
         }
 
         private void ReplaceFilteredLines(IReadOnlyList<FilteredLogLine> newLines)
         {
             FilteredLogLines.Clear();
+            _searchMatches.Clear(); // Clear internal match list on replace
+            _searchMarkers.Clear(); // Clear ruler markers
+            _currentSearchIndex = -1; // Reset search index
+            SelectAndScrollToCurrentMatch(); // Clear editor selection
+
             foreach (var line in newLines)
             {
                 FilteredLogLines.Add(line);
             }
-            ScheduleLogTextUpdate(); // Trigger text update
+            // ScheduleLogTextUpdate(); // Schedule is called by ApplyFilteredUpdate now
         }
-
-        // Central method to signal the processor that filters or context may have changed.
-        private void TriggerFilterUpdate()
-        {
-            // Show busy indicator *before* starting the potentially long operation.
-            IsBusyFiltering = true;
-
-            // Post the actual filter update call to the dispatcher queue.
-            // This allows the UI to update (show the spinner) before the potentially
-            // blocking call to GetCurrentFilter or UpdateFilterSettings happens.
-             _uiContext.Post(_ =>
-             {
-                 IFilter? currentFilter = GetCurrentFilter(); // Reads filter tree state
-                 _logFilterProcessor.UpdateFilterSettings(currentFilter ?? new TrueFilter(), ContextLines); // Sends to processor
-                 UpdateFilterSubstringsCommand.Execute(null); // Triggers Highlighting Configuration update
-             }, null);
-             // Alternative using Dispatcher:
-             // Application.Current.Dispatcher.BeginInvoke(new Action(() =>
-             //{
-             //    var currentFilter = GetCurrentFilter(); // Reads filter tree state
-             //    _logFilterProcessor.UpdateFilterSettings(currentFilter, ContextLines); // Sends to processor
-             //    UpdateFilterSubstringsCommand.Execute(null); // Triggers Highlighting Configuration update
-             //}));
-        }
-
-        // Handles errors reported by the processor's observable stream.
-        private void HandleProcessorError(string contextMessage, Exception ex)
-        {
-            Debug.WriteLine($"{contextMessage}: {ex}");
-            // TODO: Implement user-facing error reporting (e.g., status bar, dialog).
-            // Example:
-            // _uiContext.Post(_ => MessageBox.Show($"Error processing logs: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Warning), null);
-        }
-
-        #endregion // --- Orchestration with ILogFilterProcessor ---
-
-        #region // --- Log Display Text Generation ---
-        // Manages the asynchronous update of the LogText property for AvalonEdit.
 
         // Schedules the LogText update to run after current UI operations.
         private void ScheduleLogTextUpdate()
@@ -528,13 +725,9 @@ namespace Logonaut.UI.ViewModels
                 if (!_logTextUpdateScheduled)
                 {
                     _logTextUpdateScheduled = true;
-                    // Interaction with UI Services (SynchronizationContext):
                     _uiContext.Post(_ =>
                     {
-                        lock (_logTextUpdateLock)
-                        {
-                            _logTextUpdateScheduled = false;
-                        }
+                        lock (_logTextUpdateLock) { _logTextUpdateScheduled = false; }
                         UpdateLogTextInternal(); // Execute the update
                     }, null);
                 }
@@ -552,18 +745,11 @@ namespace Logonaut.UI.ViewModels
                 // Update search matches and markers AFTER LogText is updated
                 UpdateSearchMatches();
             }
-            catch (InvalidOperationException ioex)
-            {
-                // Handle potential collection modified error (should be rare with Post)
-                Debug.WriteLine($"Error during UpdateLogTextInternal (Collection modified?): {ioex}");
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Generic error during UpdateLogTextInternal: {ex}");
-            }
+            catch (InvalidOperationException ioex) { Debug.WriteLine($"Error during UpdateLogTextInternal (Collection modified?): {ioex}"); }
+            catch (Exception ex) { Debug.WriteLine($"Generic error during UpdateLogTextInternal: {ex}"); }
         }
 
-        // Core search logic
+        // Core search logic - updates internal list and ruler markers
         private void UpdateSearchMatches()
         {
              string currentSearchTerm = SearchText; // Use local copy
@@ -573,105 +759,98 @@ namespace Logonaut.UI.ViewModels
              _searchMatches.Clear();
              SearchMarkers.Clear(); // Clear the collection for the ruler
              _currentSearchIndex = -1;
-             // Clear selection in editor immediately
-             SelectAndScrollToCurrentMatch();
+             SelectAndScrollToCurrentMatch(); // Clear selection in editor
 
              if (string.IsNullOrEmpty(currentSearchTerm) || string.IsNullOrEmpty(textToSearch))
              {
-                 OnPropertyChanged(nameof(SearchStatusText)); // Update status (e.g., clear it)
-                 return; // Nothing to search for or in
+                 OnPropertyChanged(nameof(SearchStatusText)); // Update status
+                 return;
              }
 
              int offset = 0;
+             var tempMarkers = new List<SearchResult>(); // Build temporary list for ruler
              while (offset < textToSearch.Length)
              {
-                 // Use case sensitivity setting for search
                  int foundIndex = textToSearch.IndexOf(
-                     currentSearchTerm, 
-                     offset, 
+                     currentSearchTerm,
+                     offset,
                      IsCaseSensitiveSearch ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase);
 
-                 if (foundIndex == -1)
-                 {
-                     break; // No more matches
-                 }
+                 if (foundIndex == -1) break;
 
                  var newMatch = new SearchResult(foundIndex, currentSearchTerm.Length);
-                 _searchMatches.Add(newMatch);
-                 SearchMarkers.Add(newMatch); // Add to the collection for the ruler
-                 offset = foundIndex + 1;
+                 _searchMatches.Add(newMatch); // Add to internal list
+                 tempMarkers.Add(newMatch);    // Add to temp list for ruler batch update
+
+                 offset = foundIndex + 1; // Continue search after the start of the current match
+             }
+
+             // Batch update the observable collection for the ruler for potentially better perf
+             foreach (var marker in tempMarkers)
+             {
+                 SearchMarkers.Add(marker);
              }
 
              OnPropertyChanged(nameof(SearchStatusText)); // Update match count display
         }
 
-        // Trigger search update when case sensitivity changes
-        partial void OnIsCaseSensitiveSearchChanged(bool value)
-        {
-            UpdateSearchMatches();
-        }
+        partial void OnIsCaseSensitiveSearchChanged(bool value) => UpdateSearchMatches(); // Trigger search update
 
-        /// <summary>
-        /// Loads log content from a text string, similar to loading from a file
-        /// </summary>
-        /// <param name="text">The text content to load as log</param>
         public void LoadLogFromText(string text)
         {
-            try
-            {
-                // Clear existing log content
-                LogDoc.Clear();
-                FilteredLogLines.Clear();
-                LogText = string.Empty;
-                LogDoc.AddInitialLines(text);
+             try
+             {
+                 _logFilterProcessor.Reset(); // Reset processor
+                 LogDoc.Clear();              // Clear internal document storage
+                 FilteredLogLines.Clear();    // Clear UI collection
+                 LogText = string.Empty;      // Clear editor text via binding
+                 _searchMatches.Clear();      // Clear search state
+                 _searchMarkers.Clear();
+                 _currentSearchIndex = -1;
 
-                // Trigger filter update to process the new content
-                TriggerFilterUpdate();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Error loading log content: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
+                 LogDoc.AddInitialLines(text); // Add new lines to storage
+
+                 // Trigger filter update to process the new content using the active profile
+                 TriggerFilterUpdate();
+             }
+             catch (Exception ex)
+             {
+                 MessageBox.Show($"Error loading log content: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+             }
         }
 
-        // Update search index based on clicked position in text
         public void UpdateSearchIndexFromCharacterOffset(int characterOffset)
         {
-            if (_searchMatches.Count == 0) return;
+             if (_searchMatches.Count == 0) return;
 
-            // Find the closest match before or at the clicked position
-            int newIndex = -1;
-            int minDistance = int.MaxValue;
+             // Find the match whose start offset is closest to the click offset
+             int newIndex = _searchMatches
+                 .Select((match, index) => new { match, index, distance = Math.Abs(match.Offset - characterOffset) })
+                 .OrderBy(item => item.distance)
+                 .FirstOrDefault()?.index ?? -1;
 
-            for (int i = 0; i < _searchMatches.Count; i++)
-            {
-                var match = _searchMatches[i];
-                int distance = Math.Abs(match.Offset - characterOffset);
-                
-                if (distance < minDistance)
-                {
-                    minDistance = distance;
-                    newIndex = i;
-                }
-            }
-
-            if (newIndex != -1 && newIndex != _currentSearchIndex)
-            {
-                _currentSearchIndex = newIndex;
-                SelectAndScrollToCurrentMatch();
-                OnPropertyChanged(nameof(SearchStatusText));
-            }
+             if (newIndex != -1 && newIndex != _currentSearchIndex)
+             {
+                 _currentSearchIndex = newIndex;
+                 SelectAndScrollToCurrentMatch();
+                 OnPropertyChanged(nameof(SearchStatusText));
+             }
+             // If clicking within the currently selected match, maybe don't change index? (Current logic selects closest)
         }
 
-        #endregion // --- Log Display Text Generation ---
+        private void HandleProcessorError(string contextMessage, Exception ex)
+        {
+            Debug.WriteLine($"{contextMessage}: {ex}");
+            _uiContext.Post(_ =>
+            {
+                IsBusyFiltering = false; // Ensure busy indicator is off
+                MessageBox.Show($"Error processing logs: {ex.Message}", "Processing Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }, null);
+        }
 
-        #region // --- Highlighting Configuration ---
-        // Generates the list of patterns for AvalonEdit highlighting based on filters.
-
-        // Helper method to recursively traverse the filter tree UI representation.
+        // --- Highlighting Configuration ---
         private void TraverseFilterTreeForHighlighting(FilterViewModel filterViewModel, ObservableCollection<string> patterns)
         {
-            // Reads UI State (Filter Tree Enabled/Value)
             if (!filterViewModel.Enabled) return;
 
             string? pattern = null;
@@ -692,14 +871,12 @@ namespace Logonaut.UI.ViewModels
             {
                 try
                 {
-                    // Basic validation before adding to the list
                     if (isRegex) { _ = new Regex(pattern); } // Throws if invalid
-                    if (!patterns.Contains(pattern))
+                    if (!patterns.Contains(pattern)) // Avoid duplicates
                         patterns.Add(pattern);
                 }
                 catch (ArgumentException ex)
                 {
-                    // Log invalid patterns found in the filter tree
                     Debug.WriteLine($"Invalid regex pattern skipped for highlighting: '{pattern}'. Error: {ex.Message}");
                     // TODO: Optionally provide UI feedback about the invalid regex in the filter.
                 }
@@ -712,18 +889,9 @@ namespace Logonaut.UI.ViewModels
             }
         }
 
-        // Helper method to extract the current filter configuration (used by Orchestration).
-        // Note: Reads filter tree state.
-        private IFilter? GetCurrentFilter()
-        {
-            return FilterProfiles.FirstOrDefault()?.FilterModel;
-        }
-
-        #endregion // --- Highlighting Configuration ---
+        #endregion // --- Orchestration & Updates ---
 
         #region // --- Lifecycle Management ---
-        // Implements IDisposable and handles cleanup of resources like subscriptions.
-
         public void Dispose()
         {
             Dispose(true);
@@ -742,55 +910,15 @@ namespace Logonaut.UI.ViewModels
         public void Cleanup()
         {
             IsBusyFiltering = false; // Ensure busy indicator is hidden on exit
-            SaveCurrentSettings();
-            Dispose();
+            SaveCurrentSettings();   // Save state before disposing
+            Dispose();               // Dispose resources
         }
-
         #endregion // --- Lifecycle Management ---
-
-        #region // --- Context Lines Commands ---
-
-        [RelayCommand(CanExecute = nameof(CanDecrementContextLines))]
-        private void DecrementContextLines()
-        {
-            // Decrement but ensure it doesn't go below 0
-            ContextLines = Math.Max(0, ContextLines - 1);
-            // The OnContextLinesChanged partial method will automatically trigger the filter update.
-        }
-
-        private bool CanDecrementContextLines()
-        {
-            // Can only decrement if the value is greater than 0
-            return ContextLines > 0;
-        }
-
-        [RelayCommand]
-        private void IncrementContextLines()
-        {
-            // Increment the value
-            ContextLines++;
-            // The OnContextLinesChanged partial method will automatically trigger the filter update.
-        }
-
-        // Ensure the ContextLines property setter itself also guards against negative values
-        // (although the command prevents it now, this is good practice)
-        // Modify the existing [ObservableProperty] backing field access if needed,
-        // or rely on the converter/command logic. The current setup with the converter
-        // and the CanExecute on the command is sufficient.
-
-        // Also, ensure the OnContextLinesChanged partial method correctly triggers updates:
-        partial void OnContextLinesChanged(int value)
-        {
-            // Re-evaluate CanExecute for Decrement command whenever ContextLines changes
-            DecrementContextLinesCommand.NotifyCanExecuteChanged();
-            TriggerFilterUpdate();
-        }
-
-
-        #endregion // --- Context Lines Commands ---
     }
+
     /// <summary>
     /// Represents the position and length of a found search match within the text.
+    /// Used for internal tracking and for markers on the OverviewRuler.
     /// </summary>
     public record SearchResult(int Offset, int Length);
 }

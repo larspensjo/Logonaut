@@ -10,13 +10,9 @@
         Closing="Window_Closing"
         Style="{DynamicResource {x:Type Window}}"> <!-- NEON: Apply base window style -->
 
-    <!-- NEON: Removed styles previously here - they are now in theme files -->
     <Window.Resources>
-        <!-- Only keep resources specific to this window or needed directly by styles below -->
         <converters:StringToIntConverter x:Key="StringToIntConverter"/>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
-
-        <!-- NEON: Define the TextEditor style locally as it uses PART_ScrollViewer -->
         <Style TargetType="{x:Type avalonEdit:TextEditor}" x:Key="TextEditorWithOverviewRulerStyle">
             <!-- Use DynamicResource for theme properties -->
             <Setter Property="Foreground" Value="{DynamicResource EditorForegroundBrush}" />
@@ -61,6 +57,7 @@
             </Setter>
         </Style>
     </Window.Resources>
+
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -94,7 +91,6 @@
         <!-- Main content -->
         <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
-                 <!-- NEON: Adjusted width -->
                 <ColumnDefinition Width="300"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
@@ -103,23 +99,54 @@
             <Border Grid.Column="0" Style="{DynamicResource CardPanelStyle}">
                 <DockPanel>
                      <TextBlock DockPanel.Dock="Top" Text="Filters" FontWeight="Bold" Margin="0,0,0,5"/>
-                      <!-- Buttons below TreeView -->
-                     <StackPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
-                        <WrapPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,10">
-                            <Button Content="Substring" Command="{Binding AddSubstringFilterCommand}" Margin="2"/>
-                            <Button Content="Regex" Command="{Binding AddRegexFilterCommand}" Margin="2"/>
-                            <Button Content="AND" Command="{Binding AddAndFilterCommand}" Margin="2"/>
-                            <Button Content="OR" Command="{Binding AddOrFilterCommand}" Margin="2"/>
-                            <Button Content="NOR" Command="{Binding AddNorFilterCommand}" Margin="2"/>
-                        </WrapPanel>
-                         <Button Content="Edit" Command="{Binding ToggleEditCommand}" Margin="0,5,0,0"/>
-                        <Button Content="Remove" Command="{Binding RemoveFilterCommand}" Margin="0,5,0,0"/>
+
+                     <!-- Profile Management Area -->
+                     <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+                         <TextBlock Text="Active Profile:" Margin="0,0,0,2" FontSize="10" Foreground="{DynamicResource SecondaryTextBrush}"/>
+                         <ComboBox ItemsSource="{Binding AvailableProfiles}"
+                                   SelectedItem="{Binding ActiveFilterProfile}"
+                                   DisplayMemberPath="Name"
+                                   Margin="0,0,0,5">
+                             <ComboBox.ToolTip>
+                                 <ToolTip>Select the active filter profile.</ToolTip>
+                             </ComboBox.ToolTip>
+                         </ComboBox>
+                         <WrapPanel HorizontalAlignment="Center">
+                            <Button Content="New" Command="{Binding CreateNewProfileCommand}" Margin="2" ToolTip="Create a new filter profile"/>
+                            <Button Content="Rename" Command="{Binding RenameProfileCommand}" Margin="2" ToolTip="Rename the selected profile"/>
+                            <Button Content="Delete" Command="{Binding DeleteProfileCommand}" Margin="2" ToolTip="Delete the selected profile"/>
+                         </WrapPanel>
                      </StackPanel>
-                     <!-- TreeView takes remaining space -->
-                    <TreeView ItemsSource="{Binding FilterProfiles}"
-                              Margin="0,0,0,0"
+
+                     <!-- Buttons for NODE management (below TreeView) -->
+                     <StackPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
+                        <TextBlock Text="Add Filter Node:" Margin="0,0,0,2" FontSize="10" Foreground="{DynamicResource SecondaryTextBrush}" HorizontalAlignment="Center"/>
+                        <WrapPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,10">
+                             <!-- Pass string parameter to identify filter type -->
+                            <Button Content="Substring" Command="{Binding AddFilterCommand}" CommandParameter="Substring" Margin="2"/>
+                            <Button Content="Regex" Command="{Binding AddFilterCommand}" CommandParameter="Regex" Margin="2"/>
+                            <Button Content="AND" Command="{Binding AddFilterCommand}" CommandParameter="And" Margin="2"/>
+                            <Button Content="OR" Command="{Binding AddFilterCommand}" CommandParameter="Or" Margin="2"/>
+                            <Button Content="NOR" Command="{Binding AddFilterCommand}" CommandParameter="Nor" Margin="2"/>
+                        </WrapPanel>
+                         <!-- Edit/Remove operate on the selected NODE -->
+                        <Button Content="Edit Node" Command="{Binding ToggleEditNodeCommand}" Margin="0,5,0,0" ToolTip="Edit the selected filter node's value"/>
+                        <Button Content="Remove Node" Command="{Binding RemoveFilterNodeCommand}" Margin="0,5,0,0" ToolTip="Remove the selected filter node and its children"/>
+                     </StackPanel>
+
+                     <!-- TreeView now displays the ACTIVE profile's tree -->
+                    <TreeView ItemsSource="{Binding ActiveTreeRootNodes}"
                               SelectedItemChanged="TreeView_SelectedItemChanged"
-                              Background="Transparent"/> <!-- NEON: Make background transparent -->
+                              Margin="0,0,0,0"
+                              Background="Transparent">
+                         <TreeView.ItemContainerStyle>
+                             <!-- Apply the HierarchicalDataTemplate from FilterTemplates.xaml -->
+                             <Style TargetType="{x:Type TreeViewItem}" BasedOn="{StaticResource {x:Type TreeViewItem}}">
+                                 <!-- Bind IsSelected to the FilterViewModel's IsSelected property if needed -->
+                                 <!-- <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" /> -->
+                             </Style>
+                         </TreeView.ItemContainerStyle>
+                    </TreeView>
                 </DockPanel>
             </Border>
 
@@ -180,7 +207,7 @@
                 <!-- Log Display -->
                 <Border Grid.Row="1" Style="{DynamicResource CardPanelStyle}" Padding="5">
                      <!-- NEON: Apply the locally defined style -->
-                    <avalonEdit:TextEditor x:Name="LogOutputEditor"
+                     <avalonEdit:TextEditor x:Name="LogOutputEditor"
                                         xmlns:avalonEdit="http://icsharpcode.net/sharpdevelop/avalonedit"
                                         xmlns:helpers="clr-namespace:Logonaut.UI.Helpers"
                                         FontFamily="Consolas" FontSize="12pt" IsReadOnly="True"

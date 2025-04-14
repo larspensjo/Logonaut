@@ -1,5 +1,6 @@
 using Logonaut.Filters;
-using Newtonsoft.Json; // Required for attributes if using explicit serialization
+using Newtonsoft.Json;
+using System.Collections.Generic; // Required for List
 
 namespace Logonaut.Common
 {
@@ -9,40 +10,22 @@ namespace Logonaut.Common
     public class LogonautSettings
     {
         /// <summary>
-        /// The root of the filter tree configuration.
-        /// Uses TypeNameHandling.All during serialization to handle the IFilter interface.
+        /// Stores all defined filter profiles.
+        /// Serialized with TypeNameHandling.All for the IFilter within FilterProfile.
         /// </summary>
-        public IFilter? RootFilter { get; set; }
+        public List<FilterProfile> FilterProfiles { get; set; } = new List<FilterProfile>();
 
         /// <summary>
-        /// The number of context lines to display around filter matches.
+        /// Stores the name of the filter profile that was last active.
         /// </summary>
-        public int ContextLines { get; set; } = 0; // Default value
+        public string? LastActiveProfileName { get; set; }
 
-        /// <summary>
-        /// Whether to show the original line numbers margin.
-        /// </summary>
-        public bool ShowLineNumbers { get; set; } = true; // Default value
+        // --- Other Settings Remain ---
+        public int ContextLines { get; set; } = 0;
+        public bool ShowLineNumbers { get; set; } = true;
+        public bool HighlightTimestamps { get; set; } = true;
+        public bool IsCaseSensitiveSearch { get; set; } = false;
 
-        /// <summary>
-        /// Whether to apply timestamp highlighting rules.
-        /// </summary>
-        public bool HighlightTimestamps { get; set; } = true; // Default value
-
-        /// <summary>
-        /// Whether to use case-sensitive search.
-        /// </summary>
-        public bool IsCaseSensitiveSearch { get; set; } = false; // Default value
-
-        // Consider adding other settings here in the future, e.g.:
-        // public string LastTheme { get; set; } = "Light";
-        // public double MainWindowWidth { get; set; } = 1000;
-        // public double MainWindowHeight { get; set; } = 600;
-        // public string LastLogFile { get; set; }
-
-        /// <summary>
-        /// Parameterless constructor for deserialization and default creation.
-        /// </summary>
         public LogonautSettings() { }
     }
 }

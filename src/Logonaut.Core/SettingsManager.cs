@@ -1,5 +1,9 @@
-using Logonaut.Common; // For LogonautSettings
+using Logonaut.Common;
+using Logonaut.Filters;
 using Newtonsoft.Json;
+using System.IO; // Required for Path, File, Directory
+using System; // Required for Environment, Exception
+using System.Linq; // Required for Linq methods
 
 namespace Logonaut.Core
 {
@@ -18,7 +22,6 @@ namespace Logonaut.Core
 
             // Ensure the application's settings directory exists
             Directory.CreateDirectory(appFolderPath);
-
             return Path.Combine(appFolderPath, SettingsFileName);
         }
 
@@ -31,13 +34,12 @@ namespace Logonaut.Core
             try
             {
                 string filePath = GetSettingsFilePath();
-                // Use Newtonsoft.Json consistent with FilterSerializer
-                // TypeNameHandling.All is crucial for serializing the IFilter interface correctly
+                // TypeNameHandling.All is crucial for serializing IFilter within FilterProfile
                 string json = JsonConvert.SerializeObject(settings, Formatting.Indented, new JsonSerializerSettings
                 {
-                    TypeNameHandling = TypeNameHandling.All
+                    TypeNameHandling = TypeNameHandling.All,
+                    NullValueHandling = NullValueHandling.Ignore // Don't write null properties
                 });
-
                 File.WriteAllText(filePath, json);
             }
             catch (Exception ex)
@@ -54,21 +56,23 @@ namespace Logonaut.Core
         public static LogonautSettings LoadSettings()
         {
             string filePath = GetSettingsFilePath();
+            LogonautSettings? loadedSettings = null;
+
             try
             {
-                if (!File.Exists(filePath))
-                    return new LogonautSettings();
-
-                string json = File.ReadAllText(filePath);
-                // Deserialize using TypeNameHandling.All to reconstruct the IFilter tree
-                var loadedSettings = JsonConvert.DeserializeObject<LogonautSettings>(json, new JsonSerializerSettings
+                if (File.Exists(filePath))
                 {
-                    TypeNameHandling = TypeNameHandling.All
-                });
-
-                if (loadedSettings != null)
-                {
-                    return loadedSettings;
+                    string json = File.ReadAllText(filePath);
+                    // Deserialize using TypeNameHandling.All
+                    loadedSettings = JsonConvert.DeserializeObject<LogonautSettings>(json, new JsonSerializerSettings
+                    {
+                        TypeNameHandling = TypeNameHandling.All,
+                        // Optional: Error handling during deserialization
+                        // Error = (sender, args) => {
+                        //     System.Diagnostics.Debug.WriteLine($"Deserialization error: {args.ErrorContext.Error.Message}");
+                        //     args.ErrorContext.Handled = true; // Attempt to continue if possible
+                        // }
+                    });
                 }
             }
             catch (Exception ex)
@@ -76,8 +80,35 @@ namespace Logonaut.Core
                 throw new Exception($"Failed to load settings: {ex.Message}", ex);
             }
 
-            // Return default settings if file doesn't exist or loading failed
-            return new LogonautSettings();
+            // If loading failed or file didn't exist, return new settings
+            if (loadedSettings == null)
+            {
+                loadedSettings = new LogonautSettings();
+            }
+
+            // Ensure there is at least one profile
+            if (loadedSettings.FilterProfiles == null || !loadedSettings.FilterProfiles.Any())
+            {
+                loadedSettings.FilterProfiles = new List<FilterProfile>
+                {
+                    new FilterProfile("Default", null) // Create a default profile
+                };
+                // Ensure LastActiveProfileName points to this new default if it was null/invalid
+                if (string.IsNullOrEmpty(loadedSettings.LastActiveProfileName) ||
+                    !loadedSettings.FilterProfiles.Any(p => p.Name == loadedSettings.LastActiveProfileName))
+                {
+                    loadedSettings.LastActiveProfileName = loadedSettings.FilterProfiles[0].Name;
+                }
+            }
+            // Validate LastActiveProfileName exists, otherwise set to the first profile's name
+            else if (string.IsNullOrEmpty(loadedSettings.LastActiveProfileName) ||
+                     !loadedSettings.FilterProfiles.Any(p => p.Name == loadedSettings.LastActiveProfileName))
+            {
+                loadedSettings.LastActiveProfileName = loadedSettings.FilterProfiles.First().Name;
+            }
+
+
+            return loadedSettings;
         }
     }
 }

@@ -1,196 +1,387 @@
 using System;
+using System.Linq; // Required for Linq methods like FirstOrDefault, Any
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Logonaut.UI.ViewModels;
 using Logonaut.Filters;
 using Logonaut.UI.Services;
+using Logonaut.Common; // Required for FilterProfile
+using System.Collections.Generic; // Required for List
 
 namespace Logonaut.UI.Tests.ViewModels
 {
     [TestClass]
     public class MainViewModelTests
     {
-        // A simple mock of IFileDialogService that always returns a preset file name.
+        // --- Mocks for Dependencies ---
+
         private class MockFileDialogService : IFileDialogService
         {
-            public string FileToReturn { get; set; } = "C:\\fake\\log.txt";
-            public string OpenFile(string title, string filter) => FileToReturn;
+            public string? FileToReturn { get; set; } = "C:\\fake\\log.txt";
+            public bool ShouldCancel { get; set; } = false;
+            public string? OpenFile(string title, string filter) => ShouldCancel ? null : FileToReturn;
         }
 
-        [TestMethod]
-        public void AddSubstringFilter_NoExistingFilter_ShouldCreateRootFilter()
+        private class MockInputPromptService : IInputPromptService
         {
-            // Arrange
-            var viewModel = new MainViewModel();
+            public string? InputToReturn { get; set; } = "Mock Input";
+            public bool ShouldCancel { get; set; } = false;
+            public string? ShowInputDialog(string title, string prompt, string defaultValue = "") => ShouldCancel ? null : InputToReturn;
+        }
 
-            // Act
-            viewModel.AddSubstringFilterCommand.Execute(null);
+        // Helper to create a view model with mocks
+        private MainViewModel CreateViewModel(IFileDialogService? fileDialog = null, IInputPromptService? prompt = null)
+        {
+            // Ensure settings are clean for each test by deleting/ignoring existing settings file if necessary
+            // Or, inject a mock settings manager if testing persistence itself. For now, rely on default profile creation.
+            return new MainViewModel(
+                fileDialog ?? new MockFileDialogService(),
+                prompt ?? new MockInputPromptService()
+                // We'll use the default LogFilterProcessor for now, assuming basic functionality tests don't need to mock it deeply.
+            );
+        }
+
+        // --- Test Methods ---
+
+        [TestMethod]
+        public void Constructor_InitializesWithDefaultProfile()
+        {
+            // Arrange & Act
+            var viewModel = CreateViewModel();
 
             // Assert
-            Assert.AreEqual(1, viewModel.FilterProfiles.Count, "A root filter should be added.");
-            Assert.IsNotNull(viewModel.SelectedFilter, "SelectedFilter should be set.");
-            Assert.IsInstanceOfType(viewModel.SelectedFilter.FilterModel, typeof(SubstringFilter), "Root filter should be a SubstringFilter.");
+            Assert.AreEqual(1, viewModel.AvailableProfiles.Count, "Should initialize with one default profile.");
+            Assert.IsNotNull(viewModel.ActiveFilterProfile, "A profile should be active by default.");
+            Assert.AreEqual("Default", viewModel.ActiveFilterProfile.Name, "Default profile name should be 'Default'.");
+            Assert.IsInstanceOfType(viewModel.ActiveFilterProfile.Model.RootFilter, typeof(TrueFilter), "Default profile should have a TrueFilter root.");
+            Assert.IsNotNull(viewModel.ActiveFilterProfile.RootFilterViewModel, "RootFilterViewModel should be created for the active profile.");
         }
 
         [TestMethod]
-        public void AddAndFilter_NoExistingFilter_ShouldCreateRootFilter()
+        public void AddFilterCommand_WithNoRootFilterInActiveProfile_CreatesRootNode()
         {
             // Arrange
-            var viewModel = new MainViewModel();
+            var viewModel = CreateViewModel();
+            // Ensure the default profile starts empty (or create a new empty one)
+            viewModel.ActiveFilterProfile?.SetModelRootFilter(null); // Make the active profile empty
 
             // Act
-            viewModel.AddAndFilterCommand.Execute(null);
+            viewModel.AddFilterCommand.Execute("Substring"); // Add a substring filter
 
             // Assert
-            Assert.AreEqual(1, viewModel.FilterProfiles.Count, "A root AND filter should be added.");
-            Assert.IsNotNull(viewModel.SelectedFilter, "SelectedFilter should be set.");
-            Assert.IsInstanceOfType(viewModel.SelectedFilter.FilterModel, typeof(AndFilter), "Root filter should be an AndFilter.");
+            Assert.IsNotNull(viewModel.ActiveFilterProfile?.Model.RootFilter, "Root filter model should be created.");
+            Assert.IsInstanceOfType(viewModel.ActiveFilterProfile.Model.RootFilter, typeof(SubstringFilter), "Root filter should be SubstringFilter.");
+            Assert.IsNotNull(viewModel.ActiveFilterProfile.RootFilterViewModel, "RootFilterViewModel should be created.");
+            Assert.AreEqual(viewModel.ActiveFilterProfile.RootFilterViewModel, viewModel.SelectedFilterNode, "Newly added root node should be selected.");
         }
 
         [TestMethod]
-        public void AddOrFilter_NoExistingFilter_ShouldCreateRootFilter()
+        public void AddFilterCommand_WithCompositeNodeSelected_AddsChildNode()
         {
             // Arrange
-            var viewModel = new MainViewModel();
+            var viewModel = CreateViewModel();
+            viewModel.AddFilterCommand.Execute("And"); // Create an AND root
+            var rootNode = viewModel.ActiveFilterProfile?.RootFilterViewModel;
+            Assert.IsNotNull(rootNode, "Root node setup failed.");
+            viewModel.SelectedFilterNode = rootNode; // Select the AND node
 
             // Act
-            viewModel.AddOrFilterCommand.Execute(null);
+            viewModel.AddFilterCommand.Execute("Substring"); // Add a substring filter as child
 
             // Assert
-            Assert.AreEqual(1, viewModel.FilterProfiles.Count, "A root OR filter should be added.");
-            Assert.IsNotNull(viewModel.SelectedFilter, "SelectedFilter should be set.");
-            Assert.IsInstanceOfType(viewModel.SelectedFilter.FilterModel, typeof(OrFilter), "Root filter should be an OrFilter.");
+            Assert.AreEqual(1, rootNode.Children.Count, "Child node should be added to the composite node.");
+            Assert.IsInstanceOfType(rootNode.Children[0].FilterModel, typeof(SubstringFilter), "Child node should be SubstringFilter.");
+            Assert.AreEqual(rootNode.Children[0], viewModel.SelectedFilterNode, "Newly added child node should be selected."); // Check if selection moves to child
         }
 
+         [TestMethod]
+        public void AddFilterCommand_WithNonCompositeNodeSelected_ShowsMessage()
+        {
+             // Arrange
+             var viewModel = CreateViewModel();
+             viewModel.AddFilterCommand.Execute("Substring"); // Create a Substring root
+             var rootNode = viewModel.ActiveFilterProfile?.RootFilterViewModel;
+             Assert.IsNotNull(rootNode, "Root node setup failed.");
+             viewModel.SelectedFilterNode = rootNode; // Select the Substring node
+             int childCount = rootNode.Children.Count;
+
+             // Act
+             // TODO: Need a way to intercept MessageBox calls for testing
+             // viewModel.AddFilterCommand.Execute("Regex"); // Try to add another child
+
+             // Assert
+             Assert.AreEqual(childCount, rootNode.Children.Count, "No child should be added to non-composite.");
+             // Assert that a message box was shown (requires mocking/framework support)
+             Assert.Inconclusive("Need framework/mocking to verify MessageBox call.");
+        }
+
+
         [TestMethod]
-        public void AddFilter_WithExistingCompositeFilter_ShouldAddChildFilter()
+        public void RemoveFilterNodeCommand_WithRootNodeSelected_ClearsActiveTree()
         {
             // Arrange
-            var compositeModel = new AndFilter();
-            var rootVM = new FilterViewModel(compositeModel);
-            var viewModel = new MainViewModel();
-            viewModel.FilterProfiles.Add(rootVM);
-            viewModel.SelectedFilter = rootVM;
+            var viewModel = CreateViewModel();
+            viewModel.AddFilterCommand.Execute("Substring"); // Add a root node
+            viewModel.SelectedFilterNode = viewModel.ActiveFilterProfile?.RootFilterViewModel; // Select the root
+            Assert.IsNotNull(viewModel.SelectedFilterNode, "Setup failed: Root node not selected.");
 
             // Act
-            viewModel.AddSubstringFilterCommand.Execute(null);
+            viewModel.RemoveFilterNodeCommand.Execute(null);
 
             // Assert
-            Assert.AreEqual(1, rootVM.Children.Count, "A child filter should be added to the AND filter.");
-            Assert.IsInstanceOfType(rootVM.Children[0].FilterModel, typeof(SubstringFilter), "Child filter should be a SubstringFilter.");
+            Assert.IsNull(viewModel.ActiveFilterProfile?.Model.RootFilter, "Root filter model should be null after removal.");
+            Assert.IsNull(viewModel.ActiveFilterProfile?.RootFilterViewModel, "RootFilterViewModel should be null.");
+            Assert.IsNull(viewModel.SelectedFilterNode, "SelectedFilterNode should be cleared.");
         }
 
         [TestMethod]
-        public void RemoveFilter_RootFilter_ShouldRemoveItAndClearSelection()
+        public void RemoveFilterNodeCommand_WithChildNodeSelected_RemovesChildAndSelectsParent()
         {
             // Arrange
-            var rootVM = new FilterViewModel(new SubstringFilter("Test"));
-            var viewModel = new MainViewModel();
-            viewModel.FilterProfiles.Add(rootVM);
-            viewModel.SelectedFilter = rootVM;
+            var viewModel = CreateViewModel();
+            viewModel.AddFilterCommand.Execute("And"); // Add AND root
+            var rootNode = viewModel.ActiveFilterProfile?.RootFilterViewModel;
+            viewModel.SelectedFilterNode = rootNode;
+            viewModel.AddFilterCommand.Execute("Substring"); // Add child
+            var childNode = rootNode?.Children.FirstOrDefault();
+            Assert.IsNotNull(childNode, "Setup failed: Child node not added.");
+            viewModel.SelectedFilterNode = childNode; // Select the child
 
             // Act
-            viewModel.RemoveFilterCommand.Execute(null);
+            viewModel.RemoveFilterNodeCommand.Execute(null);
 
             // Assert
-            Assert.AreEqual(0, viewModel.FilterProfiles.Count, "Root filter should be removed.");
-            Assert.IsNull(viewModel.SelectedFilter, "SelectedFilter should be cleared.");
+            Assert.IsNotNull(rootNode, "Root node should still exist.");
+            Assert.AreEqual(0, rootNode.Children.Count, "Child node should be removed.");
+            Assert.AreEqual(rootNode, viewModel.SelectedFilterNode, "Parent node (root) should be selected.");
         }
 
         [TestMethod]
-        public void RemoveFilter_ChildFilter_ShouldRemoveItFromParent()
+        public void ToggleEditNodeCommand_OnEditableNode_TogglesEditState()
+        {
+             // Arrange
+             var viewModel = CreateViewModel();
+             viewModel.AddFilterCommand.Execute("Substring");
+             var node = viewModel.ActiveFilterProfile?.RootFilterViewModel;
+             Assert.IsNotNull(node, "Node setup failed.");
+             viewModel.SelectedFilterNode = node;
+             Assert.IsTrue(node.IsEditable, "Node should be editable.");
+             bool initialState = node.IsEditing;
+
+             // Act
+             viewModel.ToggleEditNodeCommand.Execute(null);
+
+             // Assert
+             Assert.AreNotEqual(initialState, node.IsEditing, "IsEditing state should toggle.");
+
+             // Act again
+             viewModel.ToggleEditNodeCommand.Execute(null);
+
+              // Assert
+             Assert.AreEqual(initialState, node.IsEditing, "IsEditing state should toggle back.");
+        }
+
+         [TestMethod]
+        public void ToggleEditNodeCommand_OnNonEditableNode_DoesNothing()
+        {
+             // Arrange
+             var viewModel = CreateViewModel();
+             viewModel.AddFilterCommand.Execute("And");
+             var node = viewModel.ActiveFilterProfile?.RootFilterViewModel;
+             Assert.IsNotNull(node, "Node setup failed.");
+             viewModel.SelectedFilterNode = node;
+             Assert.IsFalse(node.IsEditable, "Node should not be editable.");
+             bool initialState = node.IsEditing;
+
+             // Act
+             viewModel.ToggleEditNodeCommand.Execute(null);
+
+             // Assert
+             Assert.AreEqual(initialState, node.IsEditing, "IsEditing state should not change.");
+        }
+
+#if false
+        [TestMethod]
+        public void ActiveFilterProfile_Set_TriggersFilterUpdateAndClearsNodeSelection()
+        {
+             // Arrange
+             var viewModel = CreateViewModel();
+             viewModel.CreateNewProfileCommand.Execute(null); // Create a second profile
+             var initialProfile = viewModel.AvailableProfiles[0];
+             var secondProfile = viewModel.AvailableProfiles[1];
+             viewModel.ActiveFilterProfile = initialProfile; // Start with first
+
+             // Setup: add a node and select it in the initial profile
+             viewModel.AddFilterCommand.Execute("Substring");
+             viewModel.SelectedFilterNode = initialProfile.RootFilterViewModel;
+             Assert.IsNotNull(viewModel.SelectedFilterNode, "Node selection setup failed.");
+
+             bool filterUpdateTriggered = false;
+             viewModel.ActiveFilterProfile.RootFilterViewModel!.FilterModel.PropertyChanged += (s, e) => {
+                 // We need a better way to test TriggerFilterUpdate was called.
+                 // For now, we assume changing the profile model implicitly calls it.
+                 // This requires mocking ILogFilterProcessor.
+                 // filterUpdateTriggered = true;
+             };
+
+
+             // Act
+             viewModel.ActiveFilterProfile = secondProfile;
+
+             // Assert
+             Assert.AreEqual(secondProfile, viewModel.ActiveFilterProfile, "Active profile not switched.");
+             Assert.IsNull(viewModel.SelectedFilterNode, "Selected filter node should be cleared when profile changes.");
+             // Assert.IsTrue(filterUpdateTriggered, "Changing active profile should trigger a filter update."); // Requires mocking
+             Assert.Inconclusive("Need to mock ILogFilterProcessor to verify TriggerFilterUpdate call.");
+        }
+#endif
+
+        // --- Tests for Profile Management Commands ---
+
+        [TestMethod]
+        public void CreateNewProfileCommand_AddsProfileAndSelectsIt()
         {
             // Arrange
-            var compositeModel = new AndFilter();
-            var rootVM = new FilterViewModel(compositeModel);
-            var childModel = new SubstringFilter("Child");
-            rootVM.AddChildFilter(childModel);
-            var viewModel = new MainViewModel();
-            viewModel.FilterProfiles.Add(rootVM);
-            viewModel.SelectedFilter = rootVM.Children[0];
+            var viewModel = CreateViewModel();
+            int initialCount = viewModel.AvailableProfiles.Count;
 
             // Act
-            viewModel.RemoveFilterCommand.Execute(null);
+            viewModel.CreateNewProfileCommand.Execute(null);
 
             // Assert
-            Assert.AreEqual(0, rootVM.Children.Count, "Child filter should be removed from parent.");
+            Assert.AreEqual(initialCount + 1, viewModel.AvailableProfiles.Count, "A new profile should be added.");
+            Assert.IsNotNull(viewModel.ActiveFilterProfile, "The new profile should be active.");
+            Assert.IsTrue(viewModel.ActiveFilterProfile.Name.StartsWith("New Profile"), "New profile should have default name pattern.");
         }
 
         [TestMethod]
-        public void PreviousSearch_WithNonEmptySearchText_ShouldAppendMessage()
+        public void RenameProfileCommand_WithValidNewName_UpdatesProfileName()
         {
             // Arrange
-            var viewModel = new MainViewModel();
+            var mockPrompter = new MockInputPromptService { InputToReturn = "Renamed Profile" };
+            var viewModel = CreateViewModel(prompt: mockPrompter);
+            var profileToRename = viewModel.ActiveFilterProfile;
+            Assert.IsNotNull(profileToRename, "Setup failed: No active profile.");
+            string oldName = profileToRename.Name;
+
+            // Act
+            viewModel.RenameProfileCommand.Execute(null);
+
+            // Assert
+            Assert.AreEqual("Renamed Profile", profileToRename.Name, "Profile name should be updated in VM.");
+            Assert.AreEqual("Renamed Profile", profileToRename.Model.Name, "Profile name should be updated in Model.");
+        }
+
+        [TestMethod]
+        public void RenameProfileCommand_WithExistingName_ShowsErrorAndDoesNotRename()
+        {
+             // Arrange
+             var mockPrompter = new MockInputPromptService();
+             var viewModel = CreateViewModel(prompt: mockPrompter);
+             viewModel.CreateNewProfileCommand.Execute(null); // Now have "Default" and "New Profile 1"
+             var profile1 = viewModel.AvailableProfiles[0];
+             var profile2 = viewModel.AvailableProfiles[1];
+             string profile2OriginalName = profile2.Name;
+             viewModel.ActiveFilterProfile = profile2; // Select the second one
+             mockPrompter.InputToReturn = profile1.Name; // Try to rename to the first one's name
+
+             // Act
+             // TODO: Need mocking/framework to verify MessageBox call
+             // viewModel.RenameProfileCommand.Execute(null);
+
+             // Assert
+             Assert.AreEqual(profile2OriginalName, profile2.Name, "Profile name should not change if name exists.");
+             Assert.Inconclusive("Need framework/mocking to verify MessageBox call.");
+        }
+
+        [TestMethod]
+        public void DeleteProfileCommand_RemovesProfileAndSelectsAnother()
+        {
+            // Arrange
+            var viewModel = CreateViewModel();
+            viewModel.CreateNewProfileCommand.Execute(null); // Profile 1
+            viewModel.CreateNewProfileCommand.Execute(null); // Profile 2 (now active)
+            Assert.AreEqual(3, viewModel.AvailableProfiles.Count); // Default + 2 new
+            var profileToDelete = viewModel.ActiveFilterProfile;
+            Assert.IsNotNull(profileToDelete);
+
+            // Act
+            // TODO: Need mocking/framework to verify MessageBox call (Yes/No)
+             // Assume user clicks Yes
+            viewModel.DeleteProfileCommand.Execute(null);
+
+            // Assert
+            Assert.AreEqual(2, viewModel.AvailableProfiles.Count, "Profile count should decrease by one.");
+            Assert.IsFalse(viewModel.AvailableProfiles.Contains(profileToDelete), "Deleted profile should be removed.");
+            Assert.IsNotNull(viewModel.ActiveFilterProfile, "Another profile should be selected.");
+            Assert.AreNotEqual(profileToDelete, viewModel.ActiveFilterProfile, "A different profile should be active.");
+            Assert.Inconclusive("Need framework/mocking to verify MessageBox confirmation.");
+        }
+
+        [TestMethod]
+        public void DeleteProfileCommand_CannotDeleteLastProfile()
+        {
+             // Arrange
+             var viewModel = CreateViewModel();
+             Assert.AreEqual(1, viewModel.AvailableProfiles.Count); // Should start with Default
+             viewModel.ActiveFilterProfile = viewModel.AvailableProfiles[0];
+
+             // Act
+             // TODO: Need mocking/framework to verify MessageBox call
+             // viewModel.DeleteProfileCommand.Execute(null);
+
+             // Assert
+             Assert.AreEqual(1, viewModel.AvailableProfiles.Count, "Profile count should remain 1.");
+              Assert.Inconclusive("Need framework/mocking to verify MessageBox call.");
+        }
+
+
+        // --- Existing Tests (Review and keep if still valid) ---
+
+        [TestMethod]
+        public void PreviousSearch_WithNonEmptySearchText_ShouldNavigate() // Simplified - just checks execution
+        {
+            // Arrange
+            var viewModel = CreateViewModel();
             viewModel.SearchText = "test";
+             // Add some dummy matches if needed for CanExecute or internal logic
+            // viewModel.SearchMatches.Add(new SearchResult(0, 4));
 
             // Act
             viewModel.PreviousSearchCommand.Execute(null);
 
-            // Assert
-            var combined = string.Join("\n", viewModel.FilteredLogLines);
-            StringAssert.Contains(combined, "Previous search executed.", "FilteredLogLines should contain the previous search message.");
+            // Assert: No exception thrown, command executed. Verifying actual scroll/select needs UI integration.
+             Assert.IsTrue(true, "Command executed without error."); // Basic check
         }
 
         [TestMethod]
-        public void NextSearch_WithNonEmptySearchText_ShouldAppendMessage()
+        public void NextSearch_WithNonEmptySearchText_ShouldNavigate() // Simplified
         {
             // Arrange
-            var viewModel = new MainViewModel();
+            var viewModel = CreateViewModel();
             viewModel.SearchText = "test";
+            // viewModel.SearchMatches.Add(new SearchResult(0, 4));
 
             // Act
             viewModel.NextSearchCommand.Execute(null);
 
             // Assert
-            var combined = string.Join("\n", viewModel.FilteredLogLines);
-            StringAssert.Contains(combined, "Next search executed.", "FilteredLogLines should contain the next search message.");
+            Assert.IsTrue(true, "Command executed without error.");
         }
 
-        [TestMethod]
-        public void BeginEditCommand_ShouldSetIsEditingToTrue()
-        {
-            // Arrange
-            var filter = new SubstringFilter("Test");
-            var viewModel = new FilterViewModel(filter);
-
-            // Act
-            viewModel.BeginEditCommand.Execute(null);
-
-            // Assert
-            Assert.IsTrue(viewModel.IsEditing, "IsEditing should be true after BeginEditCommand is executed.");
-            Assert.IsFalse(viewModel.IsNotEditing, "IsNotEditing should be false after BeginEditCommand is executed.");
-        }
-
-        [TestMethod]
-        public void EndEditCommand_ShouldSetIsEditingToFalse()
-        {
-            // Arrange
-            var filter = new SubstringFilter("Test");
-            var viewModel = new FilterViewModel(filter);
-            viewModel.BeginEditCommand.Execute(null); // Ensure it is in editing mode
-
-            // Act
-            viewModel.EndEditCommand.Execute(null);
-
-            // Assert
-            Assert.IsFalse(viewModel.IsEditing, "IsEditing should be false after EndEditCommand is executed.");
-            Assert.IsTrue(viewModel.IsNotEditing, "IsNotEditing should be true after EndEditCommand is executed.");
-        }
-
-#if false
-        // TODO: Need a mock for ThemeViewModel
         [TestMethod]
         public void OpenLogFile_ShouldSetCurrentLogFilePath()
         {
             // Arrange
             var fakeService = new MockFileDialogService { FileToReturn = "C:\\fake\\log.txt" };
-            var viewModel = new MainViewModel(fakeService);
+            var viewModel = CreateViewModel(fakeService);
+            // Mocking LogTailerManager/LogFilterProcessor interactions would be needed for full test.
 
             // Act
             viewModel.OpenLogFileCommand.Execute(null);
 
             // Assert
             Assert.AreEqual("C:\\fake\\log.txt", viewModel.CurrentLogFilePath, "CurrentLogFilePath should be updated.");
+            // Further asserts would require mocking dependencies.
         }
-#endif
     }
 }

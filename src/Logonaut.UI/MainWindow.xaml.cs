@@ -353,7 +353,7 @@ namespace Logonaut.UI
             if (DataContext is MainViewModel viewModel)
             {
                 // The TreeView's SelectedItem is the data item (FilterViewModel)
-                viewModel.SelectedFilter = e.NewValue as FilterViewModel;
+                viewModel.SelectedFilterNode = e.NewValue as FilterViewModel;
             }
         }
 
