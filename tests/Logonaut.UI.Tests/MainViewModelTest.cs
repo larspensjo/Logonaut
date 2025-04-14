@@ -6,6 +6,7 @@ using Logonaut.Filters;
 using Logonaut.UI.Services;
 using Logonaut.Common; // Required for FilterProfile
 using System.Collections.Generic; // Required for List
+using System.Collections.ObjectModel; // Required for ObservableCollection
 
 namespace Logonaut.UI.Tests.ViewModels
 {
@@ -29,18 +30,55 @@ namespace Logonaut.UI.Tests.ViewModels
         }
 
         // Helper to create a view model with mocks
-        private MainViewModel CreateViewModel(IFileDialogService? fileDialog = null, IInputPromptService? prompt = null)
+       private MainViewModel CreateViewModel(IFileDialogService? fileDialog = null, IInputPromptService? prompt = null)
         {
-            // Ensure settings are clean for each test by deleting/ignoring existing settings file if necessary
-            // Or, inject a mock settings manager if testing persistence itself. For now, rely on default profile creation.
+            // Provide a basic SynchronizationContext for the test environment
+            var testSyncContext = new SynchronizationContext();
+
             return new MainViewModel(
                 fileDialog ?? new MockFileDialogService(),
-                prompt ?? new MockInputPromptService()
-                // We'll use the default LogFilterProcessor for now, assuming basic functionality tests don't need to mock it deeply.
+                prompt ?? new MockInputPromptService(),
+                logFilterProcessor: null, // Use default or mock if needed later
+                uiContext: testSyncContext // Pass the test context
             );
         }
 
         // --- Test Methods ---
+        [TestMethod]
+        public void AddFilterCommand_WhenActiveProfileIsEmpty_UpdatesActiveTreeRootNodes()
+        {
+            // Arrange
+            var viewModel = CreateViewModel();
+
+            // Ensure we have an active profile to work with
+            Assert.IsNotNull(viewModel.ActiveFilterProfile, "Test setup failed: No active profile found after initialization.");
+
+            // Explicitly clear the root filter of the active profile to simulate an empty tree state
+            viewModel.ActiveFilterProfile.SetModelRootFilter(null);
+            // Also clear the collection bound to the TreeView, mimicking the state after SetModelRootFilter(null)
+            viewModel.ActiveTreeRootNodes.Clear(); // Direct manipulation for test setup
+
+            Assert.IsNull(viewModel.ActiveFilterProfile.RootFilterViewModel, "Pre-condition failed: RootFilterViewModel should be null.");
+            Assert.AreEqual(0, viewModel.ActiveTreeRootNodes.Count, "Pre-condition failed: ActiveTreeRootNodes should be empty.");
+            Assert.IsNull(viewModel.SelectedFilterNode, "Pre-condition failed: SelectedFilterNode should be null.");
+
+            // Act: Add the first filter node (e.g., a Substring filter)
+            viewModel.AddFilterCommand.Execute("Substring");
+
+            // Assert
+            // 1. Check the collection bound to the TreeView
+            Assert.AreEqual(1, viewModel.ActiveTreeRootNodes.Count, "ActiveTreeRootNodes should contain one item (the new root).");
+            Assert.IsNotNull(viewModel.ActiveTreeRootNodes[0], "The item in ActiveTreeRootNodes should not be null.");
+            Assert.IsInstanceOfType(viewModel.ActiveTreeRootNodes[0].FilterModel, typeof(SubstringFilter), "The filter model of the root node should be SubstringFilter.");
+
+            // 2. Check if the ActiveFilterProfile's RootFilterViewModel was also updated (should be the same instance)
+            Assert.IsNotNull(viewModel.ActiveFilterProfile.RootFilterViewModel, "Active profile's RootFilterViewModel should now be set.");
+            Assert.AreSame(viewModel.ActiveTreeRootNodes[0], viewModel.ActiveFilterProfile.RootFilterViewModel, "ActiveTreeRootNodes item should be the same instance as the profile's RootFilterViewModel.");
+
+            // 3. Check if the new node was automatically selected
+            Assert.IsNotNull(viewModel.SelectedFilterNode, "SelectedFilterNode should be set to the new root.");
+            Assert.AreSame(viewModel.ActiveTreeRootNodes[0], viewModel.SelectedFilterNode, "SelectedFilterNode should be the newly added root node.");
+        }
 
         [TestMethod]
         public void Constructor_InitializesWithDefaultProfile()
@@ -199,7 +237,7 @@ namespace Logonaut.UI.Tests.ViewModels
              Assert.AreEqual(initialState, node.IsEditing, "IsEditing state should not change.");
         }
 
-#if false
+#if false // Keep this inactive for now as it requires deeper mocking
         [TestMethod]
         public void ActiveFilterProfile_Set_TriggersFilterUpdateAndClearsNodeSelection()
         {

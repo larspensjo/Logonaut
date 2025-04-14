@@ -85,11 +85,13 @@ namespace Logonaut.UI.ViewModels
         public MainViewModel(
             IFileDialogService? fileDialogService = null,
             IInputPromptService? inputPromptService = null, // Inject input service
-            ILogFilterProcessor? logFilterProcessor = null)
+            ILogFilterProcessor? logFilterProcessor = null,
+            SynchronizationContext? uiContext = null) // Optional for testing
         {
             _fileDialogService = fileDialogService ?? new FileDialogService();
             _inputPromptService = inputPromptService ?? new InputPromptService(); // Use default/placeholder
-            _uiContext = SynchronizationContext.Current ?? throw new InvalidOperationException("Could not capture SynchronizationContext. Ensure ViewModel is created on the UI thread.");
+            _uiContext = uiContext ?? SynchronizationContext.Current ??
+                         throw new InvalidOperationException("Could not capture or receive a valid SynchronizationContext."); // Store injected or captured
 
             // Initialize and own the processor
             _logFilterProcessor = logFilterProcessor ?? new LogFilterProcessor(
