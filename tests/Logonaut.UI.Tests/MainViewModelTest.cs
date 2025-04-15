@@ -33,13 +33,45 @@ namespace Logonaut.UI.Tests.ViewModels
             public string? ShowInputDialog(string title, string prompt, string defaultValue = "") => ShouldCancel ? null : InputToReturn;
         }
 
+        private class MockSettingsService : Logonaut.Core.ISettingsService
+        {
+            public LogonautSettings SettingsToReturn { get; set; } = CreateDefaultTestSettings();
+            public LogonautSettings? SavedSettings { get; private set; } // To check what was saved
+
+            public LogonautSettings LoadSettings()
+            {
+                // Return the pre-configured settings for the test
+                return SettingsToReturn;
+            }
+
+            public void SaveSettings(LogonautSettings settings)
+            {
+                // Capture the settings that were attempted to be saved
+                SavedSettings = settings;
+            }
+
+            // Helper for default test settings
+            public static LogonautSettings CreateDefaultTestSettings()
+            {
+                return new LogonautSettings
+                {
+                    // Use a default null filter, which is the same as no filter.
+                    FilterProfiles = new List<FilterProfile> { new FilterProfile("Default", null) },
+                    LastActiveProfileName = "Default",
+                    ContextLines = 0
+                    // Add other default properties as needed
+                };
+            }
+        }
+
         // Helper to create a view model with mocks
-       private MainViewModel CreateMockViewModel(IFileDialogService? fileDialog = null, IInputPromptService? prompt = null)
+       private MainViewModel CreateMockViewModel(Logonaut.Core.ISettingsService? settings = null, IFileDialogService? fileDialog = null, IInputPromptService? prompt = null)
         {
             // Provide a basic SynchronizationContext for the test environment
             var testSyncContext = new SynchronizationContext();
 
             return new MainViewModel(
+                settings ?? new MockSettingsService(),
                 fileDialog ?? new MockFileDialogService(),
                 prompt ?? new MockInputPromptService(),
                 logFilterProcessor: null, // Use default or mock if needed later
@@ -304,8 +336,8 @@ namespace Logonaut.UI.Tests.ViewModels
             Assert.AreEqual(1, viewModel.AvailableProfiles.Count, "Should initialize with one default profile.");
             Assert.IsNotNull(viewModel.ActiveFilterProfile, "A profile should be active by default.");
             Assert.AreEqual("Default", viewModel.ActiveFilterProfile.Name, "Default profile name should be 'Default'.");
-            Assert.IsInstanceOfType(viewModel.ActiveFilterProfile.Model.RootFilter, typeof(TrueFilter), "Default profile should have a TrueFilter root.");
-            Assert.IsNotNull(viewModel.ActiveFilterProfile.RootFilterViewModel, "RootFilterViewModel should be created for the active profile.");
+            Assert.IsNull(viewModel.ActiveFilterProfile.Model.RootFilter, "Default profile should have no filter.");
+            Assert.IsNull(viewModel.ActiveFilterProfile.RootFilterViewModel, "RootFilterViewModel should also be null.");
         }
 
         [TestMethod] public void AddFilterCommand_WithNoRootFilterInActiveProfile_CreatesRootNode()
@@ -609,7 +641,7 @@ namespace Logonaut.UI.Tests.ViewModels
         {
             // Arrange
             var fakeService = new MockFileDialogService { FileToReturn = "C:\\fake\\log.txt" };
-            var viewModel = CreateMockViewModel(fakeService);
+            var viewModel = CreateMockViewModel(fileDialog: fakeService);
             // Mocking LogTailerManager/LogFilterProcessor interactions would be needed for full test.
 
             // Act

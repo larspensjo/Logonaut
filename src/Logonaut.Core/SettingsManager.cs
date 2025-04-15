@@ -5,6 +5,8 @@ using System.IO; // Required for Path, File, Directory
 using System; // Required for Environment, Exception
 using System.Linq; // Required for Linq methods
 
+// TODO: SettingsManager is no longer used.
+
 namespace Logonaut.Core
 {
     /// <summary>

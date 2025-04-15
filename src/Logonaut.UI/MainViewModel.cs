@@ -57,6 +57,7 @@ namespace Logonaut.UI.ViewModels
 
         // --- UI Services & Context ---
         private readonly IFileDialogService _fileDialogService;
+        private readonly ISettingsService _settingsService;
         private readonly IInputPromptService _inputPromptService; // For renaming
         private readonly SynchronizationContext _uiContext;
 
@@ -83,11 +84,13 @@ namespace Logonaut.UI.ViewModels
         #region // --- Constructor ---
 
         public MainViewModel(
+            ISettingsService settingsService,
             IFileDialogService? fileDialogService = null,
             IInputPromptService? inputPromptService = null, // Inject input service
             ILogFilterProcessor? logFilterProcessor = null,
             SynchronizationContext? uiContext = null) // Optional for testing
         {
+            _settingsService = settingsService;
             _fileDialogService = fileDialogService ?? new FileDialogService();
             _inputPromptService = inputPromptService ?? new InputPromptService(); // Use default/placeholder
             _uiContext = uiContext ?? SynchronizationContext.Current ??
@@ -225,22 +228,7 @@ namespace Logonaut.UI.ViewModels
         private void LoadPersistedSettings()
         {
             LogonautSettings settings;
-            try
-            {
-                settings = SettingsManager.LoadSettings();
-                // SettingsManager now ensures at least one profile exists and LastActiveProfileName is valid
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Fatal error loading settings: {ex.Message}\nWill proceed with defaults.", "Settings Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                settings = new LogonautSettings(); // Use defaults
-                // Ensure default profile exists
-                if (!settings.FilterProfiles.Any())
-                {
-                    settings.FilterProfiles.Add(new FilterProfile("Default", null));
-                    settings.LastActiveProfileName = "Default";
-                }
-            }
+            settings = _settingsService.LoadSettings();
 
             // Apply loaded settings to ViewModel properties
             ContextLines = settings.ContextLines;
@@ -287,14 +275,7 @@ namespace Logonaut.UI.ViewModels
                 // TODO: Add theme, window state etc.
             };
 
-            try
-            {
-                SettingsManager.SaveSettings(settingsToSave);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Error saving settings: {ex.Message}", "Settings Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
+            _settingsService.SaveSettings(settingsToSave);
         }
 
         #endregion // --- UI State Management ---
