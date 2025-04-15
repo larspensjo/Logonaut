@@ -176,6 +176,90 @@ namespace Logonaut.UI.Tests.ViewModels
             }
         }
 
+        [TestMethod] public void RemoveFilter_ShouldUpdateTreeViewItems()
+        {
+            // Arrange - Needs STA thread for WPF controls
+            MainViewModel? vmMock = null;
+            MainWindow? window = null;
+            TreeView? filterTreeView = null;
+            Exception? threadException = null;
+
+            var t = new Thread(() =>
+            {
+                Dispatcher? dispatcher = null; // Capture dispatcher for shutdown
+                try
+                {
+                    // --- Setup ---
+                    dispatcher = Dispatcher.CurrentDispatcher; // Get dispatcher for this thread
+                    vmMock = CreateMockViewModel();
+                    window = new MainWindow(vmMock);
+
+                    // Force layout to apply templates and create controls
+                    window.Measure(new Size(800, 600));
+                    window.Arrange(new Rect(0, 0, 800, 600));
+                    window.UpdateLayout();
+
+                    var windowContentElement = window.Content as UIElement;
+                    Assert.IsNotNull(windowContentElement, "Window Content is null.");
+                    filterTreeView = FindVisualChild<TreeView>(windowContentElement, "FilterTreeViewNameForTesting");
+                    Assert.IsNotNull(filterTreeView, "FilterTreeViewNameForTesting not found.");
+
+                    // Pre-condition: Add a filter node first so we have something to remove
+                    Assert.IsNotNull(vmMock.ActiveFilterProfile, "No active profile.");
+                    vmMock.ActiveFilterProfile.SetModelRootFilter(null); // Start empty
+                    vmMock.ActiveTreeRootNodes.Clear();
+                    Assert.AreEqual(0, filterTreeView.Items.Count, "Pre-Add: TreeView should be empty.");
+
+                    vmMock.AddFilterCommand.Execute("Substring");
+
+                    // Wait for dispatcher processing (bindings, layout) after add
+                    dispatcher.Invoke(() => { }, DispatcherPriority.DataBind);
+                    dispatcher.Invoke(() => { window.UpdateLayout(); }, DispatcherPriority.Loaded);
+
+                    Assert.AreEqual(1, filterTreeView.Items.Count, "Pre-Remove: TreeView should have 1 item after add.");
+                    vmMock.SelectedFilterNode = vmMock.ActiveFilterProfile.RootFilterViewModel; // Select the added node
+                    Assert.IsNotNull(vmMock.SelectedFilterNode, "Pre-Remove: Node to remove wasn't selected.");
+
+                    // --- Act ---
+                    vmMock.RemoveFilterNodeCommand.Execute(null);
+
+                    // Wait for dispatcher processing (bindings, layout) after remove
+                    dispatcher.Invoke(() => { }, DispatcherPriority.DataBind);
+                    dispatcher.Invoke(() => { window.UpdateLayout(); }, DispatcherPriority.Loaded);
+
+                    // --- Assert ---
+                    Assert.AreEqual(0, filterTreeView.Items.Count, "Post-Remove: TreeView Items collection should be empty.");
+                    Assert.AreEqual(0, vmMock.ActiveTreeRootNodes.Count, "Post-Remove: ViewModel's ActiveTreeRootNodes should be empty.");
+                    Assert.IsNull(vmMock.SelectedFilterNode, "Post-Remove: SelectedFilterNode should be null.");
+                    Assert.IsNull(vmMock.ActiveFilterProfile.RootFilterViewModel, "Post-Remove: Profile's RootFilterViewModel should be null.");
+
+                }
+                catch (Exception ex)
+                {
+                    threadException = ex;
+                }
+                finally
+                {
+                    // Ensure Dispatcher processing stops
+                    if (dispatcher != null && !dispatcher.HasShutdownStarted)
+                    {
+                        dispatcher.InvokeShutdown();
+                    }
+                    // Clean up window resources if necessary, though InvokeShutdown usually handles it.
+                     window?.Close(); // Helps release resources if window wasn't explicitly shown/closed
+                }
+            });
+
+            t.SetApartmentState(ApartmentState.STA); // WPF requires STA
+            t.Start();
+            t.Join(); // Wait for test thread
+
+            if (threadException != null)
+            {
+                throw new AssertFailedException($"Exception on STA thread: {threadException.Message}", threadException);
+            }
+        }
+
         [TestMethod] public void AddFilterCommand_WhenActiveProfileIsEmpty_UpdatesActiveTreeRootNodes()
         {
             // Arrange

@@ -484,6 +484,7 @@ namespace Logonaut.UI.ViewModels
             if (SelectedFilterNode == ActiveFilterProfile.RootFilterViewModel)
             {
                 ActiveFilterProfile.SetModelRootFilter(null); // Clears the model and VM tree
+                UpdateActiveTreeRootNodes(ActiveFilterProfile);
                 SelectedFilterNode = null; // Clear selection
             }
             // Case 2: Removing a child node
@@ -631,14 +632,15 @@ namespace Logonaut.UI.ViewModels
         /// <summary>
         /// Updates the ActiveTreeRootNodes collection based on the new active profile.
         /// </summary>
-        private void UpdateActiveTreeRootNodes(FilterProfileViewModel? activeProfile) // <-- NEW HELPER
+        private void UpdateActiveTreeRootNodes(FilterProfileViewModel? activeProfile)
         {
             ActiveTreeRootNodes.Clear();
             if (activeProfile?.RootFilterViewModel != null)
                 ActiveTreeRootNodes.Add(activeProfile.RootFilterViewModel);
 
-            // I don't think a notification is generated when we don't assign to the property directly.
-             OnPropertyChanged(nameof(ActiveTreeRootNodes));
+            // TODO: There will be an automatic CollectionChanged event, not a PropertyChanged event. However, we shouldn't need a PropertyChanged event here.
+            // The UI controls bound via ItemsSource listen for CollectionChanged.
+            OnPropertyChanged(nameof(ActiveTreeRootNodes));
         }
 
         // Central method to signal the processor that filters or context may have changed.
