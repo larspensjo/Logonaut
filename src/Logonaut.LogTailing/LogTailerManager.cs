@@ -1,6 +1,8 @@
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 
+// TODO: This class should no longer be used.
+
 namespace Logonaut.LogTailing
 {
     // LogTailerManager centralizes log file monitoring, ensuring efficient tailing, resource management, 

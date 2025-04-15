@@ -11,6 +11,7 @@ using System.Windows; // Required for DependencyObject
 using System.Windows.Media; // Required for VisualTreeHelper
 using System.Windows.Controls; // Required for TreeView
 using System.Windows.Threading; // Required for DispatcherPriority
+using System.Reactive.Linq; // Required for AsObservable
 
 namespace Logonaut.UI.Tests.ViewModels
 {
@@ -64,14 +65,70 @@ namespace Logonaut.UI.Tests.ViewModels
             }
         }
 
+        private class MockLogTailerService : Logonaut.Core.ILogTailerService
+        {
+            private readonly System.Reactive.Subjects.Subject<string> _logLinesSubject = new System.Reactive.Subjects.Subject<string>();
+            public string? ChangedFilePath { get; private set; }
+            public bool IsDisposed { get; private set; } = false;
+            public bool IsStopped { get; private set; } = false;
+
+            public IObservable<string> LogLines => _logLinesSubject.AsObservable();
+
+            public void ChangeFile(string filePath)
+            {
+                if(IsDisposed) throw new ObjectDisposedException(nameof(MockLogTailerService));
+                // Simulate file check or just record the call
+                if (filePath == "C:\\throw\\error.log") // Example for testing error path
+                {
+                    throw new System.IO.FileNotFoundException("Mock file not found");
+                }
+                ChangedFilePath = filePath;
+                IsStopped = false; // Changing file implies starting again
+                // In a real mock, you might simulate file events here if needed by tests
+            }
+
+            public void StopTailing()
+            {
+                IsStopped = true;
+                // Optionally complete the subject if tests rely on completion
+                // _logLinesSubject.OnCompleted();
+            }
+
+            // Simulate emitting a log line
+            public void EmitLine(string line)
+            {
+                if(IsDisposed || IsStopped) return;
+                _logLinesSubject.OnNext(line);
+            }
+
+            // Simulate emitting an error
+            public void EmitError(Exception ex)
+            {
+                if(IsDisposed || IsStopped) return;
+                _logLinesSubject.OnError(ex);
+            }
+
+            public void Dispose()
+            {
+                if(IsDisposed) return;
+                IsDisposed = true;
+                _logLinesSubject.OnCompleted(); // Signal completion on dispose
+                _logLinesSubject.Dispose();
+            }
+        }
+
         // Helper to create a view model with mocks
-       private MainViewModel CreateMockViewModel(Logonaut.Core.ISettingsService? settings = null, IFileDialogService? fileDialog = null, IInputPromptService? prompt = null)
+        private MainViewModel CreateMockViewModel(
+            Logonaut.Core.ISettingsService? settings = null,
+            Logonaut.Core.ILogTailerService? logTailer = null,
+            IFileDialogService? fileDialog = null, IInputPromptService? prompt = null)
         {
             // Provide a basic SynchronizationContext for the test environment
             var testSyncContext = new SynchronizationContext();
 
             return new MainViewModel(
                 settings ?? new MockSettingsService(),
+                logTailer ?? new MockLogTailerService(),
                 fileDialog ?? new MockFileDialogService(),
                 prompt ?? new MockInputPromptService(),
                 logFilterProcessor: null, // Use default or mock if needed later

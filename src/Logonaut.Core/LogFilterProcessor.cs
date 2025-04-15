@@ -17,7 +17,7 @@ namespace Logonaut.Core
     public class LogFilterProcessor : ILogFilterProcessor
     {
         private readonly LogDocument _logDocument;
-        private readonly IObservable<string> _rawLogLines;
+        private readonly ILogTailerService _logTailerService;
         private readonly SynchronizationContext _uiContext;
 
         private readonly BehaviorSubject<FilteredUpdate> _filteredUpdatesSubject = new(new FilteredUpdate(UpdateType.Replace, Array.Empty<FilteredLogLine>()));
@@ -36,27 +36,31 @@ namespace Logonaut.Core
 
         public IObservable<FilteredUpdate> FilteredUpdates => _filteredUpdatesSubject.AsObservable();
 
+        private IDisposable? _logSubscription; // Keep track of the subscription to dispose it
+
         public LogFilterProcessor(
-            IObservable<string> rawLogLines,
+            ILogTailerService logTailerService,
             LogDocument logDocument,
             SynchronizationContext uiContext,
             IScheduler? backgroundScheduler = null)
         {
-            _rawLogLines = rawLogLines ?? throw new ArgumentNullException(nameof(rawLogLines));
-            _logDocument = logDocument ?? throw new ArgumentNullException(nameof(logDocument));
-            _uiContext = uiContext ?? throw new ArgumentNullException(nameof(uiContext));
+            _logTailerService = logTailerService;
+            _logDocument = logDocument;
+            _uiContext = uiContext;
             _backgroundScheduler = backgroundScheduler ?? TaskPoolScheduler.Default;
 
             InitializePipelines();
 
             _disposables.Add(_filteredUpdatesSubject);
             _disposables.Add(_filterSettingsSubject);
+            _disposables.Add(Disposable.Create(() => _logSubscription?.Dispose()));
         }
 
         private void InitializePipelines()
         {
+            _logSubscription?.Dispose();
             // --- Incremental Filtering Pipeline ---
-            var incrementalSubscription = _rawLogLines
+            _logSubscription = _logTailerService.LogLines
                 .Select(line =>
                 {
                     // Assign original index and add to document *before* buffering/filtering
@@ -73,8 +77,6 @@ namespace Logonaut.Core
                     matchedLines => _filteredUpdatesSubject.OnNext(new FilteredUpdate(UpdateType.Append, matchedLines)),
                     ex => HandlePipelineError("Incremental Filtering Error", ex) // TODO: Improve error handling
                 );
-
-            _disposables.Add(incrementalSubscription);
 
             // --- Full Re-Filtering Pipeline (Triggered by Filter Changes) ---
             var fullRefilterSubscription = _filterSettingsSubject
@@ -140,6 +142,7 @@ namespace Logonaut.Core
 
         public void Dispose()
         {
+            _logSubscription?.Dispose();
             _disposables.Dispose();
         }
     }

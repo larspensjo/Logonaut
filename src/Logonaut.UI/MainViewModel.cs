@@ -58,6 +58,7 @@ namespace Logonaut.UI.ViewModels
         // --- UI Services & Context ---
         private readonly IFileDialogService _fileDialogService;
         private readonly ISettingsService _settingsService;
+        private readonly ILogTailerService _logTailerService;
         private readonly IInputPromptService _inputPromptService; // For renaming
         private readonly SynchronizationContext _uiContext;
 
@@ -85,12 +86,14 @@ namespace Logonaut.UI.ViewModels
 
         public MainViewModel(
             ISettingsService settingsService,
+            ILogTailerService logTailerService,
             IFileDialogService? fileDialogService = null,
-            IInputPromptService? inputPromptService = null, // Inject input service
+            IInputPromptService? inputPromptService = null,
             ILogFilterProcessor? logFilterProcessor = null,
-            SynchronizationContext? uiContext = null) // Optional for testing
+            SynchronizationContext? uiContext = null)
         {
             _settingsService = settingsService;
+            _logTailerService = logTailerService;
             _fileDialogService = fileDialogService ?? new FileDialogService();
             _inputPromptService = inputPromptService ?? new InputPromptService(); // Use default/placeholder
             _uiContext = uiContext ?? SynchronizationContext.Current ??
@@ -98,7 +101,7 @@ namespace Logonaut.UI.ViewModels
 
             // Initialize and own the processor
             _logFilterProcessor = logFilterProcessor ?? new LogFilterProcessor(
-                LogTailerManager.Instance.LogLines,
+                _logTailerService,
                 LogDoc, // Pass the LogDocument instance - LogDoc owned by VM (UI State)
                 _uiContext);
 
@@ -339,27 +342,17 @@ namespace Logonaut.UI.ViewModels
 
             // Prevent deleting the last profile? Or ensure a default is created.
             if (AvailableProfiles.Count <= 1)
-            {
-                MessageBox.Show("Cannot delete the last filter profile.", "Delete Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
+                throw new InvalidOperationException("Cannot delete the last filter profile, this should have been disabled.");
 
+            var profileToRemove = ActiveFilterProfile;
+            int currentIndex = AvailableProfiles.IndexOf(profileToRemove);
+            AvailableProfiles.Remove(profileToRemove);
 
-            var result = MessageBox.Show($"Are you sure you want to delete the profile '{ActiveFilterProfile.Name}'?",
-                                         "Confirm Deletion", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            // Select another profile (e.g., the previous one or the first one)
+            ActiveFilterProfile = AvailableProfiles.ElementAtOrDefault(Math.Max(0, currentIndex - 1)) ?? AvailableProfiles.First();
+            // Setting ActiveFilterProfile triggers the update
 
-            if (result == MessageBoxResult.Yes)
-            {
-                var profileToRemove = ActiveFilterProfile;
-                int currentIndex = AvailableProfiles.IndexOf(profileToRemove);
-                AvailableProfiles.Remove(profileToRemove);
-
-                // Select another profile (e.g., the previous one or the first one)
-                ActiveFilterProfile = AvailableProfiles.ElementAtOrDefault(Math.Max(0, currentIndex - 1)) ?? AvailableProfiles.First();
-                // Setting ActiveFilterProfile triggers the update
-
-                SaveCurrentSettings(); // Save changes
-            }
+            SaveCurrentSettings(); // Save changes
         }
 
         private bool CanManageActiveProfile() => ActiveFilterProfile != null;
@@ -509,9 +502,9 @@ namespace Logonaut.UI.ViewModels
 
             try
             {
-                LogTailerManager.Instance.ChangeFile(selectedFile); // Start tailing new file
-                // After starting tailer and resetting processor, trigger processing using the *current* active filter
-                TriggerFilterUpdate();
+                _logTailerService.ChangeFile(selectedFile);
+
+                TriggerFilterUpdate(); // TODO: Not sure this is needed.
             }
             catch (Exception ex)
             {
@@ -912,6 +905,7 @@ namespace Logonaut.UI.ViewModels
         {
             IsBusyFiltering = false; // Ensure busy indicator is hidden on exit
             SaveCurrentSettings();   // Save state before disposing
+            _logTailerService?.StopTailing();
             Dispose();               // Dispose resources
         }
         #endregion // --- Lifecycle Management ---
