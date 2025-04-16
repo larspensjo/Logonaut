@@ -527,8 +527,8 @@ namespace Logonaut.UI.ViewModels
             }
         }
 
-        [RelayCommand(CanExecute = nameof(CanSearch))]
-        private void PreviousSearch()
+        // TODO: We want Shift+F3 to trigger previous search
+        [RelayCommand(CanExecute = nameof(CanSearch))] private void PreviousSearch()
         {
             if (_searchMatches.Count == 0) return;
             _currentSearchIndex = (_currentSearchIndex - 1 + _searchMatches.Count) % _searchMatches.Count; // Wrap around
@@ -536,8 +536,8 @@ namespace Logonaut.UI.ViewModels
             OnPropertyChanged(nameof(SearchStatusText));
         }
 
-        [RelayCommand(CanExecute = nameof(CanSearch))]
-        private void NextSearch()
+        // TODO: We want F3 to trigger next search
+        [RelayCommand(CanExecute = nameof(CanSearch))] private void NextSearch()
         {
             if (_searchMatches.Count == 0) return;
             _currentSearchIndex = (_currentSearchIndex + 1) % _searchMatches.Count; // Wrap around
@@ -563,8 +563,7 @@ namespace Logonaut.UI.ViewModels
 
         partial void OnSearchTextChanged(string value) => UpdateSearchMatches(); // Trigger search update
 
-        [RelayCommand]
-        private void UpdateFilterSubstrings() // Triggered by TriggerFilterUpdate
+        [RelayCommand] private void UpdateFilterSubstrings() // Triggered by TriggerFilterUpdate
         {
             var newFilterSubstrings = new ObservableCollection<string>();
             // Traverse the tree of the *currently active* profile
@@ -583,8 +582,7 @@ namespace Logonaut.UI.ViewModels
         }
         private bool CanDecrementContextLines() => ContextLines > 0;
 
-        [RelayCommand]
-        private void IncrementContextLines()
+        [RelayCommand] private void IncrementContextLines()
         {
             ContextLines++;
             // OnContextLinesChanged triggers TriggerFilterUpdate
@@ -635,10 +633,12 @@ namespace Logonaut.UI.ViewModels
         // - OnContextLinesChanged
         // - Callbacks passed to FilterViewModel instances (triggered by Enable toggle, EndEdit)
         // - Callbacks from FilterProfileViewModel (e.g., SetModelRootFilter)
+        // TODO: Whenever the filter settings are changed, we should ensure the line currently selected in the editor is still visible. Preferably at the same window position.
         private void TriggerFilterUpdate()
         {
             // Simple check to avoid queuing multiple simultaneous updates. More robust
             // handling might involve cancellation or ensuring only the latest runs.
+            // TODO: Maybe some kind of dirty flag can be used? Is it needed? That is, are there any problems to fail trigger an update?
             if (IsBusyFiltering)
             {
                 Debug.WriteLine("TriggerFilterUpdate skipped: Already busy.");

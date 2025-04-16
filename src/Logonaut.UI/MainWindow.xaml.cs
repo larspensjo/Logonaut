@@ -14,6 +14,7 @@ using Logonaut.UI.ViewModels;
 
 namespace Logonaut.UI
 {
+    // TODO: Keep track of optional selected line in log window. Use highlighting to show.
     public partial class MainWindow : Window, IDisposable
     {
         // --- Dark Title Bar Support ---
