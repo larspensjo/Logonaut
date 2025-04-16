@@ -103,7 +103,7 @@ namespace Logonaut.Core // Or Infrastructure namespace
              {
                  settings.FilterProfiles = new List<FilterProfile>
                  {
-                     new FilterProfile("Default", new TrueFilter()) // Ensure default exists
+                     new FilterProfile("Default", null) // Null filter is used when there are no filters
                  };
                  settings.LastActiveProfileName = "Default";
              }
@@ -112,16 +112,6 @@ namespace Logonaut.Core // Or Infrastructure namespace
              {
                   // Ensure LastActiveProfileName is valid, default to first if not
                  settings.LastActiveProfileName = settings.FilterProfiles.First().Name;
-             }
-
-             // Ensure all profiles have a non-null root filter (important for logic assuming root exists)
-             foreach(var profile in settings.FilterProfiles)
-             {
-                if(profile.RootFilter == null)
-                {
-                    profile.RootFilter = new TrueFilter(); // Assign a default if null
-                    System.Diagnostics.Debug.WriteLine($"WARN: Profile '{profile.Name}' loaded with null RootFilter. Defaulting to TrueFilter.");
-                }
              }
         }
     }

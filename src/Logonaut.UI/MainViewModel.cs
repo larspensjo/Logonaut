@@ -340,19 +340,33 @@ namespace Logonaut.UI.ViewModels
         {
             if (ActiveFilterProfile == null) return;
 
-            // Prevent deleting the last profile? Or ensure a default is created.
-            if (AvailableProfiles.Count <= 1)
-                throw new InvalidOperationException("Cannot delete the last filter profile, this should have been disabled.");
-
+            // Keep the profile to remove and its index for selection logic later
             var profileToRemove = ActiveFilterProfile;
-            int currentIndex = AvailableProfiles.IndexOf(profileToRemove);
-            AvailableProfiles.Remove(profileToRemove);
+            int removedIndex = AvailableProfiles.IndexOf(profileToRemove);
 
-            // Select another profile (e.g., the previous one or the first one)
-            ActiveFilterProfile = AvailableProfiles.ElementAtOrDefault(Math.Max(0, currentIndex - 1)) ?? AvailableProfiles.First();
-            // Setting ActiveFilterProfile triggers the update
+            // --- Logic for Deletion ---
+            AvailableProfiles.Remove(profileToRemove); // Remove the selected profile
 
-            SaveCurrentSettings(); // Save changes
+            // --- Handle Last Profile Scenario ---
+            if (AvailableProfiles.Count == 0)
+            {
+                // If the list is now empty, create and add a new default profile
+                var defaultModel = new FilterProfile("Default", null); // Use default name and no filter
+                var defaultVM = new FilterProfileViewModel(defaultModel, TriggerFilterUpdate);
+                AvailableProfiles.Add(defaultVM);
+
+                // Set the new default profile as the active one
+                ActiveFilterProfile = defaultVM;
+                // Setting ActiveFilterProfile triggers OnActiveFilterProfileChanged -> UpdateActiveTreeRootNodes & TriggerFilterUpdate
+            }
+            else
+            {
+                // Select another profile (e.g., the previous one or the first one)
+                ActiveFilterProfile = AvailableProfiles.ElementAtOrDefault(Math.Max(0, removedIndex - 1)) ?? AvailableProfiles.First();
+                // Setting ActiveFilterProfile triggers OnActiveFilterProfileChanged -> UpdateActiveTreeRootNodes & TriggerFilterUpdate
+            }
+
+            SaveCurrentSettings(); // Save the updated profile list and active profile
         }
 
         private bool CanManageActiveProfile() => ActiveFilterProfile != null;

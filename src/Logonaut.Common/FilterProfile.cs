@@ -15,7 +15,7 @@ namespace Logonaut.Common
 
         /// <summary>
         /// Gets or sets the root filter node for this profile's hierarchy.
-        /// Can be null if the profile is empty.
+        /// A null value indicates no filter is set.
         /// Uses TypeNameHandling during serialization.
         /// </summary>
         [JsonProperty(TypeNameHandling = TypeNameHandling.All)]
