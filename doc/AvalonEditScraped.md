@@ -560,7 +560,7 @@ Implements `ITextAreaInputHandler`.
 
 Inherits from `System.Windows.FrameworkElement`, implements `IScrollInfo`, `IWeakEventListener`, `ITextEditorComponent`, `System.IServiceProvider`.
 
-**Summary:** The core rendering control. It manages visual lines, interacts with the document's height tree, handles layers for background/selection/text/caret rendering, and provides coordinate transformations. It does not handle user input directly.
+**Summary:** The core rendering control. It manages visual lines, interacts with the document's height tree, handles layers for background/selection/text/caret rendering, and provides coordinate transformations. It does not handle user input directly. **Important: Many methods dealing with visual positions expect coordinates relative to the document origin (including scroll offset), not relative to the control itself.**
 
 **Public Properties:**
 
@@ -576,7 +576,7 @@ Inherits from `System.Windows.FrameworkElement`, implements `IScrollInfo`, `IWea
 *   `DefaultBaseline`: `double` (readonly) - Gets the default baseline position within a line.
 *   `WideSpaceWidth`: `double` (readonly) - Gets the width of a 'wide space' (typically 'x'), used for tab width calculation.
 *   `DocumentHeight`: `double` (readonly) - Gets the total height of the document content in device-independent pixels.
-*   `ScrollOffset`: `Vector` (readonly) - Gets the current scroll offset.
+*   `ScrollOffset`: `Vector` (readonly) - Gets the current scroll offset (**X**, **Y**) in device-independent pixels. **This is crucial for coordinate transformations between control-relative points (e.g., from mouse events) and document-relative points required by many methods.**
 *   `NonPrintableCharacterBrush`, `LinkTextForegroundBrush`, `LinkTextBackgroundBrush`: `Brush` - Brushes for specific rendering elements. (Dependency Properties)
 *   `LinkTextUnderline`: `bool` - Whether links are underlined. (Dependency Property)
 *   `ColumnRulerPen`: `Pen` - Pen for the column ruler. (Dependency Property)
@@ -593,11 +593,11 @@ Inherits from `System.Windows.FrameworkElement`, implements `IScrollInfo`, `IWea
 *   `GetOrConstructVisualLine(DocumentLine documentLine)`: `VisualLine` - Gets the visual line for a document line, constructing it if necessary (even if outside the visible area).
 *   `GetVisualLineFromVisualTop(double visualTop)`: `VisualLine` - Gets the visual line at a specific vertical position.
 *   `GetVisualTopByDocumentLine(int line)`: `double` - Gets the vertical position of the top of a document line.
-*   `GetVisualPosition(TextViewPosition position, VisualYPosition yPositionMode)`: `Point` - Converts a `TextViewPosition` (including visual column) to a visual coordinate.
-*   `GetPosition(Point visualPosition)`: `TextViewPosition?` - Converts a visual coordinate to the nearest `TextViewPosition`.
-*   `GetPositionFloor(Point visualPosition)`: `TextViewPosition?` - Converts a visual coordinate to the `TextViewPosition` immediately before the point.
-*   `GetDocumentLineByVisualTop(double visualTop)`: `DocumentLine` - Gets the document line at a specific vertical position.
-*   `InsertLayer(UIElement layer, KnownLayer referencedLayer, LayerInsertionPosition position)`: Inserts a custom UIElement layer relative to a known layer.
+*   `GetVisualPosition(TextViewPosition position, VisualYPosition yPositionMode)`: `Point` - Converts a `TextViewPosition` (including visual column) to a **document-relative coordinate**.
+*   `GetPosition(Point visualPosition)`: `TextViewPosition?` - Converts a **document-relative coordinate** (`visualPosition`) to the nearest `TextViewPosition`. **Important:** The input `Point` must be relative to the document origin (e.g., `e.GetPosition(textView) + textView.ScrollOffset`). May return `null` if visual lines are invalid or the mapping fails (can occur after large scrolls if internal state is inconsistent).
+*   `GetPositionFloor(Point visualPosition)`: `TextViewPosition?` - Converts a **document-relative coordinate** (`visualPosition`) to the `TextViewPosition` immediately before the point. **Important:** The input `Point` must be relative to the document origin (e.g., `e.GetPosition(textView) + textView.ScrollOffset`). May return `null` near the top of partially visible lines after scrolling due to its "floor" behavior; `GetPosition` is often more robust for general hit-testing.
+*   `GetVisualLineFromVisualTop(double visualTop)`: `VisualLine` - Gets the visual line at a specific vertical position. **Important:** The `visualTop` value **must be relative to the document origin (unscrolled)**, e.g., `e.GetPosition(textView).Y + textView.ScrollOffset.Y`. Returns `null` if the position is outside the document's rendered area.
+*   `GetDocumentLineByVisualTop(double visualTop)`: `DocumentLine` - Gets the document line at a specific vertical position. **Important:** The `visualTop` value **must be relative to the document origin (unscrolled)**.*   `InsertLayer(UIElement layer, KnownLayer referencedLayer, LayerInsertionPosition position)`: Inserts a custom UIElement layer relative to a known layer.
 *   `CollapseLines(DocumentLine start, DocumentLine end)`: `CollapsedLineSection` - Marks lines as collapsed for rendering purposes (used internally by features like folding).
 
 **Public Events:**
@@ -621,6 +621,13 @@ Inherits from `System.Windows.FrameworkElement`, implements `IScrollInfo`, `IWea
 *   **HeightTree:** An augmented red-black tree mapping document lines to vertical positions and heights, crucial for efficient scrolling and handling collapsed sections.
 *   **Layers:** Uses a `LayerCollection` to manage rendering order (Background, Selection, Text, Caret, and custom layers). Background rendering is handled by `IBackgroundRenderer`.
 *   **Inline Objects:** Manages the lifecycle and layout of UIElements embedded within the text via `InlineObjectRun` and `InlineObjectElement`.
+*   **Coordinate Systems:** A key point of confusion.
+    *   Mouse events (`e.GetPosition(textView)`) give coordinates relative to the `TextView` control's top-left corner.
+    *   Methods like `GetPosition`, `GetPositionFloor`, `GetVisualLineFromVisualTop`, `GetDocumentLineByVisualTop` expect coordinates or Y-values relative to the **document's origin (top-left, unscrolled)**.
+    *   **To convert:** `pointRelativeToDocument = pointRelativeToControl + textView.ScrollOffset`.
+    *   `VisualLine.VisualTop` is relative to the document origin.
+    *   `VisualLine.GetVisualPosition()` returns a point relative to the document origin.
+    *   `VisualLine.GetTextViewPosition()` and `VisualLine.GetVisualColumn()` also typically work with document-relative points, although their internal math might transform these relative to the line's start.
 
 ### Class: `VisualLine`
 
@@ -637,7 +644,7 @@ Inherits from `System.Windows.FrameworkElement`, implements `IScrollInfo`, `IWea
 *   `VisualLength`: `int` (readonly) - The length in visual columns (excluding end-of-line marker).
 *   `VisualLengthWithEndOfLineMarker`: `int` (readonly) - The length in visual columns including a potential end-of-line marker.
 *   `Height`: `double` (readonly) - The total height of the visual line.
-*   `VisualTop`: `double` (readonly) - The vertical position relative to the document start.
+*   `VisualTop`: `double` (readonly) - The vertical position **relative to the document start (unscrolled)**.
 *   `IsDisposed`: `bool` (readonly) - Gets whether the visual line has been disposed.
 
 **Public Methods:**
@@ -647,9 +654,9 @@ Inherits from `System.Windows.FrameworkElement`, implements `IScrollInfo`, `IWea
 *   `GetTextLine(int visualColumn)` / `GetTextLine(int visualColumn, bool isAtEndOfLine)`: `TextLine` - Gets the WPF `TextLine` containing the specified visual column.
 *   `GetTextLineVisualYPosition(TextLine textLine, VisualYPosition yPositionMode)`: `double` - Gets the Y position of a specific `TextLine` within the `VisualLine`.
 *   `GetTextLineVisualStartColumn(TextLine textLine)`: `int` - Gets the starting visual column of a specific `TextLine`.
-*   `GetTextLineByVisualYPosition(double visualTop)`: `TextLine` - Gets the `TextLine` at a specific Y position within the `VisualLine`.
-*   `GetVisualPosition(int visualColumn, VisualYPosition yPositionMode)`: `Point` - Gets the visual coordinate for a visual column.
-*   `GetTextViewPosition(int visualColumn)` / `GetTextViewPosition(Point visualPosition, bool allowVirtualSpace)` / `GetTextViewPositionFloor(Point visualPosition, bool allowVirtualSpace)`: `TextViewPosition` - Converts visual columns/coordinates to `TextViewPosition`.
+*   `GetTextLineByVisualYPosition(double visualTop)`: `TextLine` - Gets the `TextLine` at a specific Y position within the `VisualLine`. **Note:** The input `visualTop` here is usually expected to be relative to the **document origin**, consistent with how `TextView.GetVisualLineFromVisualTop` works.
+*   `GetVisualPosition(int visualColumn, VisualYPosition yPositionMode)`: `Point` - Gets the visual coordinate (**relative to the document origin**) for a visual column within this line.
+*   `GetTextViewPosition(Point visualPosition, bool allowVirtualSpace)` / `GetTextViewPositionFloor(Point visualPosition, bool allowVirtualSpace)`: `TextViewPosition` - Converts **document-relative coordinates** to `TextViewPosition`.
 *   `GetNextCaretPosition(int visualColumn, LogicalDirection direction, CaretPositioningMode mode, bool allowVirtualSpace)`: `int` - Finds the next valid caret stop.
 
 **Internal Insights:**

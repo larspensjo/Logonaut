@@ -129,13 +129,11 @@ namespace Logonaut.UI.ViewModels
 
         // The 0-based index of the highlighted line within the FilteredLogLines collection.
         // Bound to the PersistentLineHighlightRenderer.HighlightedLineIndex DP.
-        [ObservableProperty]
-        private int _highlightedFilteredLineIndex = -1;
+        [ObservableProperty] private int _highlightedFilteredLineIndex = -1;
 
         // The original line number (1-based) corresponding to the highlighted line.
         // Used to restore selection after re-filtering.
-        [ObservableProperty]
-        private int _highlightedOriginalLineNumber = -1;
+        [ObservableProperty] private int _highlightedOriginalLineNumber = -1;
 
         // Update original line number whenever the filtered index changes
         partial void OnHighlightedFilteredLineIndexChanged(int value)
@@ -581,33 +579,24 @@ namespace Logonaut.UI.ViewModels
                 CurrentMatchOffset = match.Offset;
                 CurrentMatchLength = match.Length;
 
-                try
+                // Need LogText to map offset to line
+                string currentLogText = LogText; // Use local copy for safety
+                if (!string.IsNullOrEmpty(currentLogText) && CurrentMatchOffset >= 0 && CurrentMatchOffset < currentLogText.Length)
                 {
-                    // Need LogText to map offset to line
-                    string currentLogText = LogText; // Use local copy for safety
-                    if (!string.IsNullOrEmpty(currentLogText) && CurrentMatchOffset >= 0 && CurrentMatchOffset < currentLogText.Length)
-                    {
-                        // This requires creating a temporary TextDocument to use GetLineByOffset reliably
-                        // Alternatively, approximate by counting newlines (less robust).
-                        // Let's assume we can access the editor's document directly or create one.
-                        // **Simplification for now: Search FilteredLogLines. This is less performant.**
-                        // TODO: A better way involves direct access to AvalonEdit's Document in MainWindow.xaml.cs
-                        // or passing the AvalonEdit control instance to the ViewModel (less ideal).
+                    // This requires creating a temporary TextDocument to use GetLineByOffset reliably
+                    // Alternatively, approximate by counting newlines (less robust).
+                    // Let's assume we can access the editor's document directly or create one.
+                    // **Simplification for now: Search FilteredLogLines. This is less performant.**
+                    // TODO: A better way involves direct access to AvalonEdit's Document in MainWindow.xaml.cs
+                    // or passing the AvalonEdit control instance to the ViewModel (less ideal).
 
-                        // Find the line number containing the start of the match
-                        int lineIndex = FindFilteredLineIndexContainingOffset(CurrentMatchOffset);
-                        HighlightedFilteredLineIndex = lineIndex; // Update the highlight
-                    }
-                    else
-                    {
-                        HighlightedFilteredLineIndex = -1; // Invalid offset
-                    }
+                    // Find the line number containing the start of the match
+                    int lineIndex = FindFilteredLineIndexContainingOffset(CurrentMatchOffset);
+                    HighlightedFilteredLineIndex = lineIndex; // Update the highlight
                 }
-                catch (Exception ex)
+                else
                 {
-                    // Log error or handle gracefully
-                    Debug.WriteLine($"Error finding line for highlight: {ex.Message}");
-                    HighlightedFilteredLineIndex = -1;
+                    HighlightedFilteredLineIndex = -1; // Invalid offset
                 }
             }
             else

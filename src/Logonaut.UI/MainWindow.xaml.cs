@@ -70,7 +70,7 @@ namespace Logonaut.UI
             // Set up initial window state
             Loaded += MainWindow_Loaded;
 
-            this.SourceInitialized += MainWindow_SourceInitialized;
+            SourceInitialized += MainWindow_SourceInitialized;
 
             // Add original line number and separator margins (code-behind approach)
             SetupCustomMargins();
@@ -79,13 +79,13 @@ namespace Logonaut.UI
             // Hook up event handlers AFTER the template is applied
             logOutputEditor.Loaded += LogOutputEditor_Loaded;
             
-            // Enable clipboard paste functionality
+            // Enable clipboard paste functionality. Only preview events seem to work here.
             logOutputEditor.TextArea.PreviewKeyDown += LogOutputEditor_PreviewKeyDown;
 
-            // Handle mouse clicks for search reference point
-            logOutputEditor.TextArea.MouseDown += LogOutputEditor_MouseDown;
+            // Handle mouse clicks for search reference point. Only preview events seem to work here.
+            logOutputEditor.TextArea.PreviewMouseDown += LogOutputEditor_PreviewMouseDown;
 
-            this.Closing += MainWindow_Closing;
+            Closing += MainWindow_Closing;
         }
 
         private void MainWindow_Closing(object? sender, CancelEventArgs e)
@@ -293,25 +293,46 @@ namespace Logonaut.UI
              };
         }
 
-        private void LogOutputEditor_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        private void LogOutputEditor_PreviewMouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
             var logOutputEditor = LogOutputEditor; // Work-around to minimize intellisense issues in XAML
             if (e.ChangedButton == System.Windows.Input.MouseButton.Left && DataContext is ViewModels.MainViewModel viewModel)
             {
-                // Get the position in the text where the user clicked
-                var positionInfo = logOutputEditor.TextArea.TextView.GetPositionFloor(e.GetPosition(logOutputEditor.TextArea.TextView));
-                if (positionInfo.HasValue) // Check if a valid position was found
+                var textView = logOutputEditor.TextArea.TextView;
+                if (!textView.IsLoaded || !textView.VisualLinesValid)
+                    throw new InvalidOperationException("TextView is not loaded or visual lines are not valid.");
+
+                // 1. Get the click position relative to the TextView control
+                Point pointRelativeToTextView = e.GetPosition(textView);
+
+                // 2. Calculate the click position relative to the start of the document (add scroll offsets)
+                Point pointInDocument = new Point(
+                    pointRelativeToTextView.X + textView.ScrollOffset.X,
+                    pointRelativeToTextView.Y + textView.ScrollOffset.Y
+                );
+
+                // 3. Use the document-relative point to get the position
+                TextViewPosition? positionInfo = textView.GetPosition(pointInDocument); // Pass the corrected point
+
+                if (positionInfo.HasValue)
                 {
-                    // Get the 1-based line number in the *filtered* document
-                    int clickedFilteredLineNumber = positionInfo.Value.Line;
-                    int clickedFilteredLineIndex = clickedFilteredLineNumber - 1; // Convert to 0-based index
+                    // 4. Get the VisualLine object associated with the position
+                    //    We can use the Line number from the positionInfo to get the DocumentLine,
+                    //    and then the VisualLine. Or, less reliably, try GetVisualLineFromVisualTop again.
+                    VisualLine? clickedVisualLine = textView.GetVisualLine(positionInfo.Value.Line);
 
-                    // Update the ViewModel's highlighted index
-                    viewModel.HighlightedFilteredLineIndex = clickedFilteredLineIndex;
+                    if (clickedVisualLine != null)
+                    {
+                        int clickedDocumentLineNumber = clickedVisualLine.FirstDocumentLine.LineNumber;
+                        int clickedFilteredLineIndex = clickedDocumentLineNumber - 1;
 
-                    // Convert TextLocation (line,column) to character offset in the document
-                    var characterOffset = logOutputEditor.Document.GetOffset(positionInfo.Value.Location);
-                    viewModel.UpdateSearchIndexFromCharacterOffset(characterOffset);
+                        viewModel.HighlightedFilteredLineIndex = clickedFilteredLineIndex;
+
+                        // Update Search based on character offset
+                        // Use the Location from positionInfo as it's already calculated
+                        var characterOffset = logOutputEditor.Document.GetOffset(positionInfo.Value.Location);
+                        viewModel.UpdateSearchIndexFromCharacterOffset(characterOffset);
+                    }
                 }
             }
         }
