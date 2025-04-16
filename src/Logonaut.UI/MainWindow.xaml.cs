@@ -52,16 +52,7 @@ namespace Logonaut.UI
         public MainWindow(MainViewModel viewModel)
         {
             // InitializeComponent() is the method generated from the XAML. When it runs, it parses the XAML, creates the UI elements, and wires them up.
-            try 
-            {
-                InitializeComponent();
-            }
-            catch (Exception ex)
-            {
-                // Handle any exceptions that occur during initialization
-                MessageBox.Show($"Error initializing the UI: {ex.Message}", "Initialization Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                throw; // Rethrow the exception to ensure the application doesn't continue in an invalid state
-            }
+            InitializeComponent();
             DataContext = viewModel;
             _viewModel = viewModel;
 

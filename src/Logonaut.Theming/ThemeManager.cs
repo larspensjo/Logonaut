@@ -15,30 +15,23 @@ namespace Logonaut.Theming
         /// </summary>
         public void ApplyTheme(ThemeType theme)
         {
-            try
+            var path = GetDictionaryPath(theme);
+            Uri themeDictUri = new Uri($"/Logonaut.Theming;component/Themes/{path}", UriKind.Relative);
+            ResourceDictionary newTheme = new ResourceDictionary { Source = themeDictUri };
+
+            // Add the new theme dictionary.
+            var mergedDictionaries = Application.Current.Resources.MergedDictionaries;
+            mergedDictionaries.Add(newTheme);
+
+            // Remove any old theme dictionaries (those with a Source that contains "/Themes/")
+            // Exclude the new one we just added.
+            for (int i = mergedDictionaries.Count - 2; i >= 0; i--)
             {
-                var path = GetDictionaryPath(theme);
-                Uri themeDictUri = new Uri($"/Logonaut.Theming;component/Themes/{path}", UriKind.Relative);
-                ResourceDictionary newTheme = new ResourceDictionary { Source = themeDictUri };
-
-                // Add the new theme dictionary.
-                var mergedDictionaries = Application.Current.Resources.MergedDictionaries;
-                mergedDictionaries.Add(newTheme);
-
-                // Remove any old theme dictionaries (those with a Source that contains "/Themes/")
-                // Exclude the new one we just added.
-                for (int i = mergedDictionaries.Count - 2; i >= 0; i--)
+                var dict = mergedDictionaries[i];
+                if (dict.Source != null && dict.Source.OriginalString.Contains("/Themes/"))
                 {
-                    var dict = mergedDictionaries[i];
-                    if (dict.Source != null && dict.Source.OriginalString.Contains("/Themes/"))
-                    {
-                        mergedDictionaries.RemoveAt(i);
-                    }
+                    mergedDictionaries.RemoveAt(i);
                 }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Failed to load theme: {ex.Message}");
             }
             CurrentTheme = theme;
         }

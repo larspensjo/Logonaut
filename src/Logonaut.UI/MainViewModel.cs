@@ -387,9 +387,7 @@ namespace Logonaut.UI.ViewModels
             }
             else if (SelectedFilterNode != null && !(SelectedFilterNode.Filter is CompositeFilter))
             {
-                // Node selected, but it's not composite - cannot add child
-                MessageBox.Show("Cannot add a child node to the selected filter type. Select a composite filter (AND, OR, NOR) or add a new root.", "Add Filter Node", MessageBoxButton.OK, MessageBoxImage.Information);
-                return;
+                throw new InvalidOperationException("Selected node is not composite"); // Should not happen if CanExecute is right
             }
 
              IFilter newFilterNodeModel;
@@ -652,25 +650,14 @@ namespace Logonaut.UI.ViewModels
             // IsBusyFiltering = true change to render before potentially blocking work.
             _uiContext.Post(_ =>
             {
-                try
-                {
-                    // Get the filter model from the *currently selected* profile VM
-                    IFilter? filterToApply = ActiveFilterProfile?.Model?.RootFilter ?? new TrueFilter();
+                // Get the filter model from the *currently selected* profile VM
+                IFilter? filterToApply = ActiveFilterProfile?.Model?.RootFilter ?? new TrueFilter();
 
-                    // Send the filter and context lines to the background processor
-                    _logFilterProcessor.UpdateFilterSettings(filterToApply, ContextLines);
+                // Send the filter and context lines to the background processor
+                _logFilterProcessor.UpdateFilterSettings(filterToApply, ContextLines);
 
-                    // Update highlighting rules based on the *active* filter tree
-                    UpdateFilterSubstringsCommand.Execute(null);
-                }
-                catch (Exception ex)
-                {
-                     // Handle errors during the setup phase on the UI thread
-                     Debug.WriteLine($"Error preparing filter update: {ex}");
-                     IsBusyFiltering = false; // Ensure busy indicator is turned off on error
-                     MessageBox.Show($"Error updating filter: {ex.Message}", "Filter Error", MessageBoxButton.OK, MessageBoxImage.Warning);
-                }
-                // IsBusyFiltering is turned off by ApplyFilteredUpdate when the Replace operation completes.
+                // Update highlighting rules based on the *active* filter tree
+                UpdateFilterSubstringsCommand.Execute(null);
             }, null);
         }
 
@@ -807,25 +794,18 @@ namespace Logonaut.UI.ViewModels
 
         public void LoadLogFromText(string text)
         {
-             try
-             {
-                 _logFilterProcessor.Reset(); // Reset processor
-                 LogDoc.Clear();              // Clear internal document storage
-                 FilteredLogLines.Clear();    // Clear UI collection
-                 LogText = string.Empty;      // Clear editor text via binding
-                 _searchMatches.Clear();      // Clear search state
-                 SearchMarkers.Clear();
-                 _currentSearchIndex = -1;
+            _logFilterProcessor.Reset(); // Reset processor
+            LogDoc.Clear();              // Clear internal document storage
+            FilteredLogLines.Clear();    // Clear UI collection
+            LogText = string.Empty;      // Clear editor text via binding
+            _searchMatches.Clear();      // Clear search state
+            SearchMarkers.Clear();
+            _currentSearchIndex = -1;
 
-                 LogDoc.AddInitialLines(text); // Add new lines to storage
+            LogDoc.AddInitialLines(text); // Add new lines to storage
 
-                 // Trigger filter update to process the new content using the active profile
-                 TriggerFilterUpdate();
-             }
-             catch (Exception ex)
-             {
-                 MessageBox.Show($"Error loading log content: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-             }
+            // Trigger filter update to process the new content using the active profile
+            TriggerFilterUpdate();
         }
 
         public void UpdateSearchIndexFromCharacterOffset(int characterOffset)

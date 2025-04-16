@@ -448,8 +448,6 @@ namespace Logonaut.UI.Tests.ViewModels
 
              // Assert
              Assert.AreEqual(childCount, rootNode.Children.Count, "No child should be added to non-composite.");
-             // Assert that a message box was shown (requires mocking/framework support)
-             Assert.Inconclusive("Need framework/mocking to verify MessageBox call.");
         }
 
 
@@ -634,8 +632,6 @@ namespace Logonaut.UI.Tests.ViewModels
             Assert.IsNotNull(profileToDelete);
 
             // Act
-            // TODO: Need mocking/framework to verify MessageBox call (Yes/No)
-             // Assume user clicks Yes
             viewModel.DeleteProfileCommand.Execute(null);
 
             // Assert
@@ -643,23 +639,23 @@ namespace Logonaut.UI.Tests.ViewModels
             Assert.IsFalse(viewModel.AvailableProfiles.Contains(profileToDelete), "Deleted profile should be removed.");
             Assert.IsNotNull(viewModel.ActiveFilterProfile, "Another profile should be selected.");
             Assert.AreNotEqual(profileToDelete, viewModel.ActiveFilterProfile, "A different profile should be active.");
-            Assert.Inconclusive("Need framework/mocking to verify MessageBox confirmation.");
         }
 
+        // TODO: This should allow deletion of last one and replace with a Default.
         [TestMethod] public void DeleteProfileCommand_CannotDeleteLastProfile()
         {
-             // Arrange
-             var viewModel = CreateMockViewModel();
-             Assert.AreEqual(1, viewModel.AvailableProfiles.Count); // Should start with Default
-             viewModel.ActiveFilterProfile = viewModel.AvailableProfiles[0];
+            // Arrange
+            var viewModel = CreateMockViewModel();
+            Assert.AreEqual(1, viewModel.AvailableProfiles.Count); // Should start with Default
+            viewModel.ActiveFilterProfile = viewModel.AvailableProfiles[0];
 
-             // Act
-             // TODO: Need mocking/framework to verify MessageBox call
-             // viewModel.DeleteProfileCommand.Execute(null);
+            // Act
+            // TODO: Need mocking/framework to verify MessageBox call
+            // viewModel.DeleteProfileCommand.Execute(null);
 
-             // Assert
-             Assert.AreEqual(1, viewModel.AvailableProfiles.Count, "Profile count should remain 1.");
-              Assert.Inconclusive("Need framework/mocking to verify MessageBox call.");
+            // Assert
+            Assert.AreEqual(1, viewModel.AvailableProfiles.Count, "Profile count should remain 1.");
+            Assert.Inconclusive("Need framework/mocking to verify MessageBox call.");
         }
 
 
