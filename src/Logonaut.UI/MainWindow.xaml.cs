@@ -82,14 +82,15 @@ namespace Logonaut.UI
             // Add original line number and separator margins (code-behind approach)
             SetupCustomMargins();
 
+            var logOutputEditor = LogOutputEditor; // Work-around to minimize intellisense issues in XAML
             // Hook up event handlers AFTER the template is applied
-            LogOutputEditor.Loaded += LogOutputEditor_Loaded;
+            logOutputEditor.Loaded += LogOutputEditor_Loaded;
             
             // Enable clipboard paste functionality
-            LogOutputEditor.TextArea.PreviewKeyDown += LogOutputEditor_PreviewKeyDown;
+            logOutputEditor.TextArea.PreviewKeyDown += LogOutputEditor_PreviewKeyDown;
 
             // Handle mouse clicks for search reference point
-            LogOutputEditor.TextArea.MouseDown += LogOutputEditor_MouseDown;
+            logOutputEditor.TextArea.MouseDown += LogOutputEditor_MouseDown;
 
             this.Closing += MainWindow_Closing;
         }
@@ -127,9 +128,10 @@ namespace Logonaut.UI
 
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
+            var logOutputEditor = LogOutputEditor; // Work-around to minimize intellisense issues in XAML
             // The template should be applied now, try to find the ruler
             // Use VisualTreeHelper to find the element within the template
-            _overviewRuler = FindVisualChild<Logonaut.UI.Helpers.OverviewRulerMargin>(LogOutputEditor);
+            _overviewRuler = FindVisualChild<Logonaut.UI.Helpers.OverviewRulerMargin>(logOutputEditor);
 
             if (_overviewRuler != null)
             {
@@ -143,7 +145,7 @@ namespace Logonaut.UI
             }
 
             // Unsubscribe when the editor unloads to prevent memory leaks
-            LogOutputEditor.Unloaded += (s, ev) => {
+            logOutputEditor.Unloaded += (s, ev) => {
                 if (_overviewRuler != null)
                 {
                     _overviewRuler.RequestScrollOffset -= OverviewRuler_RequestScrollOffset;
@@ -152,7 +154,7 @@ namespace Logonaut.UI
             };
 
             // Initialize chunk separator
-            TextView textView = LogOutputEditor.TextArea.TextView;
+            TextView textView = logOutputEditor.TextArea.TextView;
             _chunkSeparator = new ChunkSeparatorRenderer(textView);
 
             // Bind the SeparatorBrush property to the Dynamic Resource
@@ -178,10 +180,10 @@ namespace Logonaut.UI
             _chunkSeparator.UpdateChunks(_viewModel.FilteredLogLines, _viewModel.ContextLines);
 
             // Clean up when editor unloads
-            LogOutputEditor.Unloaded += LogOutputEditor_Unloaded;
+            logOutputEditor.Unloaded += LogOutputEditor_Unloaded;
         }
 
-        private void LogOutputEditor_Unloaded(object? sender, RoutedEventArgs e)
+        private void LogOutputEditor_Unloaded(object? sender, RoutedEventArgs? e)
         {
             // Clean up Overview Ruler binding
             if (_overviewRuler != null)
@@ -232,9 +234,10 @@ namespace Logonaut.UI
 
         private void LogOutputEditor_Loaded(object sender, RoutedEventArgs e)
         {
+            var logOutputEditor = LogOutputEditor; // Work-around to minimize intellisense issues in XAML
              // The template should be applied now, try to find the ruler
              // Use VisualTreeHelper to find the element within the template
-             _overviewRuler = FindVisualChild<Logonaut.UI.Helpers.OverviewRulerMargin>(LogOutputEditor);
+             _overviewRuler = FindVisualChild<Logonaut.UI.Helpers.OverviewRulerMargin>(logOutputEditor);
 
              if (_overviewRuler != null)
              {
@@ -248,7 +251,7 @@ namespace Logonaut.UI
              }
 
              // Unsubscribe when the editor unloads to prevent memory leaks
-             LogOutputEditor.Unloaded += (s, ev) => {
+             logOutputEditor.Unloaded += (s, ev) => {
                  if (_overviewRuler != null)
                  {
                      _overviewRuler.RequestScrollOffset -= OverviewRuler_RequestScrollOffset;
@@ -259,15 +262,16 @@ namespace Logonaut.UI
 
         private void LogOutputEditor_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
+            var logOutputEditor = LogOutputEditor; // Work-around to minimize intellisense issues in XAML
             if (e.ChangedButton == System.Windows.Input.MouseButton.Left && DataContext is ViewModels.MainViewModel viewModel)
             {
                 // Get the position in the text where the user clicked
-                var positionInfo = LogOutputEditor.TextArea.TextView.GetPositionFloor(e.GetPosition(LogOutputEditor.TextArea.TextView));
+                var positionInfo = logOutputEditor.TextArea.TextView.GetPositionFloor(e.GetPosition(logOutputEditor.TextArea.TextView));
                 if (positionInfo.HasValue)
                 {
                     // Convert TextLocation (line,column) to character offset in the document
                     var textLocation = positionInfo.Value.Location;
-                    var characterOffset = LogOutputEditor.Document.GetOffset(textLocation);
+                    var characterOffset = logOutputEditor.Document.GetOffset(textLocation);
                     viewModel.UpdateSearchIndexFromCharacterOffset(characterOffset);
                 }
             }
@@ -294,6 +298,8 @@ namespace Logonaut.UI
                 }
                 else
                 {
+                    if (child is null)
+                        throw new ArgumentNullException(nameof(child), "Child is null. This should not happen.");
                     T? childOfChild = FindVisualChild<T>(child);
                     if (childOfChild != null)
                         return childOfChild;
@@ -305,8 +311,9 @@ namespace Logonaut.UI
 
         private void SetupCustomMargins()
         {
+            var logOutputEditor = LogOutputEditor; // Work-around to minimize intellisense issues in XAML
             var numberMargin = new Logonaut.UI.Helpers.OriginalLineNumberMargin();
-            LogOutputEditor.TextArea.LeftMargins.Add(numberMargin);
+            logOutputEditor.TextArea.LeftMargins.Add(numberMargin);
 
             var filteredLinesBinding = new System.Windows.Data.Binding("FilteredLogLines")
             {
@@ -325,11 +332,11 @@ namespace Logonaut.UI
             // --- Separator Margin ---
             var lineSeparatorMargin = new Logonaut.UI.Helpers.VerticalLineMargin();
             lineSeparatorMargin.SetBinding(UIElement.VisibilityProperty, visibilityBinding);
-            LogOutputEditor.TextArea.LeftMargins.Add(lineSeparatorMargin);
+            logOutputEditor.TextArea.LeftMargins.Add(lineSeparatorMargin);
         }
 
 
-        private void MainWindow_SourceInitialized(object sender, EventArgs e)
+        private void MainWindow_SourceInitialized(object? sender, EventArgs e)
         {
             // The window handle is now available
             if (IsWindows10OrGreater())

@@ -32,16 +32,16 @@ namespace Logonaut.UI.Converters
                     _ => null
                 };
 
-                if (iconGeometry != null)
-                {
-                    // Return a Path element using the geometry
-                    // Use DynamicResource for Fill color for theming
-                    var path = new Path { Data = iconGeometry, Stretch = Stretch.Uniform, Width = 12, Height = 12 };
-                    path.SetResourceReference(Shape.FillProperty, "TextForegroundBrush"); // Bind fill to theme text color
-                    return path;
-                }
+                if (iconGeometry == null)
+                    throw new ArgumentException($"Unknown filter type: {typeText}");
+
+                // Return a Path element using the geometry
+                // Use DynamicResource for Fill color for theming
+                var path = new Path { Data = iconGeometry, Stretch = Stretch.Uniform, Width = 12, Height = 12 };
+                path.SetResourceReference(Shape.FillProperty, "TextForegroundBrush"); // Bind fill to theme text color
+                return path;
             }
-            return null; // Return null if no icon is defined or value is wrong type
+            throw new ArgumentException($"Unsupported filter type: {value?.GetType().Name}");
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)

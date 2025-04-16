@@ -714,7 +714,7 @@ namespace Logonaut.UI.ViewModels
         {
             FilteredLogLines.Clear();
             _searchMatches.Clear(); // Clear internal match list on replace
-            _searchMarkers.Clear(); // Clear ruler markers
+            SearchMarkers.Clear(); // Clear ruler markers
             _currentSearchIndex = -1; // Reset search index
             SelectAndScrollToCurrentMatch(); // Clear editor selection
 
@@ -764,6 +764,7 @@ namespace Logonaut.UI.ViewModels
              string textToSearch = LogText; // Use local copy
 
              // Clear previous results
+             // TODO: Some code here is duplicated with ReplaceFilteredLines. Consider refactoring.
              _searchMatches.Clear();
              SearchMarkers.Clear(); // Clear the collection for the ruler
              _currentSearchIndex = -1;
@@ -813,7 +814,7 @@ namespace Logonaut.UI.ViewModels
                  FilteredLogLines.Clear();    // Clear UI collection
                  LogText = string.Empty;      // Clear editor text via binding
                  _searchMatches.Clear();      // Clear search state
-                 _searchMarkers.Clear();
+                 SearchMarkers.Clear();
                  _currentSearchIndex = -1;
 
                  LogDoc.AddInitialLines(text); // Add new lines to storage

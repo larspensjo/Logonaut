@@ -94,10 +94,13 @@ namespace Logonaut.UI.Helpers
 
         public void Draw(TextView textView, DrawingContext drawingContext)
         {
+            if (_separatorPen == null)
+                throw new InvalidOperationException("SeparatorPen is not initialized.");
+
             // Use the _separatorPen created from the DP
-            Pen pen = _separatorPen;
-            if (pen == null || _filteredLines == null || _filteredLines.Count < 2 || !textView.VisualLinesValid)
+            if (_filteredLines == null || _filteredLines.Count < 2 || !textView.VisualLinesValid)
                 return;
+            Pen pen = _separatorPen;
 
             var avalonVisualLines = textView.VisualLines;
             if (avalonVisualLines.Count < 1)
