@@ -91,8 +91,14 @@
         <!-- Main content -->
         <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="300"/>
-                <ColumnDefinition Width="*"/>
+                <!-- Column 0: Left Panel (Resizable) -->
+                <ColumnDefinition Width="1*" MinWidth="200"/> <!-- Use * for resizing, add MinWidth -->
+
+                <!-- Column 1: Grid Splitter -->
+                <ColumnDefinition Width="5" />
+
+                <!-- Column 2: Right Panel (Resizable) -->
+                <ColumnDefinition Width="3*" MinWidth="300"/> <!-- Use * for resizing, add MinWidth -->
             </Grid.ColumnDefinitions>
 
             <!-- Left Panel: Filter Management -->
@@ -151,8 +157,18 @@
                 </DockPanel>
             </Border>
 
+            <!-- TODO: We want live redraw of the window -->
+            <GridSplitter Grid.Column="1"
+                          Width="5"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Stretch"
+                          Background="{DynamicResource BorderBrush}"
+                          ShowsPreview="True"
+                          ResizeDirection="Columns"
+                          ResizeBehavior="PreviousAndNext"/>
+
             <!-- Right Panel: Log Display and Search -->
-            <Grid Grid.Column="1">
+            <Grid Grid.Column="2">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
