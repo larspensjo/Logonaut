@@ -125,6 +125,33 @@ namespace Logonaut.UI.ViewModels
 
         #endregion // --- Constructor ---
 
+        #region // --- Highlighted Line State ---
+
+        // The 0-based index of the highlighted line within the FilteredLogLines collection.
+        // Bound to the PersistentLineHighlightRenderer.HighlightedLineIndex DP.
+        [ObservableProperty]
+        private int _highlightedFilteredLineIndex = -1;
+
+        // The original line number (1-based) corresponding to the highlighted line.
+        // Used to restore selection after re-filtering.
+        [ObservableProperty]
+        private int _highlightedOriginalLineNumber = -1;
+
+        // Update original line number whenever the filtered index changes
+        partial void OnHighlightedFilteredLineIndexChanged(int value)
+        {
+            if (value >= 0 && value < FilteredLogLines.Count)
+            {
+                HighlightedOriginalLineNumber = FilteredLogLines[value].OriginalLineNumber;
+            }
+            else
+            {
+                HighlightedOriginalLineNumber = -1; // No valid line highlighted
+            }
+        }
+
+        #endregion // --- Highlighted Line State ---
+
         #region // --- UI State Management ---
         // Holds observable properties representing the application's state for data binding.
 
@@ -553,12 +580,62 @@ namespace Logonaut.UI.ViewModels
                 var match = _searchMatches[_currentSearchIndex];
                 CurrentMatchOffset = match.Offset;
                 CurrentMatchLength = match.Length;
+
+                try
+                {
+                    // Need LogText to map offset to line
+                    string currentLogText = LogText; // Use local copy for safety
+                    if (!string.IsNullOrEmpty(currentLogText) && CurrentMatchOffset >= 0 && CurrentMatchOffset < currentLogText.Length)
+                    {
+                        // This requires creating a temporary TextDocument to use GetLineByOffset reliably
+                        // Alternatively, approximate by counting newlines (less robust).
+                        // Let's assume we can access the editor's document directly or create one.
+                        // **Simplification for now: Search FilteredLogLines. This is less performant.**
+                        // TODO: A better way involves direct access to AvalonEdit's Document in MainWindow.xaml.cs
+                        // or passing the AvalonEdit control instance to the ViewModel (less ideal).
+
+                        // Find the line number containing the start of the match
+                        int lineIndex = FindFilteredLineIndexContainingOffset(CurrentMatchOffset);
+                        HighlightedFilteredLineIndex = lineIndex; // Update the highlight
+                    }
+                    else
+                    {
+                        HighlightedFilteredLineIndex = -1; // Invalid offset
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Log error or handle gracefully
+                    Debug.WriteLine($"Error finding line for highlight: {ex.Message}");
+                    HighlightedFilteredLineIndex = -1;
+                }
             }
             else
             {
                 CurrentMatchOffset = -1;
                 CurrentMatchLength = 0;
+                HighlightedFilteredLineIndex = -1; // Clear highlight if no match selected
             }
+        }
+
+        // Helper method to find the index in FilteredLogLines containing a character offset
+        // Note: This is inefficient for large logs. See comments in SelectAndScrollToCurrentMatch.
+        private int FindFilteredLineIndexContainingOffset(int offset)
+        {
+            int currentOffset = 0;
+            for (int i = 0; i < FilteredLogLines.Count; i++)
+            {
+                int lineLength = FilteredLogLines[i].Text.Length;
+                // Check if offset falls within this line (inclusive of start, exclusive of end newline)
+                // Add + Environment.NewLine.Length for the newline characters between lines
+                int lineEndOffset = currentOffset + lineLength;
+                if (offset >= currentOffset && offset <= lineEndOffset) // <= includes position right after last char
+                {
+                    return i;
+                }
+                currentOffset = lineEndOffset + Environment.NewLine.Length; // Move to start of next line
+            }
+            return -1; // Offset not found
         }
 
         partial void OnSearchTextChanged(string value) => UpdateSearchMatches(); // Trigger search update
@@ -666,9 +743,11 @@ namespace Logonaut.UI.ViewModels
         private void ApplyFilteredUpdate(FilteredUpdate update)
         {
             bool wasReplace = update.Type == UpdateType.Replace;
+            int originalLineToRestore = -1; // Store the original line number
 
             if (wasReplace)
             {
+                originalLineToRestore = HighlightedOriginalLineNumber; // Store before clearing
                 ReplaceFilteredLines(update.Lines); // Updates UI State (FilteredLogLines)
                 // Search markers are cleared and updated after LogText changes
             }
@@ -683,7 +762,24 @@ namespace Logonaut.UI.ViewModels
             // Turn off busy indicator only after a full Replace operation completes
             if (wasReplace)
             {
-                 _uiContext.Post(_ => { IsBusyFiltering = false; }, null);
+                // --- Restore Highlight After Replace ---
+                if (originalLineToRestore > 0)
+                {
+                    // Find the new index of the line with the stored original number
+                    int newIndex = FilteredLogLines
+                        .Select((line, index) => new { line.OriginalLineNumber, Index = index })
+                        .FirstOrDefault(item => item.OriginalLineNumber == originalLineToRestore)?.Index ?? -1;
+
+                    // Update the highlight index *after* the UI potentially updates from ReplaceFilteredLines
+                    _uiContext.Post(_ => { HighlightedFilteredLineIndex = newIndex; }, null);
+                }
+                else
+                {
+                    // If no line was previously highlighted, ensure it's reset
+                    _uiContext.Post(_ => { HighlightedFilteredLineIndex = -1; }, null);
+                }
+
+                _uiContext.Post(_ => { IsBusyFiltering = false; }, null);
             }
         }
 
@@ -801,6 +897,7 @@ namespace Logonaut.UI.ViewModels
             _searchMatches.Clear();      // Clear search state
             SearchMarkers.Clear();
             _currentSearchIndex = -1;
+            HighlightedFilteredLineIndex = -1; // Reset highlight
 
             LogDoc.AddInitialLines(text); // Add new lines to storage
 

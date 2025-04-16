@@ -50,6 +50,9 @@
     <SolidColorBrush x:Key="CheckBox.Disabled.Background" Color="#F4F4F4"/>
     <SolidColorBrush x:Key="CheckBox.Disabled.BorderBrush" Color="#DDDDDD"/>
 
+    <!-- Persistent line highlihting -->
+    <SolidColorBrush x:Key="PersistedHighlightBrush" Color="#E0E0E0" /> <!-- Light Gray -->
+
     <!-- NEON: Subtle Shadow Effect -->
     <DropShadowEffect x:Key="PanelShadowEffect" Color="#FFAAAAAA" ShadowDepth="2" BlurRadius="6" Opacity="0.15"/>
 
@@ -493,7 +496,7 @@
     <SolidColorBrush x:Key="Highlighting.Error" Color="{StaticResource ErrorColor}"/>
     <SolidColorBrush x:Key="Highlighting.Warning" Color="{StaticResource WarningColor}"/>
     <SolidColorBrush x:Key="Highlighting.Info" Color="{StaticResource InfoColor}"/>
-    <SolidColorBrush x:Key="Highlighting.FilterMatch.Background" Color="{StaticResource HighlightFilterBackgroundColor}"/>
+    <StaticResource x:Key="Highlighting.FilterMatch.Background" ResourceKey="PersistedHighlightBrush"/>
     <SolidColorBrush x:Key="Highlighting.FilterMatch.Foreground" Color="{StaticResource PrimaryForegroundColor}"/>
     <SolidColorBrush x:Key="Highlighting.SearchMatch.Background" Color="{StaticResource HighlightSearchBackgroundColor}"/>
     <SolidColorBrush x:Key="Highlighting.SearchMatch.Foreground" Color="{StaticResource PrimaryForegroundColor}"/>

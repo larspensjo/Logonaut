@@ -45,6 +45,9 @@
     <SolidColorBrush x:Key="CheckBox.Disabled.Background" Color="#202020"/>
     <SolidColorBrush x:Key="CheckBox.Disabled.BorderBrush" Color="#444444"/>
 
+    <!-- Persistent line highlihting -->
+    <SolidColorBrush x:Key="PersistedHighlightBrush" Color="#404040" /> <!-- Dark Gray -->
+
     <!-- NEON: Glow Effect -->
     <DropShadowEffect x:Key="FocusGlowEffect" Color="{StaticResource GlowColor}" ShadowDepth="0" BlurRadius="8" Opacity="0.9"/>
     <DropShadowEffect x:Key="PanelShadowEffect" Color="#FF000000" ShadowDepth="3" BlurRadius="8" Opacity="0.4"/>
@@ -619,7 +622,7 @@
     <SolidColorBrush x:Key="Highlighting.Error" Color="{StaticResource ErrorColor}"/>
     <SolidColorBrush x:Key="Highlighting.Warning" Color="{StaticResource WarningColor}"/>
     <SolidColorBrush x:Key="Highlighting.Info" Color="{StaticResource InfoColor}"/>
-    <SolidColorBrush x:Key="Highlighting.FilterMatch.Background" Color="{StaticResource HighlightFilterBackgroundColor}"/>
+    <StaticResource x:Key="Highlighting.FilterMatch.Background" ResourceKey="PersistedHighlightBrush"/>
     <SolidColorBrush x:Key="Highlighting.FilterMatch.Foreground" Color="{StaticResource PrimaryForegroundColor}"/> <!-- Ensure text is readable -->
     <SolidColorBrush x:Key="Highlighting.SearchMatch.Background" Color="{StaticResource HighlightSearchBackgroundColor}"/>
     <SolidColorBrush x:Key="Highlighting.SearchMatch.Foreground" Color="{StaticResource PrimaryForegroundColor}"/>

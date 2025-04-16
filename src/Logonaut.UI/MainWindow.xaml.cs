@@ -41,6 +41,7 @@ namespace Logonaut.UI
         private OverviewRulerMargin? _overviewRuler;
         private ChunkSeparatorRenderer? _chunkSeparator;
         private bool _disposed;
+        private PersistentLineHighlightRenderer? _highlightRenderer;
 
         private static Logonaut.Core.FileSystemSettingsService _settingsService = new();
         private static Logonaut.LogTailing.LogTailerService _logTailerService = new();
@@ -121,58 +122,70 @@ namespace Logonaut.UI
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
             var logOutputEditor = LogOutputEditor; // Work-around to minimize intellisense issues in XAML
-            // The template should be applied now, try to find the ruler
-            // Use VisualTreeHelper to find the element within the template
+
+            // --- Overview Ruler Setup ---
             _overviewRuler = FindVisualChild<Logonaut.UI.Helpers.OverviewRulerMargin>(logOutputEditor);
+            if (_overviewRuler is null)
+                throw new InvalidOperationException("OverviewRulerMargin not found in TextEditor template.");
+            _overviewRuler.RequestScrollOffset += OverviewRuler_RequestScrollOffset;
+            // No need for the extra Unloaded lambda here, LogOutputEditor_Unloaded handles it.
 
-            if (_overviewRuler != null)
-            {
-                // Hook up the event handler
-                _overviewRuler.RequestScrollOffset += OverviewRuler_RequestScrollOffset;
-            }
-            else
-            {
-                // TODO: Log or handle the case where the ruler wasn't found
-                System.Diagnostics.Debug.WriteLine("OverviewRulerMargin not found in TextEditor template.");
-            }
-
-            // Unsubscribe when the editor unloads to prevent memory leaks
-            logOutputEditor.Unloaded += (s, ev) => {
-                if (_overviewRuler != null)
-                {
-                    _overviewRuler.RequestScrollOffset -= OverviewRuler_RequestScrollOffset;
-                }
-                // Also unsubscribe from Loaded/Unloaded? Might not be necessary if window closes.
-            };
-
-            // Initialize chunk separator
+            // Get TextView *once*
             TextView textView = logOutputEditor.TextArea.TextView;
+            if (textView == null) // Add null check for safety
+                 throw new InvalidOperationException("TextView not found within LogOutputEditor.");
+
+
+            // --- Highlight Renderer Setup ---
+            _highlightRenderer = new PersistentLineHighlightRenderer(textView);
+
+            // Highlight Index Binding
+            var highlightIndexBinding = new Binding("HighlightedFilteredLineIndex")
+            {
+                Source = _viewModel,
+                Mode = BindingMode.OneWay
+            };
+            BindingOperations.SetBinding(
+                _highlightRenderer,
+                PersistentLineHighlightRenderer.HighlightedLineIndexProperty,
+                highlightIndexBinding
+            );
+
+            // Highlight Brush Binding (using TextView.Tag as proxy)
+            textView.SetResourceReference(TextView.TagProperty, "PersistedHighlightBrush"); // Set resource on Tag
+            var highlightBrushBinding = new Binding("Tag") // Bind to Tag
+            {
+                Source = textView,
+                Mode = BindingMode.OneWay
+            };
+            BindingOperations.SetBinding(
+                _highlightRenderer,
+                PersistentLineHighlightRenderer.HighlightBrushProperty,
+                highlightBrushBinding
+            );
+            textView.BackgroundRenderers.Add(_highlightRenderer);
+
+            // --- Chunk Separator Setup ---
             _chunkSeparator = new ChunkSeparatorRenderer(textView);
 
-            // Bind the SeparatorBrush property to the Dynamic Resource
-            // We need to do this in code as TextView is internal to AvalonEdit's template
-            textView.SetResourceReference(
-                TextView.TagProperty,
-                "ChunkSeparatorBrush"); // The key defined in theme XAML files
+            // Chunk Separator Brush Binding (using TextView.ToolTip as proxy)
+            textView.SetResourceReference(TextView.ToolTipProperty, "ChunkSeparatorBrush"); // Use ToolTipProperty
 
-            // Bind ChunkSeparatorRenderer.SeparatorBrush to TextView.Tag
-            // This creates a standard one-way WPF binding. It binds the SeparatorBrush property of our _chunkSeparator instance to the Tag property
-            // of the textView. Now, whenever textView.Tag changes (because the dynamic resource updated), this binding will push the new Brush
-            // value into _chunkSeparator.SeparatorBrush.
-            var brushBinding = new Binding("Tag")
+            var chunkBrushBinding = new Binding("ToolTip")
             {
-                Source = textView, // Bind to the TextView instance
-                Mode = BindingMode.OneWay // Get the value from TextView.Tag
+                Source = textView,
+                Mode = BindingMode.OneWay
             };
             BindingOperations.SetBinding(
                 _chunkSeparator,
                 ChunkSeparatorRenderer.SeparatorBrushProperty,
-                brushBinding);
+                chunkBrushBinding // Use the correct binding variable
+            );
             textView.BackgroundRenderers.Add(_chunkSeparator);
             _chunkSeparator.UpdateChunks(_viewModel.FilteredLogLines, _viewModel.ContextLines);
 
-            // Clean up when editor unloads
-            logOutputEditor.Unloaded += LogOutputEditor_Unloaded;
+            // --- Final Cleanup Subscription ---
+            logOutputEditor.Unloaded += LogOutputEditor_Unloaded; // Subscribe the main unload handler ONCE
         }
 
         private void LogOutputEditor_Unloaded(object? sender, RoutedEventArgs? e)
@@ -198,6 +211,34 @@ namespace Logonaut.UI
             }
             _overviewRuler = null; // Release reference
             _chunkSeparator = null; // Release reference
+
+            if (_highlightRenderer != null)
+            {
+                 TextView textView = LogOutputEditor.TextArea.TextView;
+                 BindingOperations.ClearBinding(_highlightRenderer, PersistentLineHighlightRenderer.HighlightedLineIndexProperty);
+                 BindingOperations.ClearBinding(_highlightRenderer, PersistentLineHighlightRenderer.HighlightBrushProperty);
+                 textView.ClearValue(TextView.TagProperty); // Clear the Tag property used for highlight brush
+
+                 if (textView.BackgroundRenderers.Contains(_highlightRenderer))
+                 {
+                    textView.BackgroundRenderers.Remove(_highlightRenderer);
+                 }
+            }
+            _highlightRenderer = null;
+
+            if (_chunkSeparator != null)
+            {
+                TextView textView = LogOutputEditor.TextArea.TextView;
+                BindingOperations.ClearBinding(_chunkSeparator, ChunkSeparatorRenderer.SeparatorBrushProperty);
+                textView.ClearValue(TextView.ToolTipProperty); // Clear the ToolTip property used for chunk brush
+
+                if (textView.BackgroundRenderers.Contains(_chunkSeparator))
+                {
+                    textView.BackgroundRenderers.Remove(_chunkSeparator);
+                }
+                _chunkSeparator.Dispose();
+            }
+            _chunkSeparator = null;
         }
 
         private void LogOutputEditor_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
@@ -259,21 +300,27 @@ namespace Logonaut.UI
             {
                 // Get the position in the text where the user clicked
                 var positionInfo = logOutputEditor.TextArea.TextView.GetPositionFloor(e.GetPosition(logOutputEditor.TextArea.TextView));
-                if (positionInfo.HasValue)
+                if (positionInfo.HasValue) // Check if a valid position was found
                 {
+                    // Get the 1-based line number in the *filtered* document
+                    int clickedFilteredLineNumber = positionInfo.Value.Line;
+                    int clickedFilteredLineIndex = clickedFilteredLineNumber - 1; // Convert to 0-based index
+
+                    // Update the ViewModel's highlighted index
+                    viewModel.HighlightedFilteredLineIndex = clickedFilteredLineIndex;
+
                     // Convert TextLocation (line,column) to character offset in the document
-                    var textLocation = positionInfo.Value.Location;
-                    var characterOffset = logOutputEditor.Document.GetOffset(textLocation);
+                    var characterOffset = logOutputEditor.Document.GetOffset(positionInfo.Value.Location);
                     viewModel.UpdateSearchIndexFromCharacterOffset(characterOffset);
                 }
             }
         }
 
-         // Handler for the ruler's request to scroll
-         private void OverviewRuler_RequestScrollOffset(object? sender, double requestedOffset)
-         {
-             LogOutputEditor.ScrollToVerticalOffset(requestedOffset);
-         }
+        // Handler for the ruler's request to scroll
+        private void OverviewRuler_RequestScrollOffset(object? sender, double requestedOffset)
+        {
+            LogOutputEditor.ScrollToVerticalOffset(requestedOffset);
+        }
 
 
         // Helper to find a child element of a specific type in the visual tree
