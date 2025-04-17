@@ -1,708 +1,873 @@
-using System;
-using System.Linq; // Required for Linq methods like FirstOrDefault, Any
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Logonaut.UI.ViewModels;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Windows; // For DispatcherPriority, Size, Rect
+using System.Windows.Controls; // For TreeView
+using System.Windows.Media; // For VisualTreeHelper
+using System.Windows.Threading; // For Dispatcher
+using Logonaut.Common;
+using Logonaut.Core;
 using Logonaut.Filters;
 using Logonaut.UI.Services;
-using Logonaut.Common; // Required for FilterProfile
-using System.Collections.Generic; // Required for List
-using System.Collections.ObjectModel; // Required for ObservableCollection
-using System.Windows; // Required for DependencyObject
-using System.Windows.Media; // Required for VisualTreeHelper
-using System.Windows.Controls; // Required for TreeView
-using System.Windows.Threading; // Required for DispatcherPriority
-using System.Reactive.Linq; // Required for AsObservable
+using Logonaut.UI.ViewModels;
+using Logonaut.UI.Tests.Mocks; // Adjust if your mocks are elsewhere
 
 namespace Logonaut.UI.Tests.ViewModels
 {
     [TestClass]
     public class MainViewModelTests
     {
-        // --- Mocks for Dependencies ---
+        // --- Declare Mocks ---
+        private MockSettingsService _mockSettings = null!;
+        private MockLogTailerService _mockTailer = null!;
+        private MockFileDialogService _mockFileDialog = null!;
+        private MockInputPromptService _mockInputPrompt = null!;
+        private MockLogFilterProcessor _mockProcessor = null!;
+        private SynchronizationContext _testContext = null!;
 
-        private class MockFileDialogService : IFileDialogService
+        private MainViewModel _viewModel = null!;
+
+        // --- WPF Control Testing Helper Fields ---
+        private static Dispatcher? _dispatcher; // For STA thread tests
+        private static AutoResetEvent _initEvent = new AutoResetEvent(false); // Synchronization for STA thread
+
+        // --- STA Thread Setup/Teardown for WPF Control Tests ---
+        // This runs once before any tests in this class that need STA
+        [ClassInitialize(Microsoft.VisualStudio.TestTools.UnitTesting.InheritanceBehavior.None)]
+        public static void ClassInitialize(TestContext context)
         {
-            public string? FileToReturn { get; set; } = "C:\\fake\\log.txt";
-            public bool ShouldCancel { get; set; } = false;
-            public string? OpenFile(string title, string filter) => ShouldCancel ? null : FileToReturn;
+            var staThread = new Thread(() =>
+            {
+                _dispatcher = Dispatcher.CurrentDispatcher;
+                _initEvent.Set(); // Signal that the dispatcher is ready
+                Dispatcher.Run(); // Start the message pump
+            });
+            staThread.SetApartmentState(ApartmentState.STA);
+            staThread.IsBackground = true;
+            staThread.Start();
+            _initEvent.WaitOne(); // Wait for dispatcher to be ready
         }
 
-        private class MockInputPromptService : IInputPromptService
+        // This runs once after all tests in this class
+        [ClassCleanup]
+        public static void ClassCleanup()
         {
-            public string? InputToReturn { get; set; } = "Mock Input";
-            public bool ShouldCancel { get; set; } = false;
-            public string? ShowInputDialog(string title, string prompt, string defaultValue = "") => ShouldCancel ? null : InputToReturn;
+            _dispatcher?.InvokeShutdown(); // Shut down the message pump
         }
 
-        private class MockSettingsService : Logonaut.Core.ISettingsService
+
+        [TestInitialize]
+        public void TestInitialize()
         {
-            public LogonautSettings SettingsToReturn { get; set; } = CreateDefaultTestSettings();
-            public LogonautSettings? SavedSettings { get; private set; } // To check what was saved
+            _mockSettings = new MockSettingsService();
+            _mockTailer = new MockLogTailerService();
+            _mockFileDialog = new MockFileDialogService();
+            _mockInputPrompt = new MockInputPromptService();
+            _mockProcessor = new MockLogFilterProcessor();
+            _testContext = new SynchronizationContext(); // Basic context for non-WPF tests
 
-            public LogonautSettings LoadSettings()
-            {
-                // Return the pre-configured settings for the test
-                return SettingsToReturn;
-            }
+            // Use default settings initially unless a test overrides
+            _mockSettings.SettingsToReturn = MockSettingsService.CreateDefaultTestSettings();
 
-            public void SaveSettings(LogonautSettings settings)
-            {
-                // Capture the settings that were attempted to be saved
-                SavedSettings = settings;
-            }
-
-            // Helper for default test settings
-            public static LogonautSettings CreateDefaultTestSettings()
-            {
-                return new LogonautSettings
-                {
-                    // Use a default null filter, which is the same as no filter.
-                    FilterProfiles = new List<FilterProfile> { new FilterProfile("Default", null) },
-                    LastActiveProfileName = "Default",
-                    ContextLines = 0
-                    // Add other default properties as needed
-                };
-            }
-        }
-
-        private class MockLogTailerService : Logonaut.Core.ILogTailerService
-        {
-            private readonly System.Reactive.Subjects.Subject<string> _logLinesSubject = new System.Reactive.Subjects.Subject<string>();
-            public string? ChangedFilePath { get; private set; }
-            public bool IsDisposed { get; private set; } = false;
-            public bool IsStopped { get; private set; } = false;
-
-            public IObservable<string> LogLines => _logLinesSubject.AsObservable();
-
-            public void ChangeFile(string filePath)
-            {
-                if(IsDisposed) throw new ObjectDisposedException(nameof(MockLogTailerService));
-                // Simulate file check or just record the call
-                if (filePath == "C:\\throw\\error.log") // Example for testing error path
-                {
-                    throw new System.IO.FileNotFoundException("Mock file not found");
-                }
-                ChangedFilePath = filePath;
-                IsStopped = false; // Changing file implies starting again
-                // In a real mock, you might simulate file events here if needed by tests
-            }
-
-            public void StopTailing()
-            {
-                IsStopped = true;
-                // Optionally complete the subject if tests rely on completion
-                // _logLinesSubject.OnCompleted();
-            }
-
-            // Simulate emitting a log line
-            public void EmitLine(string line)
-            {
-                if(IsDisposed || IsStopped) return;
-                _logLinesSubject.OnNext(line);
-            }
-
-            // Simulate emitting an error
-            public void EmitError(Exception ex)
-            {
-                if(IsDisposed || IsStopped) return;
-                _logLinesSubject.OnError(ex);
-            }
-
-            public void Dispose()
-            {
-                if(IsDisposed) return;
-                IsDisposed = true;
-                _logLinesSubject.OnCompleted(); // Signal completion on dispose
-                _logLinesSubject.Dispose();
-            }
-        }
-
-        // Helper to create a view model with mocks
-        private MainViewModel CreateMockViewModel(
-            Logonaut.Core.ISettingsService? settings = null,
-            Logonaut.Core.ILogTailerService? logTailer = null,
-            IFileDialogService? fileDialog = null, IInputPromptService? prompt = null)
-        {
-            // Provide a basic SynchronizationContext for the test environment
-            var testSyncContext = new SynchronizationContext();
-
-            return new MainViewModel(
-                settings ?? new MockSettingsService(),
-                logTailer ?? new MockLogTailerService(),
-                fileDialog ?? new MockFileDialogService(),
-                prompt ?? new MockInputPromptService(),
-                logFilterProcessor: null, // Use default or mock if needed later
-                uiContext: testSyncContext // Pass the test context
+            _viewModel = new MainViewModel(
+                _mockSettings,
+                _mockTailer,
+                _mockFileDialog,
+                _mockInputPrompt,
+                _mockProcessor,
+                _testContext
             );
         }
 
-        // --- Helper Function to Find Visual Child ---
-        private static T? FindVisualChild<T>(DependencyObject parent, string name) where T : FrameworkElement
+        [TestCleanup]
+        public void TestCleanup()
         {
-            T? foundChild = null;
-            int childrenCount = VisualTreeHelper.GetChildrenCount(parent);
-
-            for (int i = 0; i < childrenCount; i++)
+            // Use Dispatcher if needed for UI cleanup, otherwise run directly
+            Action cleanupAction = () =>
             {
-                var child = VisualTreeHelper.GetChild(parent, i);
+                _viewModel?.Dispose();
+                _mockProcessor?.Dispose();
+                _mockTailer?.Dispose();
+            };
 
-                if (child is not T childType)
-
-                {
-                    // Recurse deeper
-                    foundChild = FindVisualChild<T>(child, name);
-                    if (foundChild != null) break; // Found in recursion
-                }
-                else
-                {
-                    // Check name if provided
-                    if (!string.IsNullOrEmpty(name))
-                    {
-                        if (childType.Name == name)
-                        {
-                            foundChild = childType;
-                            break; // Found by name
-                        }
-                        else
-                        {
-                            // Continue searching siblings or recurse if name doesn't match
-                             foundChild = FindVisualChild<T>(child, name);
-                             if (foundChild != null) break;
-                        }
-                    }
-                    else
-                    {
-                        // Found the first instance of the type T
-                        foundChild = childType;
-                        break;
-                    }
-                }
+            if (Thread.CurrentThread.GetApartmentState() == ApartmentState.STA && _dispatcher != null)
+            {
+                _dispatcher.Invoke(cleanupAction);
             }
-            return foundChild;
+            else
+            {
+                cleanupAction(); // Run directly if not STA or dispatcher unavailable
+            }
         }
 
-        // --- Test Methods ---
-        // Note: This test requires running in an environment that can instantiate WPF controls
-        // and process the dispatcher queue. MSTest might require specific configuration
-        // or attributes like [STATestMethod] if encountering threading issues.
-        [TestMethod] public void AddFilter_WhenActiveProfileIsEmpty_ShouldUpdateTreeViewItems()
+        // --- Helper Function to Find Visual Child (Keep as is) ---
+        private static T? FindVisualChild<T>(DependencyObject parent, string name = "") where T : FrameworkElement
         {
-            // Arrange - Requires running potentially on STA thread and using Dispatcher
-            MainViewModel? vmMock = null;
-            MainWindow? window = null;
-            TreeView? filterTreeView = null;
-            Exception? threadException = null;
+             T? foundChild = null;
+             int childrenCount = VisualTreeHelper.GetChildrenCount(parent);
 
-            // Use a dedicated STA thread for WPF components
-            var t = new Thread(() =>
-            {
-                try
-                {
-                    vmMock = CreateMockViewModel();
-                    window = new MainWindow(vmMock);
+             for (int i = 0; i < childrenCount; i++)
+             {
+                 var child = VisualTreeHelper.GetChild(parent, i);
 
-                    // We need to load the window components but not show it.
-                    // Calling Measure/Arrange/UpdateLayout forces template application and binding setup.
-                    window.Measure(new Size(800, 600));
-                    window.Arrange(new Rect(0, 0, 800, 600));
-                    window.UpdateLayout(); // Initial layout pass
-
-                    // ***** Start search from window.Content *****
-                    var windowContentElement = window.Content as UIElement;
-                    Assert.IsNotNull(windowContentElement, "Window Content is null or not a UIElement after layout.");
-
-                     // Ensure the TreeView is found after initial layout
-                    filterTreeView = FindVisualChild<TreeView>(windowContentElement, "FilterTreeViewNameForTesting");
-                    if (filterTreeView == null) throw new AssertFailedException("FilterTreeViewNameForTesting not found in MainWindow visual tree.");
-
-
-                    // Pre-condition checks (on UI thread)
-                    Assert.IsNotNull(vmMock.ActiveFilterProfile, "Pre-condition: Active profile is null.");
-                    vmMock.ActiveFilterProfile.SetModelRootFilter(null); // Ensure tree is empty
-                    vmMock.ActiveTreeRootNodes.Clear();
-                    Assert.AreEqual(0, filterTreeView.Items.Count, "Pre-condition: TreeView should be empty initially.");
-
-                    // Act - Execute command that modifies the ViewModel collection
-                    vmMock.AddFilterCommand.Execute("Substring");
-
-                    // Crucially, wait for the dispatcher to process binding updates and layout changes
-                    // Use DispatcherPriority.Loaded or DataBind to ensure bindings have propagated
-                     window.Dispatcher.Invoke(() => { }, DispatcherPriority.DataBind); // Process bindings
-                     window.Dispatcher.Invoke(() => { window.UpdateLayout(); }, DispatcherPriority.Loaded); // Process layout
-
-
-                    // Assert - Check the Items collection of the actual TreeView control
-                    Assert.AreEqual(1, filterTreeView.Items.Count, "TreeView Items collection should have one item.");
-                    Assert.IsNotNull(filterTreeView.Items[0], "TreeView item should not be null.");
-                    Assert.IsInstanceOfType(filterTreeView.Items[0], typeof(FilterViewModel), "TreeView item should be a FilterViewModel.");
-
-                    var itemViewModel = (FilterViewModel)filterTreeView.Items[0];
-                    Assert.IsInstanceOfType(itemViewModel.Filter, typeof(SubstringFilter), "Filter model of the TreeView item should be SubstringFilter.");
-
-                }
-                catch (Exception ex)
-                {
-                    threadException = ex; // Capture exception to rethrow on main thread
-                }
-                finally
-                {
-                     // Ensure Dispatcher processing stops if the test window wasn't shown
-                     if (window != null && window.Dispatcher.HasShutdownStarted == false)
+                 if (child is not T childType)
+                 {
+                     foundChild = FindVisualChild<T>(child, name);
+                     if (foundChild != null) break;
+                 }
+                 else
+                 {
+                     if (!string.IsNullOrEmpty(name))
                      {
-                        window.Dispatcher.InvokeShutdown();
+                         if (childType.Name == name)
+                         {
+                             foundChild = childType;
+                             break;
+                         }
+                         else
+                         {
+                              foundChild = FindVisualChild<T>(child, name);
+                              if (foundChild != null) break;
+                         }
                      }
-                }
-            });
-
-            t.SetApartmentState(ApartmentState.STA); // Set the thread to STA
-            t.Start();
-            t.Join(); // Wait for the STA thread to finish
-
-            // Rethrow any exception caught on the STA thread
-            if (threadException != null)
-            {
-                throw new AssertFailedException($"Exception occurred on STA thread: {threadException.Message}", threadException);
-            }
+                     else
+                     {
+                         foundChild = childType;
+                         break;
+                     }
+                 }
+             }
+             return foundChild;
         }
 
-        [TestMethod] public void RemoveFilter_ShouldUpdateTreeViewItems()
-        {
-            // Arrange - Needs STA thread for WPF controls
-            MainViewModel? vmMock = null;
-            MainWindow? window = null;
-            TreeView? filterTreeView = null;
-            Exception? threadException = null;
+        #region Initialization Tests (NEW)
 
-            var t = new Thread(() =>
+        [TestMethod]
+        public void Constructor_LoadsSettingsAndInitializesDefaultProfile()
+        {
+            // Act (ViewModel created in Initialize)
+            // Assert
+            Assert.IsNotNull(_viewModel.AvailableProfiles);
+            Assert.AreEqual(1, _viewModel.AvailableProfiles.Count);
+            Assert.IsNotNull(_viewModel.ActiveFilterProfile);
+            Assert.AreEqual("Default", _viewModel.ActiveFilterProfile.Name);
+            Assert.IsNull(_viewModel.ActiveFilterProfile.Model.RootFilter);
+            Assert.IsNull(_viewModel.ActiveFilterProfile.RootFilterViewModel);
+            Assert.AreEqual(0, _viewModel.ContextLines);
+            Assert.IsTrue(_viewModel.ShowLineNumbers);
+            Assert.IsTrue(_viewModel.HighlightTimestamps);
+            Assert.IsFalse(_viewModel.IsCaseSensitiveSearch);
+        }
+
+        [TestMethod]
+        public void Constructor_TriggersInitialFilterUpdateViaActiveProfileChange()
+        {
+            // Assert (Processor interaction happens during construction via ActiveProfile set)
+            Assert.AreEqual(1, _mockProcessor.UpdateFilterSettingsCallCount);
+            Assert.IsNotNull(_mockProcessor.LastFilterSettings);
+            Assert.IsInstanceOfType(_mockProcessor.LastFilterSettings?.Filter, typeof(TrueFilter));
+            Assert.AreEqual(0, _mockProcessor.LastFilterSettings?.ContextLines);
+        }
+
+        #endregion
+
+        #region Profile Management Tests (NEW)
+
+        [TestMethod]
+        public void CreateNewProfileCommand_AddsUniqueProfile_SetsActive_SavesSettings()
+        {
+            int initialCount = _viewModel.AvailableProfiles.Count;
+            _viewModel.CreateNewProfileCommand.Execute(null);
+            Assert.AreEqual(initialCount + 1, _viewModel.AvailableProfiles.Count);
+            var newProfile = _viewModel.AvailableProfiles.Last();
+            Assert.AreEqual("New Profile 1", newProfile.Name);
+            Assert.AreSame(newProfile, _viewModel.ActiveFilterProfile);
+            Assert.IsNotNull(_mockSettings.SavedSettings);
+            Assert.AreEqual(newProfile.Name, _mockSettings.SavedSettings?.LastActiveProfileName);
+            Assert.AreEqual(initialCount + 1, _mockSettings.SavedSettings?.FilterProfiles.Count);
+            Assert.IsTrue(_mockProcessor.UpdateFilterSettingsCallCount > 1);
+            Assert.IsInstanceOfType(_mockProcessor.LastFilterSettings?.Filter, typeof(TrueFilter));
+        }
+
+         [TestMethod]
+        public void CreateNewProfileCommand_GeneratesUniqueName()
+        {
+            _viewModel.CreateNewProfileCommand.Execute(null); // "New Profile 1"
+            _viewModel.CreateNewProfileCommand.Execute(null); // "New Profile 2"
+            Assert.AreEqual(3, _viewModel.AvailableProfiles.Count);
+            Assert.IsNotNull(_viewModel.AvailableProfiles.FirstOrDefault(p => p.Name == "New Profile 1"));
+            Assert.IsNotNull(_viewModel.AvailableProfiles.FirstOrDefault(p => p.Name == "New Profile 2"));
+            Assert.AreEqual("New Profile 2", _viewModel.ActiveFilterProfile?.Name);
+        }
+
+        [TestMethod]
+        public void RenameProfileCommand_ValidName_UpdatesName_SavesSettings()
+        {
+            _mockInputPrompt.InputToReturn = "Renamed Profile";
+            var activeProfile = _viewModel.ActiveFilterProfile;
+            Assert.IsNotNull(activeProfile);
+            string oldName = activeProfile.Name;
+            _viewModel.RenameProfileCommand.Execute(null);
+            Assert.AreEqual("Renamed Profile", activeProfile.Name);
+            Assert.AreEqual("Renamed Profile", activeProfile.Model.Name);
+            Assert.AreNotEqual(oldName, activeProfile.Name);
+            Assert.IsNotNull(_mockSettings.SavedSettings);
+            Assert.AreEqual("Renamed Profile", _mockSettings.SavedSettings?.LastActiveProfileName);
+        }
+
+        [TestMethod]
+        [Ignore("Requires mocking/intercepting MessageBox.Show")] // Mark ignored
+        public void RenameProfileCommand_DuplicateName_DoesNotRename_ShowsError()
+        {
+            // Arrange
+            _viewModel.CreateNewProfileCommand.Execute(null);
+            var profileToRename = _viewModel.ActiveFilterProfile;
+            Assert.IsNotNull(profileToRename);
+            _mockInputPrompt.InputToReturn = "Default";
+            string originalName = profileToRename.Name;
+
+            // Act
+            _viewModel.RenameProfileCommand.Execute(null);
+
+            // Assert
+            Assert.AreEqual(originalName, profileToRename.Name);
+            Assert.IsTrue(_mockSettings.SavedSettings == null || _mockSettings.SavedSettings.LastActiveProfileName == originalName);
+            // Assert MessageBox was shown (needs framework)
+            Assert.Inconclusive("MessageBox verification requires UI testing framework.");
+        }
+
+
+        [TestMethod]
+        [Ignore("Requires mocking/intercepting MessageBox.Show")] // Mark ignored
+        public void DeleteProfileCommand_RemovesActive_SelectsPrevious_SavesSettings()
+        {
+            _viewModel.CreateNewProfileCommand.Execute(null);
+            _viewModel.CreateNewProfileCommand.Execute(null);
+            int initialCount = _viewModel.AvailableProfiles.Count;
+            var profileToDelete = _viewModel.ActiveFilterProfile;
+            Assert.IsNotNull(profileToDelete);
+            var expectedNextActive = _viewModel.AvailableProfiles[initialCount - 2];
+            _viewModel.DeleteProfileCommand.Execute(null); // Assumes user confirms MessageBox
+            Assert.AreEqual(initialCount - 1, _viewModel.AvailableProfiles.Count);
+            Assert.IsFalse(_viewModel.AvailableProfiles.Contains(profileToDelete));
+            Assert.IsNotNull(_viewModel.ActiveFilterProfile);
+            Assert.AreSame(expectedNextActive, _viewModel.ActiveFilterProfile);
+            Assert.IsNotNull(_mockSettings.SavedSettings);
+            Assert.AreEqual(expectedNextActive.Name, _mockSettings.SavedSettings?.LastActiveProfileName);
+            Assert.AreEqual(initialCount - 1, _mockSettings.SavedSettings?.FilterProfiles.Count);
+            Assert.IsTrue(_mockProcessor.UpdateFilterSettingsCallCount > 0);
+            Assert.AreSame(expectedNextActive.Model.RootFilter ?? new TrueFilter(), _mockProcessor.LastFilterSettings?.Filter);
+            Assert.Inconclusive("MessageBox verification requires UI testing framework.");
+        }
+
+         [TestMethod]
+        [Ignore("Requires mocking/intercepting MessageBox.Show")] // Mark ignored
+        public void DeleteProfileCommand_DeletesLastProfile_CreatesAndSelectsDefault()
+        {
+            Assert.AreEqual(1, _viewModel.AvailableProfiles.Count);
+            var lastProfile = _viewModel.ActiveFilterProfile;
+            Assert.IsNotNull(lastProfile);
+             _viewModel.DeleteProfileCommand.Execute(null); // Assumes user confirms MessageBox
+            Assert.AreEqual(1, _viewModel.AvailableProfiles.Count);
+            var newDefaultProfile = _viewModel.AvailableProfiles[0];
+            Assert.IsNotNull(newDefaultProfile);
+            Assert.AreNotSame(lastProfile, newDefaultProfile);
+            Assert.AreEqual("Default", newDefaultProfile.Name);
+            Assert.IsNull(newDefaultProfile.Model.RootFilter);
+            Assert.AreSame(newDefaultProfile, _viewModel.ActiveFilterProfile);
+            Assert.IsNotNull(_mockSettings.SavedSettings);
+            Assert.AreEqual("Default", _mockSettings.SavedSettings?.LastActiveProfileName);
+            Assert.IsTrue(_mockProcessor.UpdateFilterSettingsCallCount > 0);
+            Assert.IsInstanceOfType(_mockProcessor.LastFilterSettings?.Filter, typeof(TrueFilter));
+             Assert.Inconclusive("MessageBox verification requires UI testing framework.");
+        }
+
+
+        [TestMethod]
+        public void ActiveFilterProfile_Set_UpdatesState_TriggersProcessor_SavesSettings()
+        {
+            _viewModel.CreateNewProfileCommand.Execute(null);
+            var profile1 = _viewModel.AvailableProfiles[0];
+            var profile2 = _viewModel.ActiveFilterProfile;
+             _mockProcessor.ResetCounters();
+             _mockSettings.ResetSettings();
+             _viewModel.ActiveFilterProfile = profile1;
+            Assert.AreSame(profile1, _viewModel.ActiveFilterProfile);
+            Assert.AreEqual(0, _viewModel.ActiveTreeRootNodes.Count);
+            Assert.IsNull(_viewModel.SelectedFilterNode);
+            Assert.AreEqual(1, _mockProcessor.UpdateFilterSettingsCallCount);
+            Assert.IsInstanceOfType(_mockProcessor.LastFilterSettings?.Filter, typeof(TrueFilter));
+            Assert.IsNotNull(_mockSettings.SavedSettings);
+            Assert.AreEqual(profile1.Name, _mockSettings.SavedSettings?.LastActiveProfileName);
+        }
+
+        #endregion
+
+        #region Filter Node Management Tests (NEW)
+
+        [TestMethod]
+        public void AddFilterCommand_EmptyTree_AddsRoot_Selects_UpdatesProcessor_Saves()
+        {
+            Assert.IsNull(_viewModel.ActiveFilterProfile?.RootFilterViewModel);
+            _mockProcessor.ResetCounters();
+            _mockSettings.ResetSettings();
+            _viewModel.AddFilterCommand.Execute("Substring");
+            Assert.IsNotNull(_viewModel.ActiveFilterProfile?.RootFilterViewModel);
+            Assert.IsInstanceOfType(_viewModel.ActiveFilterProfile.RootFilterViewModel.Filter, typeof(SubstringFilter));
+            Assert.AreEqual(1, _viewModel.ActiveTreeRootNodes.Count);
+            Assert.AreSame(_viewModel.ActiveFilterProfile.RootFilterViewModel, _viewModel.ActiveTreeRootNodes[0]);
+            Assert.AreSame(_viewModel.ActiveFilterProfile.RootFilterViewModel, _viewModel.SelectedFilterNode);
+            Assert.AreEqual(1, _mockProcessor.UpdateFilterSettingsCallCount);
+            Assert.IsNotNull(_mockProcessor.LastFilterSettings?.Filter);
+            Assert.IsInstanceOfType(_mockProcessor.LastFilterSettings?.Filter, typeof(SubstringFilter));
+            Assert.IsNotNull(_mockSettings.SavedSettings);
+        }
+
+        [TestMethod]
+        public void AddFilterCommand_CompositeSelected_AddsChild_Selects_UpdatesProcessor_Saves()
+        {
+            _viewModel.AddFilterCommand.Execute("And");
+            var root = _viewModel.ActiveFilterProfile?.RootFilterViewModel;
+            Assert.IsNotNull(root);
+            _viewModel.SelectedFilterNode = root;
+            _mockProcessor.ResetCounters();
+            _mockSettings.ResetSettings();
+            _viewModel.AddFilterCommand.Execute("Regex");
+            Assert.AreEqual(1, root.Children.Count);
+            var child = root.Children[0];
+            Assert.IsInstanceOfType(child.Filter, typeof(RegexFilter));
+            Assert.AreSame(child, _viewModel.SelectedFilterNode);
+            Assert.AreEqual(1, _mockProcessor.UpdateFilterSettingsCallCount);
+            Assert.IsNotNull(_mockProcessor.LastFilterSettings?.Filter);
+            Assert.AreSame(root.Filter, _mockProcessor.LastFilterSettings?.Filter);
+            Assert.IsNotNull(_mockSettings.SavedSettings);
+        }
+
+        [TestMethod]
+        public void RemoveFilterNodeCommand_RootSelected_ClearsTree_UpdatesProcessor_Saves()
+        {
+            _viewModel.AddFilterCommand.Execute("Substring");
+            _viewModel.SelectedFilterNode = _viewModel.ActiveFilterProfile?.RootFilterViewModel;
+            Assert.IsNotNull(_viewModel.SelectedFilterNode);
+            _mockProcessor.ResetCounters();
+            _mockSettings.ResetSettings();
+            _viewModel.RemoveFilterNodeCommand.Execute(null);
+            Assert.IsNull(_viewModel.ActiveFilterProfile?.RootFilterViewModel);
+            Assert.AreEqual(0, _viewModel.ActiveTreeRootNodes.Count);
+            Assert.IsNull(_viewModel.SelectedFilterNode);
+            Assert.AreEqual(1, _mockProcessor.UpdateFilterSettingsCallCount);
+            Assert.IsInstanceOfType(_mockProcessor.LastFilterSettings?.Filter, typeof(TrueFilter));
+            Assert.IsNotNull(_mockSettings.SavedSettings);
+        }
+
+        [TestMethod]
+        public void RemoveFilterNodeCommand_ChildSelected_RemovesChild_SelectsParent_UpdatesProcessor_Saves()
+        {
+            _viewModel.AddFilterCommand.Execute("Or");
+            var root = _viewModel.ActiveFilterProfile?.RootFilterViewModel;
+            Assert.IsNotNull(root);
+            _viewModel.SelectedFilterNode = root;
+            _viewModel.AddFilterCommand.Execute("Substring");
+            var child = root.Children[0];
+            _viewModel.SelectedFilterNode = child;
+            _mockProcessor.ResetCounters();
+            _mockSettings.ResetSettings();
+            _viewModel.RemoveFilterNodeCommand.Execute(null);
+            Assert.AreEqual(0, root.Children.Count);
+            Assert.AreSame(root, _viewModel.SelectedFilterNode);
+            Assert.AreEqual(1, _mockProcessor.UpdateFilterSettingsCallCount);
+            Assert.IsNotNull(_mockProcessor.LastFilterSettings?.Filter);
+            Assert.AreSame(root.Filter, _mockProcessor.LastFilterSettings?.Filter);
+            Assert.IsNotNull(_mockSettings.SavedSettings);
+        }
+
+        [TestMethod]
+        public void ToggleEditNodeCommand_EndEdit_UpdatesProcessor_Saves()
+        {
+            _viewModel.AddFilterCommand.Execute("Substring");
+            var node = _viewModel.ActiveFilterProfile?.RootFilterViewModel;
+            Assert.IsNotNull(node);
+            _viewModel.SelectedFilterNode = node;
+            node.BeginEditCommand.Execute(null);
+            _mockProcessor.ResetCounters();
+            _mockSettings.ResetSettings();
+            node.FilterText = "Updated Value";
+            _viewModel.ToggleEditNodeCommand.Execute(null); // End editing
+            Assert.IsFalse(node.IsEditing);
+            Assert.AreEqual(1, _mockProcessor.UpdateFilterSettingsCallCount);
+            Assert.IsNotNull(_mockProcessor.LastFilterSettings?.Filter);
+            Assert.AreEqual("Updated Value", (_mockProcessor.LastFilterSettings?.Filter as SubstringFilter)?.Value);
+            Assert.IsNotNull(_mockSettings.SavedSettings);
+        }
+
+        [TestMethod]
+        public void FilterViewModel_EnabledChanged_TriggersProcessorUpdate_Saves()
+        {
+             // Arrange
+            _viewModel.AddFilterCommand.Execute("Substring");
+            var node = _viewModel.ActiveFilterProfile?.RootFilterViewModel;
+            Assert.IsNotNull(node);
+            Assert.IsTrue(node.Enabled);
+            _mockProcessor.ResetCounters(); // Reset
+            _mockSettings.ResetSettings();
+
+            // Act
+            node.Enabled = false; // Change the 'Enabled' state
+
+            // Assert
+             Assert.AreEqual(1, _mockProcessor.UpdateFilterSettingsCallCount, "Changing Enabled should trigger processor update.");
+            Assert.IsNotNull(_mockProcessor.LastFilterSettings?.Filter);
+            Assert.IsFalse(_mockProcessor.LastFilterSettings?.Filter?.Enabled, "Filter passed to processor should be disabled.");
+             Assert.IsNotNull(_mockSettings.SavedSettings, "Settings should be saved after Enabled change.");
+             // Could add deeper checks in SavedSettings if needed
+        }
+
+
+        #endregion
+
+        #region Search Tests (NEW)
+
+        [TestMethod]
+        public void SearchText_Set_UpdatesMatchesAndStatus()
+        {
+            _viewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Line one with test"));
+            _viewModel.FilteredLogLines.Add(new FilteredLogLine(2, "Line two NO MATCH"));
+            _viewModel.FilteredLogLines.Add(new FilteredLogLine(3, "Line three with TEST"));
+            _viewModel.GetType().GetMethod("UpdateLogTextInternal", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.Invoke(_viewModel, null);
+
+            _viewModel.IsCaseSensitiveSearch = false;
+            _viewModel.SearchText = "test";
+            Assert.AreEqual(2, _viewModel.SearchMarkers.Count);
+            StringAssert.Contains(_viewModel.SearchStatusText, "2 matches found");
+
+            _viewModel.IsCaseSensitiveSearch = true;
+            Assert.AreEqual(1, _viewModel.SearchMarkers.Count);
+            StringAssert.Contains(_viewModel.SearchStatusText, "1 matches found");
+        }
+
+        [TestMethod]
+        public void NextSearchCommand_CyclesThroughMatches_UpdatesSelectionAndHighlight()
+        {
+            _viewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Test 1")); // Index 0
+            _viewModel.FilteredLogLines.Add(new FilteredLogLine(2, "Test 2")); // Index 1
+            _viewModel.FilteredLogLines.Add(new FilteredLogLine(3, "Other"));
+            _viewModel.FilteredLogLines.Add(new FilteredLogLine(4, "Test 3")); // Index 3
+            _viewModel.GetType().GetMethod("UpdateLogTextInternal", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.Invoke(_viewModel, null);
+            _viewModel.SearchText = "Test";
+
+            _viewModel.NextSearchCommand.Execute(null);
+            Assert.AreEqual(0, _viewModel.CurrentMatchOffset);
+            Assert.AreEqual(0, _viewModel.HighlightedFilteredLineIndex);
+            StringAssert.Contains(_viewModel.SearchStatusText, "Match 1 of 3");
+
+            _viewModel.NextSearchCommand.Execute(null);
+            Assert.AreEqual(1, _viewModel.HighlightedFilteredLineIndex);
+            StringAssert.Contains(_viewModel.SearchStatusText, "Match 2 of 3");
+
+            _viewModel.NextSearchCommand.Execute(null);
+            Assert.AreEqual(3, _viewModel.HighlightedFilteredLineIndex);
+            StringAssert.Contains(_viewModel.SearchStatusText, "Match 3 of 3");
+
+            _viewModel.NextSearchCommand.Execute(null);
+            Assert.AreEqual(0, _viewModel.HighlightedFilteredLineIndex);
+            StringAssert.Contains(_viewModel.SearchStatusText, "Match 1 of 3");
+        }
+
+        [TestMethod]
+        public void PreviousSearchCommand_CyclesThroughMatches_UpdatesSelectionAndHighlight()
+        {
+            _viewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Test 1")); // Index 0
+            _viewModel.FilteredLogLines.Add(new FilteredLogLine(2, "Test 2")); // Index 1
+            _viewModel.FilteredLogLines.Add(new FilteredLogLine(3, "Other"));
+            _viewModel.FilteredLogLines.Add(new FilteredLogLine(4, "Test 3")); // Index 3
+            _viewModel.GetType().GetMethod("UpdateLogTextInternal", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.Invoke(_viewModel, null);
+            _viewModel.SearchText = "Test";
+
+            _viewModel.PreviousSearchCommand.Execute(null);
+            Assert.AreEqual(3, _viewModel.HighlightedFilteredLineIndex);
+            StringAssert.Contains(_viewModel.SearchStatusText, "Match 3 of 3");
+
+            _viewModel.PreviousSearchCommand.Execute(null);
+             Assert.AreEqual(1, _viewModel.HighlightedFilteredLineIndex);
+             StringAssert.Contains(_viewModel.SearchStatusText, "Match 2 of 3");
+
+            _viewModel.PreviousSearchCommand.Execute(null);
+             Assert.AreEqual(0, _viewModel.HighlightedFilteredLineIndex);
+             StringAssert.Contains(_viewModel.SearchStatusText, "Match 1 of 3");
+
+             _viewModel.PreviousSearchCommand.Execute(null);
+             Assert.AreEqual(3, _viewModel.HighlightedFilteredLineIndex);
+             StringAssert.Contains(_viewModel.SearchStatusText, "Match 3 of 3");
+        }
+
+        #endregion
+
+        #region Interaction with LogFilterProcessor Tests (NEW)
+
+        [TestMethod]
+        public void OpenLogFileCommand_CallsProcessorReset_AndTailerChangeFile()
+        {
+            _mockFileDialog.FileToReturn = "C:\\good\\log.txt";
+            _viewModel.OpenLogFileCommand.Execute(null);
+            Assert.AreEqual(1, _mockProcessor.ResetCallCount);
+            Assert.AreEqual("C:\\good\\log.txt", _mockTailer.ChangedFilePath);
+            Assert.AreEqual("C:\\good\\log.txt", _viewModel.CurrentLogFilePath);
+        }
+
+        [TestMethod]
+        public void ApplyFilteredUpdate_Replace_ClearsAndAddsLines_UpdatesLogText_ResetsSearch()
+        {
+            _viewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Old Line 1"));
+            _viewModel.SearchText = "Old";
+            _viewModel.GetType().GetMethod("UpdateLogTextInternal", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.Invoke(_viewModel, null);
+            Assert.AreEqual(1, _viewModel.SearchMarkers.Count); // Verify search state was set
+
+            var newLines = new List<FilteredLogLine> { new FilteredLogLine(10, "New") };
+            _mockProcessor.SimulateFilteredUpdate(new FilteredUpdate(UpdateType.Replace, newLines));
+            _viewModel.GetType().GetMethod("UpdateLogTextInternal", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.Invoke(_viewModel, null);
+
+            Assert.AreEqual(1, _viewModel.FilteredLogLines.Count);
+            Assert.AreEqual("New", _viewModel.FilteredLogLines[0].Text);
+            Assert.AreEqual("New", _viewModel.LogText);
+            Assert.AreEqual(0, _viewModel.SearchMarkers.Count); // Search cleared
+            Assert.AreEqual(-1, _viewModel.CurrentMatchOffset);
+            Assert.IsFalse(_viewModel.IsBusyFiltering);
+        }
+
+        [TestMethod]
+        public void ApplyFilteredUpdate_Append_AddsLines_UpdatesLogText()
+        {
+            _viewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Existing 1"));
+            _viewModel.GetType().GetMethod("UpdateLogTextInternal", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.Invoke(_viewModel, null);
+
+            var linesToAppend = new List<FilteredLogLine> { new FilteredLogLine(5, "Appended 5") };
+             _mockProcessor.SimulateFilteredUpdate(new FilteredUpdate(UpdateType.Append, linesToAppend));
+             _viewModel.GetType().GetMethod("UpdateLogTextInternal", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.Invoke(_viewModel, null);
+
+            Assert.AreEqual(2, _viewModel.FilteredLogLines.Count);
+            Assert.AreEqual("Appended 5", _viewModel.FilteredLogLines[1].Text);
+            Assert.AreEqual("Existing 1" + Environment.NewLine + "Appended 5", _viewModel.LogText);
+             Assert.IsTrue(_viewModel.IsBusyFiltering, "Append should not reset busy flag"); // Verify flag state
+        }
+
+        [TestMethod]
+        public void ApplyFilteredUpdate_Replace_RestoresHighlightBasedOnOriginalLineNumber()
+        {
+            // Arrange
+            _viewModel.FilteredLogLines.Add(new FilteredLogLine(5, "Line Five"));
+            _viewModel.FilteredLogLines.Add(new FilteredLogLine(10, "Line Ten"));
+            _viewModel.FilteredLogLines.Add(new FilteredLogLine(15, "Line Fifteen"));
+            _viewModel.HighlightedFilteredLineIndex = 1; // Highlight original line 10
+            Assert.AreEqual(10, _viewModel.HighlightedOriginalLineNumber);
+
+            var newLines = new List<FilteredLogLine> { new FilteredLogLine(10, "Ten"), new FilteredLogLine(20, "Twenty") };
+            _mockProcessor.SimulateFilteredUpdate(new FilteredUpdate(UpdateType.Replace, newLines));
+
+            // Simulate the async Post back to set the index
+             _testContext.Send(_ => { }, null);
+
+            Assert.AreEqual(0, _viewModel.HighlightedFilteredLineIndex); // Should now highlight index 0
+            Assert.AreEqual(10, _viewModel.HighlightedOriginalLineNumber);
+        }
+
+
+        #endregion
+
+        #region State Update Tests (NEW)
+
+        [TestMethod]
+        public void ContextLines_Set_TriggersProcessorUpdate_SavesSettings()
+        {
+            _mockProcessor.ResetCounters();
+            _mockSettings.ResetSettings();
+            _viewModel.ContextLines = 5;
+            Assert.AreEqual(5, _viewModel.ContextLines);
+            Assert.AreEqual(1, _mockProcessor.UpdateFilterSettingsCallCount);
+            Assert.AreEqual(5, _mockProcessor.LastFilterSettings?.ContextLines);
+            Assert.IsNotNull(_mockSettings.SavedSettings);
+            Assert.AreEqual(5, _mockSettings.SavedSettings?.ContextLines);
+        }
+
+        [TestMethod]
+        public void ShowLineNumbers_Set_SavesSettings_UpdatesVisibilityProperty()
+        {
+            _mockSettings.ResetSettings();
+            bool initialState = _viewModel.ShowLineNumbers;
+            Visibility initialVisibility = _viewModel.IsCustomLineNumberMarginVisible;
+
+            _viewModel.ShowLineNumbers = !initialState;
+
+            Assert.AreEqual(!initialState, _viewModel.ShowLineNumbers);
+            Assert.AreNotEqual(initialVisibility, _viewModel.IsCustomLineNumberMarginVisible);
+            Assert.IsNotNull(_mockSettings.SavedSettings);
+            Assert.AreEqual(!initialState, _mockSettings.SavedSettings?.ShowLineNumbers);
+        }
+
+        [TestMethod]
+        public void HighlightTimestamps_Set_SavesSettings()
+        {
+             _mockSettings.ResetSettings();
+            bool initialState = _viewModel.HighlightTimestamps;
+
+            _viewModel.HighlightTimestamps = !initialState;
+
+             Assert.AreEqual(!initialState, _viewModel.HighlightTimestamps);
+             Assert.IsNotNull(_mockSettings.SavedSettings);
+             Assert.AreEqual(!initialState, _mockSettings.SavedSettings?.HighlightTimestamps);
+        }
+
+         [TestMethod]
+        public void IsCaseSensitiveSearch_Set_SavesSettings_UpdatesSearch()
+        {
+             // Arrange
+             _viewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Test test"));
+             _viewModel.GetType().GetMethod("UpdateLogTextInternal", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.Invoke(_viewModel, null);
+             _viewModel.SearchText = "Test";
+             _viewModel.IsCaseSensitiveSearch = false;
+             Assert.AreEqual(2, _viewModel.SearchMarkers.Count); // Initial insensitive search
+             _mockSettings.ResetSettings();
+
+             // Act
+             _viewModel.IsCaseSensitiveSearch = true;
+
+             // Assert
+             Assert.IsTrue(_viewModel.IsCaseSensitiveSearch);
+             Assert.AreEqual(1, _viewModel.SearchMarkers.Count); // Search should re-run and find 1 match
+             Assert.IsNotNull(_mockSettings.SavedSettings);
+             Assert.IsTrue(_mockSettings.SavedSettings?.IsCaseSensitiveSearch);
+        }
+
+
+        #endregion
+
+        #region Highlighting State Tests (NEW)
+
+        [TestMethod]
+        public void HighlightedFilteredLineIndex_SetValid_UpdatesOriginalLineNumber()
+        {
+            _viewModel.FilteredLogLines.Add(new FilteredLogLine(5, "Line Five"));
+            _viewModel.FilteredLogLines.Add(new FilteredLogLine(10, "Line Ten"));
+            _viewModel.HighlightedFilteredLineIndex = 1;
+            Assert.AreEqual(1, _viewModel.HighlightedFilteredLineIndex);
+            Assert.AreEqual(10, _viewModel.HighlightedOriginalLineNumber);
+        }
+
+        [TestMethod]
+        public void HighlightedFilteredLineIndex_SetInvalid_ResetsOriginalLineNumber()
+        {
+            _viewModel.FilteredLogLines.Add(new FilteredLogLine(5, "Line Five"));
+            _viewModel.HighlightedFilteredLineIndex = 0;
+            Assert.AreEqual(5, _viewModel.HighlightedOriginalLineNumber);
+
+            _viewModel.HighlightedFilteredLineIndex = -1;
+            Assert.AreEqual(-1, _viewModel.HighlightedFilteredLineIndex);
+            Assert.AreEqual(-1, _viewModel.HighlightedOriginalLineNumber);
+
+            _viewModel.HighlightedFilteredLineIndex = 5; // Out of bounds
+            Assert.AreEqual(5, _viewModel.HighlightedFilteredLineIndex);
+            Assert.AreEqual(-1, _viewModel.HighlightedOriginalLineNumber);
+        }
+
+        #endregion
+
+        #region Cleanup Tests (NEW)
+
+        [TestMethod]
+        public void Dispose_SavesSettings_StopsTailer_DisposesProcessor()
+        {
+            _mockSettings.ResetSettings();
+            _viewModel.Dispose();
+            Assert.IsNotNull(_mockSettings.SavedSettings);
+            Assert.IsTrue(_mockTailer.IsStopped);
+
+            // --- Verify Processor Disposal Behavior ---
+            var odeReset = Assert.ThrowsException<ObjectDisposedException>(() => _mockProcessor.Reset(), "Calling Reset() after Dispose should throw ObjectDisposedException.");
+            Assert.AreEqual(nameof(MockLogFilterProcessor), odeReset.ObjectName); // Verify the correct object name in the exception
+
+            var odeUpdate = Assert.ThrowsException<ObjectDisposedException>(() => _mockProcessor.UpdateFilterSettings(new TrueFilter(), 0), "Calling UpdateFilterSettings() after Dispose should throw ObjectDisposedException.");
+            Assert.AreEqual(nameof(MockLogFilterProcessor), odeUpdate.ObjectName);
+
+            // Verify that trying to simulate events also doesn't work (or simply completes/errors the internal subject upon disposal)
+            // Depending on the exact implementation, this might not throw but just do nothing or signal completion/error earlier.
+            // Assert.ThrowsException<ObjectDisposedException>(() => processor.SimulateFilteredUpdate(new FilteredUpdate(UpdateType.Replace, []))); // Optional check
+        }
+
+        #endregion
+
+        #region WPF Control Interaction Tests (Requires STA)
+
+        // Use TestMethod with STA attribute if direct Dispatcher isn't used,
+        // or rely on ClassInitialize/Cleanup with Dispatcher.Invoke as shown.
+
+        [TestMethod]
+        public void AddFilter_WhenActiveProfileIsEmpty_ShouldUpdateTreeViewItems_STA()
+        {
+             Exception? threadException = null;
+             TreeView? filterTreeView = null; // Need to access this after invoke
+
+             _dispatcher?.Invoke(() => // Use dispatcher from ClassInitialize
+             {
+                 MainWindow? window = null;
+                 try
+                 {
+                     // Re-initialize mocks specific to this test if needed,
+                     // or rely on TestInitialize if sufficient.
+                     // Note: _viewModel is already created in TestInitialize.
+
+                     window = new MainWindow(_viewModel); // Use the main _viewModel
+                     window.Measure(new Size(800, 600));
+                     window.Arrange(new Rect(0, 0, 800, 600));
+                     window.UpdateLayout();
+
+                     var windowContentElement = window.Content as UIElement;
+                     Assert.IsNotNull(windowContentElement, "Window Content is null.");
+                     filterTreeView = FindVisualChild<TreeView>(windowContentElement, "FilterTreeViewNameForTesting");
+                     Assert.IsNotNull(filterTreeView, "FilterTreeView not found.");
+
+                     // Pre-conditions within Invoke
+                      Assert.IsNotNull(_viewModel.ActiveFilterProfile, "Pre-condition: Active profile is null.");
+                      _viewModel.ActiveFilterProfile.SetModelRootFilter(null);
+                      _viewModel.ActiveTreeRootNodes.Clear();
+                      Assert.AreEqual(0, filterTreeView.Items.Count, "Pre-condition: TreeView should be empty.");
+
+                     // Act within Invoke
+                     _viewModel.AddFilterCommand.Execute("Substring");
+
+                     // Wait for bindings/layout within Invoke
+                     Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.DataBind);
+                     Dispatcher.CurrentDispatcher.Invoke(() => { window.UpdateLayout(); }, DispatcherPriority.Loaded);
+
+                     // Assert within Invoke (or capture values to assert outside)
+                      Assert.AreEqual(1, filterTreeView.Items.Count, "TreeView Items collection should have one item.");
+                      Assert.IsInstanceOfType(filterTreeView.Items[0], typeof(FilterViewModel), "Item is FilterViewModel");
+                      var itemViewModel = (FilterViewModel)filterTreeView.Items[0];
+                      Assert.IsInstanceOfType(itemViewModel.Filter, typeof(SubstringFilter), "Item Filter model is SubstringFilter.");
+                 }
+                 catch (Exception ex)
+                 {
+                     threadException = ex;
+                 }
+                 finally
+                 {
+                      // Cleanup window if created
+                      window?.Close();
+                 }
+             });
+
+            if (threadException != null) throw threadException; // Re-throw exception from STA thread
+        }
+
+        [TestMethod]
+        public void RemoveFilter_ShouldUpdateTreeViewItems_STA()
+        {
+             Exception? threadException = null;
+             TreeView? filterTreeView = null; // Capture for assertion
+
+            _dispatcher?.Invoke(() =>
             {
-                Dispatcher? dispatcher = null; // Capture dispatcher for shutdown
+                 MainWindow? window = null;
                 try
                 {
-                    // --- Setup ---
-                    dispatcher = Dispatcher.CurrentDispatcher; // Get dispatcher for this thread
-                    vmMock = CreateMockViewModel();
-                    window = new MainWindow(vmMock);
+                     window = new MainWindow(_viewModel);
+                     window.Measure(new Size(800, 600));
+                     window.Arrange(new Rect(0, 0, 800, 600));
+                     window.UpdateLayout();
 
-                    // Force layout to apply templates and create controls
-                    window.Measure(new Size(800, 600));
-                    window.Arrange(new Rect(0, 0, 800, 600));
-                    window.UpdateLayout();
+                     var windowContentElement = window.Content as UIElement;
+                     Assert.IsNotNull(windowContentElement, "Window Content is null.");
+                     filterTreeView = FindVisualChild<TreeView>(windowContentElement, "FilterTreeViewNameForTesting");
+                     Assert.IsNotNull(filterTreeView, "FilterTreeView not found.");
 
-                    var windowContentElement = window.Content as UIElement;
-                    Assert.IsNotNull(windowContentElement, "Window Content is null.");
-                    filterTreeView = FindVisualChild<TreeView>(windowContentElement, "FilterTreeViewNameForTesting");
-                    Assert.IsNotNull(filterTreeView, "FilterTreeViewNameForTesting not found.");
+                    // Arrange: Add a filter first
+                     Assert.IsNotNull(_viewModel.ActiveFilterProfile, "No active profile.");
+                     _viewModel.ActiveFilterProfile.SetModelRootFilter(null);
+                     _viewModel.ActiveTreeRootNodes.Clear();
+                     Assert.AreEqual(0, filterTreeView.Items.Count, "Pre-Add: TreeView empty.");
+                     _viewModel.AddFilterCommand.Execute("Substring");
+                     Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.DataBind);
+                     Dispatcher.CurrentDispatcher.Invoke(() => { window.UpdateLayout(); }, DispatcherPriority.Loaded);
+                     Assert.AreEqual(1, filterTreeView.Items.Count, "Pre-Remove: TreeView should have 1 item.");
+                     _viewModel.SelectedFilterNode = _viewModel.ActiveFilterProfile.RootFilterViewModel; // Select node
+                     Assert.IsNotNull(_viewModel.SelectedFilterNode, "Pre-Remove: Node not selected.");
 
-                    // Pre-condition: Add a filter node first so we have something to remove
-                    Assert.IsNotNull(vmMock.ActiveFilterProfile, "No active profile.");
-                    vmMock.ActiveFilterProfile.SetModelRootFilter(null); // Start empty
-                    vmMock.ActiveTreeRootNodes.Clear();
-                    Assert.AreEqual(0, filterTreeView.Items.Count, "Pre-Add: TreeView should be empty.");
+                    // Act
+                    _viewModel.RemoveFilterNodeCommand.Execute(null);
+                    Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.DataBind);
+                    Dispatcher.CurrentDispatcher.Invoke(() => { window.UpdateLayout(); }, DispatcherPriority.Loaded);
 
-                    vmMock.AddFilterCommand.Execute("Substring");
-
-                    // Wait for dispatcher processing (bindings, layout) after add
-                    dispatcher.Invoke(() => { }, DispatcherPriority.DataBind);
-                    dispatcher.Invoke(() => { window.UpdateLayout(); }, DispatcherPriority.Loaded);
-
-                    Assert.AreEqual(1, filterTreeView.Items.Count, "Pre-Remove: TreeView should have 1 item after add.");
-                    vmMock.SelectedFilterNode = vmMock.ActiveFilterProfile.RootFilterViewModel; // Select the added node
-                    Assert.IsNotNull(vmMock.SelectedFilterNode, "Pre-Remove: Node to remove wasn't selected.");
-
-                    // --- Act ---
-                    vmMock.RemoveFilterNodeCommand.Execute(null);
-
-                    // Wait for dispatcher processing (bindings, layout) after remove
-                    dispatcher.Invoke(() => { }, DispatcherPriority.DataBind);
-                    dispatcher.Invoke(() => { window.UpdateLayout(); }, DispatcherPriority.Loaded);
-
-                    // --- Assert ---
-                    Assert.AreEqual(0, filterTreeView.Items.Count, "Post-Remove: TreeView Items collection should be empty.");
-                    Assert.AreEqual(0, vmMock.ActiveTreeRootNodes.Count, "Post-Remove: ViewModel's ActiveTreeRootNodes should be empty.");
-                    Assert.IsNull(vmMock.SelectedFilterNode, "Post-Remove: SelectedFilterNode should be null.");
-                    Assert.IsNull(vmMock.ActiveFilterProfile.RootFilterViewModel, "Post-Remove: Profile's RootFilterViewModel should be null.");
+                    // Assert (Check TreeView Items count inside Invoke)
+                     Assert.AreEqual(0, filterTreeView.Items.Count, "Post-Remove: TreeView Items collection should be empty.");
 
                 }
-                catch (Exception ex)
-                {
-                    threadException = ex;
-                }
-                finally
-                {
-                    // Ensure Dispatcher processing stops
-                    if (dispatcher != null && !dispatcher.HasShutdownStarted)
-                    {
-                        dispatcher.InvokeShutdown();
-                    }
-                    // Clean up window resources if necessary, though InvokeShutdown usually handles it.
-                     window?.Close(); // Helps release resources if window wasn't explicitly shown/closed
-                }
+                catch(Exception ex) { threadException = ex; }
+                finally { window?.Close(); }
             });
 
-            t.SetApartmentState(ApartmentState.STA); // WPF requires STA
-            t.Start();
-            t.Join(); // Wait for test thread
+            if (threadException != null) throw threadException;
 
-            if (threadException != null)
-            {
-                throw new AssertFailedException($"Exception on STA thread: {threadException.Message}", threadException);
-            }
+            // Assert ViewModel state (can be done outside Invoke)
+             Assert.AreEqual(0, _viewModel.ActiveTreeRootNodes.Count, "Post-Remove: ViewModel's ActiveTreeRootNodes should be empty.");
+             Assert.IsNull(_viewModel.SelectedFilterNode, "Post-Remove: SelectedFilterNode should be null.");
+             Assert.IsNull(_viewModel.ActiveFilterProfile?.RootFilterViewModel, "Post-Remove: Profile's RootFilterViewModel should be null.");
         }
 
-        [TestMethod] public void AddFilterCommand_WhenActiveProfileIsEmpty_UpdatesActiveTreeRootNodes()
+        #endregion
+
+        #region Original Tests (Review and keep if still valid)
+
+        [TestMethod]
+        public void OpenLogFile_ShouldSetCurrentLogFilePath() // Kept - Valid logic test
         {
-            // Arrange
-            var viewModel = CreateMockViewModel();
-
-            // Ensure we have an active profile to work with
-            Assert.IsNotNull(viewModel.ActiveFilterProfile, "Test setup failed: No active profile found after initialization.");
-
-            // Explicitly clear the root filter of the active profile to simulate an empty tree state
-            viewModel.ActiveFilterProfile.SetModelRootFilter(null);
-            // Also clear the collection bound to the TreeView, mimicking the state after SetModelRootFilter(null)
-            viewModel.ActiveTreeRootNodes.Clear(); // Direct manipulation for test setup
-
-            Assert.IsNull(viewModel.ActiveFilterProfile.RootFilterViewModel, "Pre-condition failed: RootFilterViewModel should be null.");
-            Assert.AreEqual(0, viewModel.ActiveTreeRootNodes.Count, "Pre-condition failed: ActiveTreeRootNodes should be empty.");
-            Assert.IsNull(viewModel.SelectedFilterNode, "Pre-condition failed: SelectedFilterNode should be null.");
-
-            // Act: Add the first filter node (e.g., a Substring filter)
-            viewModel.AddFilterCommand.Execute("Substring");
-
-            // Assert
-            // 1. Check the collection bound to the TreeView
-            Assert.AreEqual(1, viewModel.ActiveTreeRootNodes.Count, "ActiveTreeRootNodes should contain one item (the new root).");
-            Assert.IsNotNull(viewModel.ActiveTreeRootNodes[0], "The item in ActiveTreeRootNodes should not be null.");
-            Assert.IsInstanceOfType(viewModel.ActiveTreeRootNodes[0].Filter, typeof(SubstringFilter), "The filter model of the root node should be SubstringFilter.");
-
-            // 2. Check if the ActiveFilterProfile's RootFilterViewModel was also updated (should be the same instance)
-            Assert.IsNotNull(viewModel.ActiveFilterProfile.RootFilterViewModel, "Active profile's RootFilterViewModel should now be set.");
-            Assert.AreSame(viewModel.ActiveTreeRootNodes[0], viewModel.ActiveFilterProfile.RootFilterViewModel, "ActiveTreeRootNodes item should be the same instance as the profile's RootFilterViewModel.");
-
-            // 3. Check if the new node was automatically selected
-            Assert.IsNotNull(viewModel.SelectedFilterNode, "SelectedFilterNode should be set to the new root.");
-            Assert.AreSame(viewModel.ActiveTreeRootNodes[0], viewModel.SelectedFilterNode, "SelectedFilterNode should be the newly added root node.");
+            _mockFileDialog.FileToReturn = "C:\\fake\\log.txt";
+            _viewModel.OpenLogFileCommand.Execute(null);
+            Assert.AreEqual("C:\\fake\\log.txt", _viewModel.CurrentLogFilePath);
+            Assert.AreEqual("C:\\fake\\log.txt", _mockTailer.ChangedFilePath); // Also check mock tailer
+            Assert.AreEqual(1, _mockProcessor.ResetCallCount); // Verify processor reset
         }
 
-        [TestMethod] public void Constructor_InitializesWithDefaultProfile()
-        {
-            // Arrange & Act
-            var viewModel = CreateMockViewModel();
+        // PreviousSearch/NextSearch tests are kept as they test command execution and state update logic,
+        // even if full UI verification requires integration tests.
 
-            // Assert
-            Assert.AreEqual(1, viewModel.AvailableProfiles.Count, "Should initialize with one default profile.");
-            Assert.IsNotNull(viewModel.ActiveFilterProfile, "A profile should be active by default.");
-            Assert.AreEqual("Default", viewModel.ActiveFilterProfile.Name, "Default profile name should be 'Default'.");
-            Assert.IsNull(viewModel.ActiveFilterProfile.Model.RootFilter, "Default profile should have no filter.");
-            Assert.IsNull(viewModel.ActiveFilterProfile.RootFilterViewModel, "RootFilterViewModel should also be null.");
-        }
-
-        [TestMethod] public void AddFilterCommand_WithNoRootFilterInActiveProfile_CreatesRootNode()
-        {
-            // Arrange
-            var viewModel = CreateMockViewModel();
-            // Ensure the default profile starts empty (or create a new empty one)
-            viewModel.ActiveFilterProfile?.SetModelRootFilter(null); // Make the active profile empty
-
-            // Act
-            viewModel.AddFilterCommand.Execute("Substring"); // Add a substring filter
-
-            // Assert
-            Assert.IsNotNull(viewModel.ActiveFilterProfile?.Model.RootFilter, "Root filter model should be created.");
-            Assert.IsInstanceOfType(viewModel.ActiveFilterProfile.Model.RootFilter, typeof(SubstringFilter), "Root filter should be SubstringFilter.");
-            Assert.IsNotNull(viewModel.ActiveFilterProfile.RootFilterViewModel, "RootFilterViewModel should be created.");
-            Assert.AreEqual(viewModel.ActiveFilterProfile.RootFilterViewModel, viewModel.SelectedFilterNode, "Newly added root node should be selected.");
-        }
-
-        [TestMethod] public void AddFilterCommand_WithCompositeNodeSelected_AddsChildNode()
-        {
-            // Arrange
-            var viewModel = CreateMockViewModel();
-            viewModel.AddFilterCommand.Execute("And"); // Create an AND root
-            var rootNode = viewModel.ActiveFilterProfile?.RootFilterViewModel;
-            Assert.IsNotNull(rootNode, "Root node setup failed.");
-            viewModel.SelectedFilterNode = rootNode; // Select the AND node
-
-            // Act
-            viewModel.AddFilterCommand.Execute("Substring"); // Add a substring filter as child
-
-            // Assert
-            Assert.AreEqual(1, rootNode.Children.Count, "Child node should be added to the composite node.");
-            Assert.IsInstanceOfType(rootNode.Children[0].Filter, typeof(SubstringFilter), "Child node should be SubstringFilter.");
-            Assert.AreEqual(rootNode.Children[0], viewModel.SelectedFilterNode, "Newly added child node should be selected."); // Check if selection moves to child
-        }
-
-        [TestMethod] public void AddFilterCommand_WithNonCompositeNodeSelected_ShowsMessage()
+        [TestMethod]
+        public void PreviousSearch_WithNonEmptySearchText_ShouldNavigate()
         {
              // Arrange
-             var viewModel = CreateMockViewModel();
-             viewModel.AddFilterCommand.Execute("Substring"); // Create a Substring root
-             var rootNode = viewModel.ActiveFilterProfile?.RootFilterViewModel;
-             Assert.IsNotNull(rootNode, "Root node setup failed.");
-             viewModel.SelectedFilterNode = rootNode; // Select the Substring node
-             int childCount = rootNode.Children.Count;
+             _viewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Test 1"));
+             _viewModel.FilteredLogLines.Add(new FilteredLogLine(2, "Test 2"));
+             _viewModel.GetType().GetMethod("UpdateLogTextInternal", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.Invoke(_viewModel, null);
+             _viewModel.SearchText = "Test";
+             int initialOffset = _viewModel.CurrentMatchOffset;
 
              // Act
-             // TODO: Need a way to intercept MessageBox calls for testing
-             // viewModel.AddFilterCommand.Execute("Regex"); // Try to add another child
+             _viewModel.PreviousSearchCommand.Execute(null); // Should wrap to last match
 
              // Assert
-             Assert.AreEqual(childCount, rootNode.Children.Count, "No child should be added to non-composite.");
+             Assert.AreNotEqual(initialOffset, _viewModel.CurrentMatchOffset, "CurrentMatchOffset should change.");
+             StringAssert.Contains(_viewModel.SearchStatusText, "Match 2 of 2"); // Assuming 2 matches
         }
 
-
-        [TestMethod] public void RemoveFilterNodeCommand_WithRootNodeSelected_ClearsActiveTree()
-        {
-            // Arrange
-            var viewModel = CreateMockViewModel();
-            viewModel.AddFilterCommand.Execute("Substring"); // Add a root node
-            viewModel.SelectedFilterNode = viewModel.ActiveFilterProfile?.RootFilterViewModel; // Select the root
-            Assert.IsNotNull(viewModel.SelectedFilterNode, "Setup failed: Root node not selected.");
-
-            // Act
-            viewModel.RemoveFilterNodeCommand.Execute(null);
-
-            // Assert
-            Assert.IsNull(viewModel.ActiveFilterProfile?.Model.RootFilter, "Root filter model should be null after removal.");
-            Assert.IsNull(viewModel.ActiveFilterProfile?.RootFilterViewModel, "RootFilterViewModel should be null.");
-            Assert.IsNull(viewModel.SelectedFilterNode, "SelectedFilterNode should be cleared.");
-        }
-
-        [TestMethod] public void RemoveFilterNodeCommand_WithChildNodeSelected_RemovesChildAndSelectsParent()
-        {
-            // Arrange
-            var viewModel = CreateMockViewModel();
-            viewModel.AddFilterCommand.Execute("And"); // Add AND root
-            var rootNode = viewModel.ActiveFilterProfile?.RootFilterViewModel;
-            viewModel.SelectedFilterNode = rootNode;
-            viewModel.AddFilterCommand.Execute("Substring"); // Add child
-            var childNode = rootNode?.Children.FirstOrDefault();
-            Assert.IsNotNull(childNode, "Setup failed: Child node not added.");
-            viewModel.SelectedFilterNode = childNode; // Select the child
-
-            // Act
-            viewModel.RemoveFilterNodeCommand.Execute(null);
-
-            // Assert
-            Assert.IsNotNull(rootNode, "Root node should still exist.");
-            Assert.AreEqual(0, rootNode.Children.Count, "Child node should be removed.");
-            Assert.AreEqual(rootNode, viewModel.SelectedFilterNode, "Parent node (root) should be selected.");
-        }
-
-        [TestMethod] public void ToggleEditNodeCommand_OnEditableNode_TogglesEditState()
+        [TestMethod]
+        public void NextSearch_WithNonEmptySearchText_ShouldNavigate()
         {
              // Arrange
-             var viewModel = CreateMockViewModel();
-             viewModel.AddFilterCommand.Execute("Substring");
-             var node = viewModel.ActiveFilterProfile?.RootFilterViewModel;
-             Assert.IsNotNull(node, "Node setup failed.");
-             viewModel.SelectedFilterNode = node;
-             Assert.IsTrue(node.IsEditable, "Node should be editable.");
-             bool initialState = node.IsEditing;
+             _viewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Test 1"));
+             _viewModel.FilteredLogLines.Add(new FilteredLogLine(2, "Test 2"));
+             _viewModel.GetType().GetMethod("UpdateLogTextInternal", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.Invoke(_viewModel, null);
+             _viewModel.SearchText = "Test";
+             int initialOffset = _viewModel.CurrentMatchOffset;
 
              // Act
-             viewModel.ToggleEditNodeCommand.Execute(null);
+             _viewModel.NextSearchCommand.Execute(null); // Should go to first match
 
              // Assert
-             Assert.AreNotEqual(initialState, node.IsEditing, "IsEditing state should toggle.");
-
-             // Act again
-             viewModel.ToggleEditNodeCommand.Execute(null);
-
-              // Assert
-             Assert.AreEqual(initialState, node.IsEditing, "IsEditing state should toggle back.");
-        }
-
-        [TestMethod] public void ToggleEditNodeCommand_OnNonEditableNode_DoesNothing()
-        {
-             // Arrange
-             var viewModel = CreateMockViewModel();
-             viewModel.AddFilterCommand.Execute("And");
-             var node = viewModel.ActiveFilterProfile?.RootFilterViewModel;
-             Assert.IsNotNull(node, "Node setup failed.");
-             viewModel.SelectedFilterNode = node;
-             Assert.IsFalse(node.IsEditable, "Node should not be editable.");
-             bool initialState = node.IsEditing;
-
-             // Act
-             viewModel.ToggleEditNodeCommand.Execute(null);
-
-             // Assert
-             Assert.AreEqual(initialState, node.IsEditing, "IsEditing state should not change.");
-        }
-
-#if false // Keep this inactive for now as it requires deeper mocking
-        [TestMethod] public void ActiveFilterProfile_Set_TriggersFilterUpdateAndClearsNodeSelection()
-        {
-             // Arrange
-             var viewModel = CreateViewModel();
-             viewModel.CreateNewProfileCommand.Execute(null); // Create a second profile
-             var initialProfile = viewModel.AvailableProfiles[0];
-             var secondProfile = viewModel.AvailableProfiles[1];
-             viewModel.ActiveFilterProfile = initialProfile; // Start with first
-
-             // Setup: add a node and select it in the initial profile
-             viewModel.AddFilterCommand.Execute("Substring");
-             viewModel.SelectedFilterNode = initialProfile.RootFilterViewModel;
-             Assert.IsNotNull(viewModel.SelectedFilterNode, "Node selection setup failed.");
-
-             bool filterUpdateTriggered = false;
-             viewModel.ActiveFilterProfile.RootFilterViewModel!.FilterModel.PropertyChanged += (s, e) => {
-                 // We need a better way to test TriggerFilterUpdate was called.
-                 // For now, we assume changing the profile model implicitly calls it.
-                 // This requires mocking ILogFilterProcessor.
-                 // filterUpdateTriggered = true;
-             };
-
-
-             // Act
-             viewModel.ActiveFilterProfile = secondProfile;
-
-             // Assert
-             Assert.AreEqual(secondProfile, viewModel.ActiveFilterProfile, "Active profile not switched.");
-             Assert.IsNull(viewModel.SelectedFilterNode, "Selected filter node should be cleared when profile changes.");
-             // Assert.IsTrue(filterUpdateTriggered, "Changing active profile should trigger a filter update."); // Requires mocking
-             Assert.Inconclusive("Need to mock ILogFilterProcessor to verify TriggerFilterUpdate call.");
-        }
-#endif
-
-        // --- Tests for Profile Management Commands ---
-
-        [TestMethod] public void CreateNewProfileCommand_AddsProfileAndSelectsIt()
-        {
-            // Arrange
-            var viewModel = CreateMockViewModel();
-            int initialCount = viewModel.AvailableProfiles.Count;
-
-            // Act
-            viewModel.CreateNewProfileCommand.Execute(null);
-
-            // Assert
-            Assert.AreEqual(initialCount + 1, viewModel.AvailableProfiles.Count, "A new profile should be added.");
-            Assert.IsNotNull(viewModel.ActiveFilterProfile, "The new profile should be active.");
-            Assert.IsTrue(viewModel.ActiveFilterProfile.Name.StartsWith("New Profile"), "New profile should have default name pattern.");
-        }
-
-        [TestMethod] public void RenameProfileCommand_WithValidNewName_UpdatesProfileName()
-        {
-            // Arrange
-            var mockPrompter = new MockInputPromptService { InputToReturn = "Renamed Profile" };
-            var viewModel = CreateMockViewModel(prompt: mockPrompter);
-            var profileToRename = viewModel.ActiveFilterProfile;
-            Assert.IsNotNull(profileToRename, "Setup failed: No active profile.");
-            string oldName = profileToRename.Name;
-
-            // Act
-            viewModel.RenameProfileCommand.Execute(null);
-
-            // Assert
-            Assert.AreEqual("Renamed Profile", profileToRename.Name, "Profile name should be updated in VM.");
-            Assert.AreEqual("Renamed Profile", profileToRename.Model.Name, "Profile name should be updated in Model.");
-        }
-
-        [TestMethod] public void RenameProfileCommand_WithExistingName_ShowsErrorAndDoesNotRename()
-        {
-             // Arrange
-             var mockPrompter = new MockInputPromptService();
-             var viewModel = CreateMockViewModel(prompt: mockPrompter);
-             viewModel.CreateNewProfileCommand.Execute(null); // Now have "Default" and "New Profile 1"
-             var profile1 = viewModel.AvailableProfiles[0];
-             var profile2 = viewModel.AvailableProfiles[1];
-             string profile2OriginalName = profile2.Name;
-             viewModel.ActiveFilterProfile = profile2; // Select the second one
-             mockPrompter.InputToReturn = profile1.Name; // Try to rename to the first one's name
-
-             // Act
-             // TODO: Need mocking/framework to verify MessageBox call
-             // viewModel.RenameProfileCommand.Execute(null);
-
-             // Assert
-             Assert.AreEqual(profile2OriginalName, profile2.Name, "Profile name should not change if name exists.");
-             Assert.Inconclusive("Need framework/mocking to verify MessageBox call.");
-        }
-
-        [TestMethod] public void DeleteProfileCommand_RemovesProfileAndSelectsAnother()
-        {
-            // Arrange
-            var viewModel = CreateMockViewModel();
-            viewModel.CreateNewProfileCommand.Execute(null); // Profile 1
-            viewModel.CreateNewProfileCommand.Execute(null); // Profile 2 (now active)
-            Assert.AreEqual(3, viewModel.AvailableProfiles.Count); // Default + 2 new
-            var profileToDelete = viewModel.ActiveFilterProfile;
-            Assert.IsNotNull(profileToDelete);
-
-            // Act
-            viewModel.DeleteProfileCommand.Execute(null);
-
-            // Assert
-            Assert.AreEqual(2, viewModel.AvailableProfiles.Count, "Profile count should decrease by one.");
-            Assert.IsFalse(viewModel.AvailableProfiles.Contains(profileToDelete), "Deleted profile should be removed.");
-            Assert.IsNotNull(viewModel.ActiveFilterProfile, "Another profile should be selected.");
-            Assert.AreNotEqual(profileToDelete, viewModel.ActiveFilterProfile, "A different profile should be active.");
-        }
-
-        // TODO: This should allow deletion of last one and replace with a Default.
-        [TestMethod] public void DeleteProfileCommand_CannotDeleteLastProfile()
-        {
-            // Arrange
-            var viewModel = CreateMockViewModel();
-            Assert.AreEqual(1, viewModel.AvailableProfiles.Count); // Should start with Default
-            viewModel.ActiveFilterProfile = viewModel.AvailableProfiles[0];
-
-            // Act
-            // TODO: Need mocking/framework to verify MessageBox call
-            // viewModel.DeleteProfileCommand.Execute(null);
-
-            // Assert
-            Assert.AreEqual(1, viewModel.AvailableProfiles.Count, "Profile count should remain 1.");
-            Assert.Inconclusive("Need framework/mocking to verify MessageBox call.");
+             Assert.AreNotEqual(initialOffset, _viewModel.CurrentMatchOffset, "CurrentMatchOffset should change.");
+             Assert.AreEqual(0, _viewModel.CurrentMatchOffset, "Should select the first match.");
+             StringAssert.Contains(_viewModel.SearchStatusText, "Match 1 of 2");
         }
 
 
-        // --- Existing Tests (Review and keep if still valid) ---
-
-        [TestMethod] public void PreviousSearch_WithNonEmptySearchText_ShouldNavigate() // Simplified - just checks execution
-        {
-            // Arrange
-            var viewModel = CreateMockViewModel();
-            viewModel.SearchText = "test";
-             // Add some dummy matches if needed for CanExecute or internal logic
-            // viewModel.SearchMatches.Add(new SearchResult(0, 4));
-
-            // Act
-            viewModel.PreviousSearchCommand.Execute(null);
-
-            // Assert: No exception thrown, command executed. Verifying actual scroll/select needs UI integration.
-             Assert.IsTrue(true, "Command executed without error."); // Basic check
-        }
-
-        [TestMethod] public void NextSearch_WithNonEmptySearchText_ShouldNavigate() // Simplified
-        {
-            // Arrange
-            var viewModel = CreateMockViewModel();
-            viewModel.SearchText = "test";
-            // viewModel.SearchMatches.Add(new SearchResult(0, 4));
-
-            // Act
-            viewModel.NextSearchCommand.Execute(null);
-
-            // Assert
-            Assert.IsTrue(true, "Command executed without error.");
-        }
-
-        [TestMethod] public void OpenLogFile_ShouldSetCurrentLogFilePath()
-        {
-            // Arrange
-            var fakeService = new MockFileDialogService { FileToReturn = "C:\\fake\\log.txt" };
-            var viewModel = CreateMockViewModel(fileDialog: fakeService);
-            // Mocking LogTailerManager/LogFilterProcessor interactions would be needed for full test.
-
-            // Act
-            viewModel.OpenLogFileCommand.Execute(null);
-
-            // Assert
-            Assert.AreEqual("C:\\fake\\log.txt", viewModel.CurrentLogFilePath, "CurrentLogFilePath should be updated.");
-            // Further asserts would require mocking dependencies.
-        }
+        #endregion
     }
 }
