@@ -38,6 +38,7 @@ namespace Logonaut.UI
         }
 
         private readonly MainViewModel _viewModel;
+        private readonly TextEditor _logOutputEditor; // Just for convenience. Referencing LogOutputEditor triggers an Intellisense error.
         private OverviewRulerMargin? _overviewRuler;
         private ChunkSeparatorRenderer? _chunkSeparator;
         private bool _disposed;
@@ -55,6 +56,7 @@ namespace Logonaut.UI
         {
             // InitializeComponent() is the method generated from the XAML. When it runs, it parses the XAML, creates the UI elements, and wires them up.
             InitializeComponent();
+            _logOutputEditor = LogOutputEditor; // This will trigger an Intellisense error
             DataContext = viewModel;
             _viewModel = viewModel;
 
@@ -75,15 +77,14 @@ namespace Logonaut.UI
             // Add original line number and separator margins (code-behind approach)
             SetupCustomMargins();
 
-            var logOutputEditor = LogOutputEditor; // Work-around to minimize intellisense issues in XAML
             // Hook up event handlers AFTER the template is applied
-            logOutputEditor.Loaded += LogOutputEditor_Loaded;
+            _logOutputEditor.Loaded += LogOutputEditor_Loaded;
             
             // Enable clipboard paste functionality. Only preview events seem to work here.
-            logOutputEditor.TextArea.PreviewKeyDown += LogOutputEditor_PreviewKeyDown;
+            _logOutputEditor.TextArea.PreviewKeyDown += LogOutputEditor_PreviewKeyDown;
 
             // Handle mouse clicks for search reference point. Only preview events seem to work here.
-            logOutputEditor.TextArea.PreviewMouseDown += LogOutputEditor_PreviewMouseDown;
+            _logOutputEditor.TextArea.PreviewMouseDown += LogOutputEditor_PreviewMouseDown;
 
             Closing += MainWindow_Closing;
         }
@@ -118,7 +119,7 @@ namespace Logonaut.UI
                 _chunkSeparator.UpdateChunks(_viewModel.FilteredLogLines, _viewModel.ContextLines);
             }
 
-            if (_selectedIndexTransformer != null && LogOutputEditor?.TextArea?.TextView != null)
+            if (_selectedIndexTransformer != null && _logOutputEditor.TextArea?.TextView != null)
             {
                 if (e.PropertyName == nameof(MainViewModel.HighlightedFilteredLineIndex))
                 {
@@ -127,33 +128,31 @@ namespace Logonaut.UI
                                           : -1; // Disable if index is -1
 
                     // Get the brush from the TextView's Tag property (where we stored the resource)
-                    var highlightBrush = LogOutputEditor.TextArea.TextView.Tag as Brush;
+                    var highlightBrush = _logOutputEditor.TextArea.TextView.Tag as Brush;
 
                     // Update the transformer state (this method handles redraw)
-                    _selectedIndexTransformer.UpdateState(newLineNumber, highlightBrush, LogOutputEditor.TextArea.TextView);
+                    _selectedIndexTransformer.UpdateState(newLineNumber, highlightBrush, _logOutputEditor.TextArea.TextView);
                 }
                 // Optional: Handle theme changes affecting the brush
                 // else if (e.PropertyName == "SomeThemeProperty" || brush resource changed)
                 // {
-                //    var highlightBrush = LogOutputEditor.TextArea.TextView.Tag as Brush;
-                //    _selectedIndexTransformer.UpdateState(_selectedIndexTransformer.HighlightedLineNumber, highlightBrush, LogOutputEditor.TextArea.TextView);
+                //    var highlightBrush = _logOutputEditor.TextArea.TextView.Tag as Brush;
+                //    _selectedIndexTransformer.UpdateState(_selectedIndexTransformer.HighlightedLineNumber, highlightBrush, _logOutputEditor.TextArea.TextView);
                 // }
             }
         }
 
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            var logOutputEditor = LogOutputEditor; // Work-around to minimize intellisense issues in XAML
-
             // --- Overview Ruler Setup ---
-            _overviewRuler = FindVisualChild<Logonaut.UI.Helpers.OverviewRulerMargin>(logOutputEditor);
+            _overviewRuler = FindVisualChild<Logonaut.UI.Helpers.OverviewRulerMargin>(_logOutputEditor);
             if (_overviewRuler is null)
                 throw new InvalidOperationException("OverviewRulerMargin not found in TextEditor template.");
             _overviewRuler.RequestScrollOffset += OverviewRuler_RequestScrollOffset;
             // No need for the extra Unloaded lambda here, LogOutputEditor_Unloaded handles it.
 
             // Get TextView *once*
-            TextView textView = logOutputEditor.TextArea.TextView;
+            TextView textView = _logOutputEditor.TextArea.TextView;
             if (textView == null) // Add null check for safety
                  throw new InvalidOperationException("TextView not found within LogOutputEditor.");
 
@@ -184,7 +183,7 @@ namespace Logonaut.UI
             _chunkSeparator.UpdateChunks(_viewModel.FilteredLogLines, _viewModel.ContextLines);
 
             // --- Final Cleanup Subscription ---
-            logOutputEditor.Unloaded += LogOutputEditor_Unloaded; // Subscribe the main unload handler ONCE
+            _logOutputEditor.Unloaded += LogOutputEditor_Unloaded; // Subscribe the main unload handler ONCE
         }
 
         private void LogOutputEditor_Unloaded(object? sender, RoutedEventArgs? e)
@@ -194,7 +193,7 @@ namespace Logonaut.UI
                 _overviewRuler.RequestScrollOffset -= OverviewRuler_RequestScrollOffset;
             _overviewRuler = null; // Release reference
 
-            TextView textView = LogOutputEditor.TextArea.TextView;
+            TextView textView = _logOutputEditor.TextArea.TextView;
             if (textView is null)
                 throw new InvalidOperationException("TextView not found within LogOutputEditor.");
 
@@ -252,10 +251,9 @@ namespace Logonaut.UI
 
         private void LogOutputEditor_Loaded(object sender, RoutedEventArgs e)
         {
-            var logOutputEditor = LogOutputEditor; // Work-around to minimize intellisense issues in XAML
              // The template should be applied now, try to find the ruler
              // Use VisualTreeHelper to find the element within the template
-             _overviewRuler = FindVisualChild<Logonaut.UI.Helpers.OverviewRulerMargin>(logOutputEditor);
+             _overviewRuler = FindVisualChild<Logonaut.UI.Helpers.OverviewRulerMargin>(_logOutputEditor);
 
              if (_overviewRuler != null)
              {
@@ -269,7 +267,7 @@ namespace Logonaut.UI
              }
 
              // Unsubscribe when the editor unloads to prevent memory leaks
-             logOutputEditor.Unloaded += (s, ev) => {
+             _logOutputEditor.Unloaded += (s, ev) => {
                  if (_overviewRuler != null)
                  {
                      _overviewRuler.RequestScrollOffset -= OverviewRuler_RequestScrollOffset;
@@ -280,10 +278,9 @@ namespace Logonaut.UI
 
         private void LogOutputEditor_PreviewMouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
-            var logOutputEditor = LogOutputEditor; // Work-around to minimize intellisense issues in XAML
             if (e.ChangedButton == System.Windows.Input.MouseButton.Left && DataContext is ViewModels.MainViewModel viewModel)
             {
-                var textView = logOutputEditor.TextArea.TextView;
+                var textView = _logOutputEditor.TextArea.TextView;
                 if (!textView.IsLoaded || !textView.VisualLinesValid)
                     throw new InvalidOperationException("TextView is not loaded or visual lines are not valid.");
 
@@ -314,7 +311,7 @@ namespace Logonaut.UI
 
                         // Update Search based on character offset
                         // Use the Location from positionInfo as it's already calculated
-                        var characterOffset = logOutputEditor.Document.GetOffset(positionInfo.Value.Location);
+                        var characterOffset = _logOutputEditor.Document.GetOffset(positionInfo.Value.Location);
                         viewModel.UpdateSearchIndexFromCharacterOffset(characterOffset);
                     }
                 }
@@ -325,7 +322,7 @@ namespace Logonaut.UI
         // Handler for the ruler's request to scroll
         private void OverviewRuler_RequestScrollOffset(object? sender, double requestedOffset)
         {
-            LogOutputEditor.ScrollToVerticalOffset(requestedOffset);
+            _logOutputEditor.ScrollToVerticalOffset(requestedOffset);
         }
 
 
@@ -356,9 +353,8 @@ namespace Logonaut.UI
 
         private void SetupCustomMargins()
         {
-            var logOutputEditor = LogOutputEditor; // Work-around to minimize intellisense issues in XAML
             var numberMargin = new Logonaut.UI.Helpers.OriginalLineNumberMargin();
-            logOutputEditor.TextArea.LeftMargins.Add(numberMargin);
+            _logOutputEditor.TextArea.LeftMargins.Add(numberMargin);
 
             var filteredLinesBinding = new System.Windows.Data.Binding("FilteredLogLines")
             {
@@ -377,7 +373,7 @@ namespace Logonaut.UI
             // --- Separator Margin ---
             var lineSeparatorMargin = new Logonaut.UI.Helpers.VerticalLineMargin();
             lineSeparatorMargin.SetBinding(UIElement.VisibilityProperty, visibilityBinding);
-            logOutputEditor.TextArea.LeftMargins.Add(lineSeparatorMargin);
+            _logOutputEditor.TextArea.LeftMargins.Add(lineSeparatorMargin);
         }
 
 
