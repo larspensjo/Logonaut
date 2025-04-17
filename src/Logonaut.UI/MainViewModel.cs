@@ -702,16 +702,6 @@ namespace Logonaut.UI.ViewModels
         // TODO: Whenever the filter settings are changed, we should ensure the line currently selected in the editor is still visible. Preferably at the same window position.
         private void TriggerFilterUpdate()
         {
-            // Simple check to avoid queuing multiple simultaneous updates. More robust
-            // handling might involve cancellation or ensuring only the latest runs.
-            // TODO: Maybe some kind of dirty flag can be used? Is it needed? That is, are there any problems to fail trigger an update?
-            if (IsBusyFiltering)
-            {
-                Debug.WriteLine("TriggerFilterUpdate skipped: Already busy.");
-                return;
-            }
-            IsBusyFiltering = true;
-
             // Post the work to the UI thread's dispatcher queue. This allows the
             // IsBusyFiltering = true change to render before potentially blocking work.
             _uiContext.Post(_ =>
@@ -736,6 +726,7 @@ namespace Logonaut.UI.ViewModels
 
             if (wasReplace)
             {
+                IsBusyFiltering = true; // Indicate UI update is starting
                 originalLineToRestore = HighlightedOriginalLineNumber; // Store before clearing
                 ReplaceFilteredLines(update.Lines); // Updates UI State (FilteredLogLines)
                 // Search markers are cleared and updated after LogText changes
@@ -743,6 +734,7 @@ namespace Logonaut.UI.ViewModels
             else // Append
             {
                 AddFilteredLines(update.Lines); // Updates UI State (FilteredLogLines)
+                // Don't change IsBusyFiltering for Appends
             }
 
             // Schedule the LogText update AFTER updating FilteredLogLines
@@ -768,6 +760,7 @@ namespace Logonaut.UI.ViewModels
                     _uiContext.Post(_ => { HighlightedFilteredLineIndex = -1; }, null);
                 }
 
+                // Ensure this runs *after* the UI updates from ReplaceFilteredLines have likely settled.
                 _uiContext.Post(_ => { IsBusyFiltering = false; }, null);
             }
         }
