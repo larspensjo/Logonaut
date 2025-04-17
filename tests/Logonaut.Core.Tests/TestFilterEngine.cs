@@ -1,8 +1,4 @@
-using System.Collections.Generic;
-using System.Linq;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Logonaut.Common;
-using Logonaut.Core;
 using Logonaut.Filters;
 
 namespace Logonaut.Core.Tests
@@ -10,6 +6,11 @@ namespace Logonaut.Core.Tests
     [TestClass]
     public class FilterEngineTests
     {
+        private static List<string> GetTextLines(IReadOnlyList<FilteredLogLine> lines)
+        {
+            return lines.Select(line => line.Text).ToList();
+        }
+
         [TestMethod]
         public void ApplyFilters_WithTrueFilterAndZeroContext_ReturnsAllLines()
         {
@@ -24,7 +25,7 @@ namespace Logonaut.Core.Tests
 
             // Assert: All lines should be returned exactly once.
             Assert.AreEqual(3, result.Count);
-            CollectionAssert.AreEqual(new List<string> { "Line 1", "Line 2", "Line 3" }, result.ToList());
+            CollectionAssert.AreEqual(new List<string> { "Line 1", "Line 2", "Line 3" }, GetTextLines(result));
         }
 
         [TestMethod]
@@ -41,7 +42,7 @@ namespace Logonaut.Core.Tests
 
             // Assert: Although context is applied, duplicate lines should be avoided.
             Assert.AreEqual(3, result.Count);
-            CollectionAssert.AreEqual(new List<string> { "Line 1", "Line 2", "Line 3" }, result.ToList());
+            CollectionAssert.AreEqual(new List<string> { "Line 1", "Line 2", "Line 3" }, GetTextLines(result));
         }
 
         [TestMethod]
@@ -72,7 +73,7 @@ namespace Logonaut.Core.Tests
                 "Info: Continuing operation",
                 "Error: Critical failure"
             };
-            CollectionAssert.AreEqual(expected, result.ToList());
+            CollectionAssert.AreEqual(expected, GetTextLines(result));
         }
 
         [TestMethod]
@@ -96,8 +97,7 @@ namespace Logonaut.Core.Tests
 
             // Assert: Only "Error: Critical failure" should match.
             Assert.AreEqual(1, result.Count);
-            // Assert.AreEqual("Error: Critical failure", result[0]);
-            // TODO: Fix
+            CollectionAssert.AreEqual(new List<string> { "Error: Critical failure" }, GetTextLines(result));
         }
     }
 }
