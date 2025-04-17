@@ -517,8 +517,11 @@ namespace Logonaut.UI.ViewModels
             {
                 if (SelectedFilterNode.IsNotEditing)
                     SelectedFilterNode.BeginEditCommand.Execute(null);
-                else
+                else {
                     SelectedFilterNode.EndEditCommand.Execute(null); // EndEdit uses callback, which triggers save
+                    // Save settings after editing is complete
+                    SaveCurrentSettings();
+                }
             }
         }
         private bool CanToggleEditNode() => SelectedFilterNode?.IsEditable ?? false;
@@ -658,6 +661,7 @@ namespace Logonaut.UI.ViewModels
         {
             DecrementContextLinesCommand.NotifyCanExecuteChanged();
             TriggerFilterUpdate(); // Trigger re-filter when context changes
+            SaveCurrentSettings();
         }
 
         #endregion // --- Command Handling ---
@@ -868,7 +872,11 @@ namespace Logonaut.UI.ViewModels
              OnPropertyChanged(nameof(SearchStatusText)); // Update match count display
         }
 
-        partial void OnIsCaseSensitiveSearchChanged(bool value) => UpdateSearchMatches(); // Trigger search update
+        partial void OnIsCaseSensitiveSearchChanged(bool value)
+        {
+            UpdateSearchMatches(); // This already happened due to [NotifyPropertyChangedFor] equivalent
+            SaveCurrentSettings(); // <<< FIX: Save settings >>>
+        }
 
         public void LoadLogFromText(string text)
         {
