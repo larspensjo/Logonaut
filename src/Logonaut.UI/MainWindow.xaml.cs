@@ -41,7 +41,7 @@ namespace Logonaut.UI
         private OverviewRulerMargin? _overviewRuler;
         private ChunkSeparatorRenderer? _chunkSeparator;
         private bool _disposed;
-        private PersistentLineHighlightRenderer? _highlightRenderer;
+        private SelectedIndexHighlightTransformer? _selectedIndexTransformer;
 
         private static Logonaut.Core.FileSystemSettingsService _settingsService = new();
         private static Logonaut.LogTailing.LogTailerService _logTailerService = new();
@@ -117,6 +117,28 @@ namespace Logonaut.UI
             {
                 _chunkSeparator.UpdateChunks(_viewModel.FilteredLogLines, _viewModel.ContextLines);
             }
+
+            if (_selectedIndexTransformer != null && LogOutputEditor?.TextArea?.TextView != null)
+            {
+                if (e.PropertyName == nameof(MainViewModel.HighlightedFilteredLineIndex))
+                {
+                    int newLineNumber = _viewModel.HighlightedFilteredLineIndex >= 0
+                                          ? _viewModel.HighlightedFilteredLineIndex + 1 // Convert 0-based index to 1-based line number
+                                          : -1; // Disable if index is -1
+
+                    // Get the brush from the TextView's Tag property (where we stored the resource)
+                    var highlightBrush = LogOutputEditor.TextArea.TextView.Tag as Brush;
+
+                    // Update the transformer state (this method handles redraw)
+                    _selectedIndexTransformer.UpdateState(newLineNumber, highlightBrush, LogOutputEditor.TextArea.TextView);
+                }
+                // Optional: Handle theme changes affecting the brush
+                // else if (e.PropertyName == "SomeThemeProperty" || brush resource changed)
+                // {
+                //    var highlightBrush = LogOutputEditor.TextArea.TextView.Tag as Brush;
+                //    _selectedIndexTransformer.UpdateState(_selectedIndexTransformer.HighlightedLineNumber, highlightBrush, LogOutputEditor.TextArea.TextView);
+                // }
+            }
         }
 
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
@@ -135,35 +157,12 @@ namespace Logonaut.UI
             if (textView == null) // Add null check for safety
                  throw new InvalidOperationException("TextView not found within LogOutputEditor.");
 
-
-            // --- Highlight Renderer Setup ---
-            _highlightRenderer = new PersistentLineHighlightRenderer(textView);
-
-            // Highlight Index Binding
-            var highlightIndexBinding = new Binding("HighlightedFilteredLineIndex")
-            {
-                Source = _viewModel,
-                Mode = BindingMode.OneWay
-            };
-            BindingOperations.SetBinding(
-                _highlightRenderer,
-                PersistentLineHighlightRenderer.HighlightedLineIndexProperty,
-                highlightIndexBinding
-            );
-
-            // Highlight Brush Binding (using TextView.Tag as proxy)
-            textView.SetResourceReference(TextView.TagProperty, "PersistedHighlightBrush"); // Set resource on Tag
-            var highlightBrushBinding = new Binding("Tag") // Bind to Tag
-            {
-                Source = textView,
-                Mode = BindingMode.OneWay
-            };
-            BindingOperations.SetBinding(
-                _highlightRenderer,
-                PersistentLineHighlightRenderer.HighlightBrushProperty,
-                highlightBrushBinding
-            );
-            textView.BackgroundRenderers.Add(_highlightRenderer);
+            _selectedIndexTransformer = new SelectedIndexHighlightTransformer();
+            // Get the initial brush from the resource dictionary via the Tag proxy
+            textView.SetResourceReference(TextView.TagProperty, "PersistedHighlightBrush");
+            _selectedIndexTransformer.HighlightBrush = textView.Tag as Brush;
+            // Add transformer to the text view
+            textView.LineTransformers.Add(_selectedIndexTransformer);
 
             // --- Chunk Separator Setup ---
             _chunkSeparator = new ChunkSeparatorRenderer(textView);
@@ -193,52 +192,38 @@ namespace Logonaut.UI
             // Clean up Overview Ruler binding
             if (_overviewRuler != null)
                 _overviewRuler.RequestScrollOffset -= OverviewRuler_RequestScrollOffset;
+            _overviewRuler = null; // Release reference
+
+            TextView textView = LogOutputEditor.TextArea.TextView;
+            if (textView is null)
+                throw new InvalidOperationException("TextView not found within LogOutputEditor.");
+
+            if (_selectedIndexTransformer != null && textView != null)
+            {
+                if (textView.LineTransformers.Contains(_selectedIndexTransformer))
+                {
+                    textView.LineTransformers.Remove(_selectedIndexTransformer);
+                }
+                // Clear the proxy property used for the brush
+                textView.ClearValue(TextView.TagProperty);
+            }
+            _selectedIndexTransformer = null;
 
             // Clean up Chunk Separator
-            if (_chunkSeparator != null)
+            if (_chunkSeparator != null && textView is not null)
             {
-                 TextView textView = LogOutputEditor.TextArea.TextView;
-                 // Clear bindings
-                 BindingOperations.ClearBinding(_chunkSeparator, ChunkSeparatorRenderer.SeparatorBrushProperty);
-                 textView.ClearValue(TextView.TagProperty); // Clear the resource reference on Tag
-
-                 // Remove renderer and dispose
-                 if(textView.BackgroundRenderers.Contains(_chunkSeparator))
-                 {
-                    textView.BackgroundRenderers.Remove(_chunkSeparator);
-                 }
-                 _chunkSeparator.Dispose();
-            }
-            _overviewRuler = null; // Release reference
-            _chunkSeparator = null; // Release reference
-
-            if (_highlightRenderer != null)
-            {
-                 TextView textView = LogOutputEditor.TextArea.TextView;
-                 BindingOperations.ClearBinding(_highlightRenderer, PersistentLineHighlightRenderer.HighlightedLineIndexProperty);
-                 BindingOperations.ClearBinding(_highlightRenderer, PersistentLineHighlightRenderer.HighlightBrushProperty);
-                 textView.ClearValue(TextView.TagProperty); // Clear the Tag property used for highlight brush
-
-                 if (textView.BackgroundRenderers.Contains(_highlightRenderer))
-                 {
-                    textView.BackgroundRenderers.Remove(_highlightRenderer);
-                 }
-            }
-            _highlightRenderer = null;
-
-            if (_chunkSeparator != null)
-            {
-                TextView textView = LogOutputEditor.TextArea.TextView;
+                // Clear bindings
                 BindingOperations.ClearBinding(_chunkSeparator, ChunkSeparatorRenderer.SeparatorBrushProperty);
-                textView.ClearValue(TextView.ToolTipProperty); // Clear the ToolTip property used for chunk brush
+                textView.ClearValue(TextView.TagProperty); // Clear the resource reference on Tag
 
-                if (textView.BackgroundRenderers.Contains(_chunkSeparator))
+                // Remove renderer and dispose
+                if(textView.BackgroundRenderers.Contains(_chunkSeparator))
                 {
-                    textView.BackgroundRenderers.Remove(_chunkSeparator);
+                textView.BackgroundRenderers.Remove(_chunkSeparator);
                 }
                 _chunkSeparator.Dispose();
             }
-            _chunkSeparator = null;
+            _chunkSeparator = null; // Release reference
         }
 
         private void LogOutputEditor_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
@@ -314,6 +299,7 @@ namespace Logonaut.UI
                 // 3. Use the document-relative point to get the position
                 TextViewPosition? positionInfo = textView.GetPosition(pointInDocument); // Pass the corrected point
 
+                int clickedFilteredLineIndex = -1; // Default to -1 if no line is clicked
                 if (positionInfo.HasValue)
                 {
                     // 4. Get the VisualLine object associated with the position
@@ -324,9 +310,7 @@ namespace Logonaut.UI
                     if (clickedVisualLine != null)
                     {
                         int clickedDocumentLineNumber = clickedVisualLine.FirstDocumentLine.LineNumber;
-                        int clickedFilteredLineIndex = clickedDocumentLineNumber - 1;
-
-                        viewModel.HighlightedFilteredLineIndex = clickedFilteredLineIndex;
+                        clickedFilteredLineIndex = clickedDocumentLineNumber - 1;
 
                         // Update Search based on character offset
                         // Use the Location from positionInfo as it's already calculated
@@ -334,6 +318,7 @@ namespace Logonaut.UI
                         viewModel.UpdateSearchIndexFromCharacterOffset(characterOffset);
                     }
                 }
+                viewModel.HighlightedFilteredLineIndex = clickedFilteredLineIndex;
             }
         }
 

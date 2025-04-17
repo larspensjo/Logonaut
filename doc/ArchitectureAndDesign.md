@@ -6,7 +6,12 @@ This document describes the specific architectural choices and high-level design
 
 Logonaut is organized into several independent modules:
 
-*   **Logonaut.UI:** Contains the WPF user interface (Views, ViewModels using CommunityToolkit.Mvvm), custom controls, attached properties for AvalonEdit integration, and UI services (like file dialogs). Manages the presentation layer and user interaction logic.
+*   **Logonaut.UI:** Contains the WPF user interface (Views, ViewModels using CommunityToolkit.Mvvm), custom controls, attached properties for AvalonEdit integration, and UI services (like file dialogs). Manages the presentation layer and user interaction logic. Key helpers include:
+    *   `AvalonEditHelper`: Attached properties for binding text, selection, and dynamic highlighting rules.
+    *   `OriginalLineNumberMargin`: Custom margin displaying original log line numbers.
+    *   `OverviewRulerMargin`: Custom scrollbar replacement showing document overview and markers.
+    *   `ChunkSeparatorRenderer`: Draws visual lines between non-contiguous log chunks.
+    *   `SelectedIndexHighlightTransformer`: `DocumentColorizingTransformer` for highlighting a specific selected line. // <<<< UPDATED/ADDED
 *   **Logonaut.Core:** Provides core business logic, including the `FilterEngine` for applying filter rules and the reactive `LogFilterProcessor` for orchestrating log processing and filtering. Also includes settings management.
 *   **Logonaut.Filters:** Implements the filtering system, defining various filter types (`SubstringFilter`, `RegexFilter`, `AndFilter`, `OrFilter`, `NorFilter`, `TrueFilter`) and serialization logic for filter trees.
 *   **Logonaut.LogTailing:** Handles asynchronous log file reading and tailing using `LogTailer` and `LogTailerManager`, exposing new log lines as an `IObservable<string>` via Reactive Extensions (Rx.NET).
@@ -25,7 +30,8 @@ Logonaut is organized into several independent modules:
 
 ### Highlighting System
 
-*   **Programmatic Control:** Highlighting rules (timestamps, levels, filter matches, search terms) are managed programmatically via a custom `IHighlightingDefinition` (`CustomHighlightingDefinition`). This allows dynamic updates based on user configuration and application state, rather than relying solely on static XSHD files.
+*   **Programmatic Control:** Highlighting rules (timestamps, levels, filter matches, search terms) are managed programmatically via a custom `IHighlightingDefinition` (`CustomHighlightingDefinition`).
+*   **Selected Line Highlighting:** The background highlighting for the user-selected line is implemented using a custom `DocumentColorizingTransformer` (`SelectedIndexHighlightTransformer`), integrating directly with AvalonEdit's rendering pipeline.
 *   **Dynamic Updates:** Highlighting updates in real-time as filter configurations change or search terms are entered.
 *   **Extensibility:** The system is designed to allow adding new types of highlighting rules easily.
 
