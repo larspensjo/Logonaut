@@ -82,6 +82,16 @@ namespace Logonaut.UI.ViewModels
 
         #endregion // --- Fields ---
 
+        #region // --- Stats Properties ---
+
+        [ObservableProperty]
+        private long _totalLogLines; // Bound to TotalLinesProcessed
+
+        // No need for ObservableProperty here, just needs to raise notification
+        public int FilteredLogLinesCount => FilteredLogLines.Count;
+
+        #endregion // --- Stats Properties ---
+
         #region // --- Constructor ---
 
         public MainViewModel(
@@ -112,9 +122,20 @@ namespace Logonaut.UI.ViewModels
                     ex => HandleProcessorError("Log Processing Error", ex)
                 );
 
+            // Subscribe to TotalLinesProcessed >>>
+            var totalLinesSubscription = _logFilterProcessor.TotalLinesProcessed
+                // No need to ObserveOn UI context if processor ensures UI thread updates,
+                // but safer to explicitly marshal here just in case.
+                // .ObserveOn(_uiContext) // Optional: Use if processor might emit on background
+                .Subscribe(
+                    count => _uiContext.Post(_ => TotalLogLines = count, null), // Update property on UI thread
+                    ex => HandleProcessorError("Total Lines Error", ex)
+                );
+
             // --- Lifecycle Management ---
             _disposables.Add(_logFilterProcessor);
             _disposables.Add(filterSubscription);
+            _disposables.Add(totalLinesSubscription);
 
             // --- Initial State Setup ---
             Theme = new ThemeViewModel(); // Part of UI State
@@ -547,6 +568,7 @@ namespace Logonaut.UI.ViewModels
 
             _logFilterProcessor.Reset(); // Reset processor state (clears doc, etc.)
             FilteredLogLines.Clear();    // Clear UI collection immediately
+            OnPropertyChanged(nameof(FilteredLogLinesCount)); // Notify count changed
             ScheduleLogTextUpdate();     // Update AvalonEdit to empty
             CurrentLogFilePath = selectedFile; // Update state
 
@@ -562,6 +584,12 @@ namespace Logonaut.UI.ViewModels
                 MessageBox.Show($"Error opening or monitoring log file '{selectedFile}':\n{ex.Message}", "File Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 CurrentLogFilePath = null; // Reset state
                 _logFilterProcessor.Reset(); // Ensure processor is reset on error too
+                 // Ensure counts are visually reset on error too
+                _uiContext.Post(_ => {
+                    FilteredLogLines.Clear();
+                    OnPropertyChanged(nameof(FilteredLogLinesCount));
+                    TotalLogLines = 0; // Directly reset UI property
+                }, null);
             }
         }
 
@@ -792,6 +820,7 @@ namespace Logonaut.UI.ViewModels
                 FilteredLogLines.Add(line);
             }
             // ScheduleLogTextUpdate(); // Schedule is called by ApplyFilteredUpdate now
+            OnPropertyChanged(nameof(FilteredLogLinesCount));
         }
 
         private void ReplaceFilteredLines(IReadOnlyList<FilteredLogLine> newLines)
@@ -806,6 +835,7 @@ namespace Logonaut.UI.ViewModels
             {
                 FilteredLogLines.Add(line);
             }
+            OnPropertyChanged(nameof(FilteredLogLinesCount));
             // ScheduleLogTextUpdate(); // Schedule is called by ApplyFilteredUpdate now
         }
 
@@ -898,6 +928,7 @@ namespace Logonaut.UI.ViewModels
             _logFilterProcessor.Reset(); // Reset processor
             LogDoc.Clear();              // Clear internal document storage
             FilteredLogLines.Clear();    // Clear UI collection
+            OnPropertyChanged(nameof(FilteredLogLinesCount)); // Notify count changed
             LogText = string.Empty;      // Clear editor text via binding
             _searchMatches.Clear();      // Clear search state
             SearchMarkers.Clear();

@@ -19,6 +19,10 @@ This document outlines the functional requirements for the Logonaut application 
 *   **Readability Customization:** The user should be able to adjust the font size for the log display. Color schemes should be adjustable via selectable themes (e.g., Light/Dark).
 *   **Theming:** The application must provide at least a Light and a Dark theme option.
 *   **Window Management:** The application window must be resizable.
+*   **Status Bar:** The application must display a status bar showing:
+    *   The total number of lines read from the source log.
+    *   The number of lines currently visible after filtering.
+    *   Both values must update dynamically as the log is processed and filters change.
 
 ## 3. Filtering System
 

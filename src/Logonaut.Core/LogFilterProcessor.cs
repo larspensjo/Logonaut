@@ -24,7 +24,7 @@ namespace Logonaut.Core
         private readonly Subject<(IFilter filter, int contextLines)> _filterSettingsSubject = new();
         private readonly CompositeDisposable _disposables = new();
         private readonly IScheduler _backgroundScheduler;
-
+        private readonly BehaviorSubject<long> _totalLinesSubject = new BehaviorSubject<long>(0);
         private long _currentLineIndex = 0; // Tracks original line numbers internally
         private IFilter _currentFilter = new TrueFilter(); // Cache the latest filter
         private int _currentContextLines = 0; // Cache the latest context lines
@@ -37,6 +37,8 @@ namespace Logonaut.Core
         public IObservable<FilteredUpdate> FilteredUpdates => _filteredUpdatesSubject.AsObservable();
 
         private IDisposable? _logSubscription; // Keep track of the subscription to dispose it
+
+        public IObservable<long> TotalLinesProcessed => _totalLinesSubject.AsObservable();
 
         public LogFilterProcessor(
             ILogTailerService logTailerService,
@@ -53,6 +55,7 @@ namespace Logonaut.Core
 
             _disposables.Add(_filteredUpdatesSubject);
             _disposables.Add(_filterSettingsSubject);
+            _disposables.Add(_totalLinesSubject);
             _disposables.Add(Disposable.Create(() => _logSubscription?.Dispose()));
         }
 
@@ -63,9 +66,10 @@ namespace Logonaut.Core
             _logSubscription = _logTailerService.LogLines
                 .Select(line =>
                 {
-                    // Assign original index and add to document *before* buffering/filtering
-                    var lineWithIndex = new { LineText = line, OriginalIndex = Interlocked.Increment(ref _currentLineIndex) };
-                    _logDocument.AppendLine(line); // Add line to the central document store
+                    var newIndex = Interlocked.Increment(ref _currentLineIndex); // Get the NEW index
+                    var lineWithIndex = new { LineText = line, OriginalIndex = newIndex };
+                    _logDocument.AppendLine(line);
+                    _totalLinesSubject.OnNext(newIndex);
                     return lineWithIndex;
                 })
                 .Buffer(_lineBufferTimeSpan, LineBufferSize, _backgroundScheduler)
@@ -126,6 +130,7 @@ namespace Logonaut.Core
             _logDocument.Clear();
             _currentFilter = new TrueFilter(); // Reset to default
             _currentContextLines = 0;
+            _totalLinesSubject.OnNext(0); // Reset line count
              // Push an empty Replace update immediately on the UI thread
             _uiContext.Post(_ => _filteredUpdatesSubject.OnNext(new FilteredUpdate(UpdateType.Replace, Array.Empty<FilteredLogLine>())), null);
              // Also trigger a (debounced) filter application with the reset state
@@ -152,7 +157,7 @@ namespace Logonaut.Core
             if (!_isDisposed) // Add isDisposed check
             {
                 _isDisposed = true; // Mark as disposed early
-
+                _totalLinesSubject?.OnCompleted();
                 // Explicitly complete the subject BEFORE disposing _disposables
                 _filteredUpdatesSubject?.OnCompleted();
 

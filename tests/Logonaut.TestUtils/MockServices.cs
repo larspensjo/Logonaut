@@ -104,24 +104,34 @@ namespace Logonaut.TestUtils
     public class MockLogFilterProcessor : ILogFilterProcessor
     {
         private readonly Subject<FilteredUpdate> _filteredUpdatesSubject = new Subject<FilteredUpdate>();
+        private readonly BehaviorSubject<long> _totalLinesSubject = new BehaviorSubject<long>(0); // <<< ADDED
         private bool _isDisposed = false;
 
+        // --- ILogFilterProcessor Implementation ---
         public IObservable<FilteredUpdate> FilteredUpdates => _filteredUpdatesSubject.AsObservable();
+        public IObservable<long> TotalLinesProcessed => _totalLinesSubject.AsObservable(); // <<< ADDED
+
+        // --- Mock Control Properties & Methods ---
         public int ResetCallCount { get; private set; } = 0;
         public int UpdateFilterSettingsCallCount { get; private set; } = 0;
         public (IFilter? Filter, int ContextLines)? LastFilterSettings { get; private set; }
+        public long CurrentSimulatedTotalLines => _totalLinesSubject.Value; // Helper to check current value
 
         public void Reset()
         {
             if (_isDisposed) throw new ObjectDisposedException(nameof(MockLogFilterProcessor));
             ResetCallCount++;
+            _totalLinesSubject.OnNext(0); // Reset total lines count
+            // Optionally simulate the empty Replace update if tests rely on it
+            // SimulateFilteredUpdate(new FilteredUpdate(UpdateType.Replace, Array.Empty<FilteredLogLine>()));
         }
 
         public void ResetCounters()
         {
             ResetCallCount = 0;
             UpdateFilterSettingsCallCount = 0;
-            LastFilterSettings = null; // Optional: Reset this too if tests need it
+            LastFilterSettings = null;
+            // Don't reset total lines subject here, Reset() handles that
         }
 
         public void UpdateFilterSettings(IFilter newFilter, int contextLines)
@@ -131,16 +141,49 @@ namespace Logonaut.TestUtils
             LastFilterSettings = (newFilter, contextLines);
         }
 
-        public void SimulateFilteredUpdate(FilteredUpdate update) { if (!_isDisposed) _filteredUpdatesSubject.OnNext(update); }
-        public void SimulateError(Exception ex) { if (!_isDisposed) _filteredUpdatesSubject.OnError(ex); }
-        public void SimulateCompletion() { if (!_isDisposed) _filteredUpdatesSubject.OnCompleted(); }
+        // --- Simulation Methods for Tests ---
+        public void SimulateFilteredUpdate(FilteredUpdate update)
+        {
+            if (!_isDisposed) _filteredUpdatesSubject.OnNext(update);
+        }
 
+        public void SimulateTotalLinesUpdate(long newTotal) // <<< ADDED
+        {
+            if (!_isDisposed) _totalLinesSubject.OnNext(newTotal);
+        }
+
+        public void SimulateError(Exception ex)
+        {
+            if (!_isDisposed)
+            {
+                // Simulate error on both streams for comprehensive testing
+                _filteredUpdatesSubject.OnError(ex);
+                _totalLinesSubject.OnError(ex);
+            }
+        }
+
+        public void SimulateCompletion()
+        {
+            if (!_isDisposed)
+            {
+                // Simulate completion on both streams
+                _filteredUpdatesSubject.OnCompleted();
+                _totalLinesSubject.OnCompleted();
+            }
+        }
+
+        // --- IDisposable Implementation ---
         public void Dispose()
         {
             if (_isDisposed) return;
             _isDisposed = true;
+
             _filteredUpdatesSubject.OnCompleted();
             _filteredUpdatesSubject.Dispose();
+
+            _totalLinesSubject.OnCompleted(); // <<< ADDED
+            _totalLinesSubject.Dispose();    // <<< ADDED
+
             GC.SuppressFinalize(this);
         }
     }

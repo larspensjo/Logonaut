@@ -15,6 +15,12 @@ namespace Logonaut.Core
         IObservable<FilteredUpdate> FilteredUpdates { get; }
 
         /// <summary>
+        /// Gets an observable sequence representing the total number of lines
+        /// processed from the source log.
+        /// </summary>
+        IObservable<long> TotalLinesProcessed { get; }
+
+        /// <summary>
         /// Signals the processor that the filter configuration has changed.
         /// The processor will apply the new filter (potentially debounced).
         /// </summary>
