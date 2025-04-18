@@ -61,8 +61,8 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <!-- Menu - Use default style which should inherit from theme -->
@@ -77,28 +77,8 @@
             <MenuItem Header="E_xit" Click="ExitMenuItem_Click"/>
         </Menu>
 
-        <!-- Stats Bar -->
-        <Border Grid.Row="1" Style="{DynamicResource CardPanelStyle}">
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock Margin="5,0,15,0" Foreground="{DynamicResource SecondaryTextBrush}">
-                    <Run Text="Total Lines:"/>
-                    <Run Text="{Binding TotalLogLines, Mode=OneWay}" FontWeight="Bold"/>
-                    <Run Text="/ Filtered:"/>
-                    <Run Text="{Binding FilteredLogLinesCount, Mode=OneWay}" FontWeight="Bold"/>
-                </TextBlock>
-
-                <!-- Remove or comment out the old static text blocks -->
-                <!--
-                <TextBlock Text="Log Stats: " Margin="0,0,10,0" Foreground="{DynamicResource SecondaryTextBrush}"/>
-                <TextBlock Text="Errors: 10" Margin="0,0,10,0" Foreground="{DynamicResource ErrorBrush}" FontWeight="Bold"/>
-                <TextBlock Text="Warnings: 5" Margin="0,0,10,0" Foreground="{DynamicResource WarningBrush}"/>
-                <TextBlock Text="Info: 20" Margin="0,0,10,0" Foreground="{DynamicResource InfoBrush}"/>
-                -->
-            </StackPanel>
-        </Border>
-
         <!-- Main content -->
-        <Grid Grid.Row="2">
+        <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
                 <!-- Column 0: Left Panel (Resizable) -->
                 <ColumnDefinition Width="1*" MinWidth="200"/> <!-- Use * for resizing, add MinWidth -->
@@ -267,5 +247,17 @@
                  </Border>
             </Grid>
         </Grid>
+
+        <!-- Stats Bar -->
+        <Border Grid.Row="2" Style="{DynamicResource CardPanelStyle}">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Margin="5,0,15,0" Foreground="{DynamicResource SecondaryTextBrush}">
+                    <Run Text="Total Lines:"/>
+                    <Run Text="{Binding TotalLogLines, Mode=OneWay}" FontWeight="Bold"/>
+                    <Run Text="/ Filtered:"/>
+                    <Run Text="{Binding FilteredLogLinesCount, Mode=OneWay}" FontWeight="Bold"/>
+                </TextBlock>
+            </StackPanel>
+        </Border>
     </Grid>
 </Window>
