@@ -11,58 +11,11 @@ using Microsoft.Reactive.Testing; // Essential for TestScheduler
 using Logonaut.Common;
 using Logonaut.Core;
 using Logonaut.Filters;
+using Logonaut.Core.Tests; // Assuming MockLogTailerService is accessible here
+using Logonaut.TestUtils;
 
 namespace Logonaut.Core.Tests
 {
-
-    // TODO: Should be made common with the one in MainViewModelTests.cs
-    public class MockLogTailerService : ILogTailerService
-    {
-        private readonly Subject<string> _logLinesSubject = new Subject<string>();
-        public string? ChangedFilePath { get; private set; }
-        public bool IsDisposed { get; private set; } = false;
-        public bool IsStopped { get; private set; } = false;
-        public Exception? LastErrorReceived { get; private set; } // Track errors
-
-        public IObservable<string> LogLines => _logLinesSubject.AsObservable();
-
-        public void ChangeFile(string filePath)
-        {
-            if (IsDisposed) throw new ObjectDisposedException(nameof(MockLogTailerService));
-            ChangedFilePath = filePath;
-            IsStopped = false;
-        }
-
-        public void StopTailing()
-        {
-            IsStopped = true;
-        }
-
-        // Simulate emitting a log line
-        public void EmitLine(string line)
-        {
-            if (IsDisposed || IsStopped) return;
-            _logLinesSubject.OnNext(line);
-        }
-
-        // Simulate emitting an error
-        public void EmitError(Exception ex)
-        {
-            if (IsDisposed || IsStopped) return;
-            LastErrorReceived = ex; // Store the error
-            _logLinesSubject.OnError(ex);
-        }
-
-        public void Dispose()
-        {
-            if (IsDisposed) return;
-            IsDisposed = true;
-            _logLinesSubject.OnCompleted();
-            _logLinesSubject.Dispose();
-        }
-    }
-
-    // Logonaut.Core.Tests/LogFilterProcessorTests.cs
     [TestClass]
     public class LogFilterProcessorTests
     {
@@ -72,7 +25,11 @@ namespace Logonaut.Core.Tests
         private LogFilterProcessor _processor = null!;
         private List<FilteredUpdate> _receivedUpdates = null!; // Capture results
         private Exception? _receivedError = null; // Capture errors
+        private bool _isCompleted = false; // Capture completion
         private IDisposable? _subscription;
+
+        // Helper to get just the text from updates for easier comparison
+        private List<string> GetLinesText(FilteredUpdate update) => update.Lines.Select(l => l.Text).ToList();
 
         [TestInitialize]
         public void TestInitialize()
@@ -82,6 +39,7 @@ namespace Logonaut.Core.Tests
             _logDocument = new LogDocument();
             _receivedUpdates = new List<FilteredUpdate>();
             _receivedError = null;
+            _isCompleted = false;
 
             // Use a simple SyncContext for tests. Testing the actual UI marshalling
             // is complex; we focus on the logic *before* ObserveOn(_uiContext).
@@ -89,14 +47,15 @@ namespace Logonaut.Core.Tests
             _processor = new LogFilterProcessor(
                 _mockTailer,
                 _logDocument,
-                new SynchronizationContext(), // Basic context for test execution
+                new ImmediateSynchronizationContext(), // Basic context for test execution
                 _scheduler // Inject the TestScheduler!
             );
 
-            // Subscribe to capture results and errors
+            // Subscribe to capture results, errors, and completion
             _subscription = _processor.FilteredUpdates.Subscribe(
                 update => _receivedUpdates.Add(update),
-                ex => _receivedError = ex
+                ex => _receivedError = ex,
+                () => _isCompleted = true
             );
         }
 
@@ -108,64 +67,64 @@ namespace Logonaut.Core.Tests
             _mockTailer?.Dispose(); // Dispose the mock if needed
         }
 
-#if false
+        // --- Test Cases ---
 
-        [TestMethod] public void Reset_ClearsDocumentAndEventuallyEmitsEmptyReplaceUpdateViaDebounce() // Renamed for clarity
+        [TestMethod]
+        public void Reset_ClearsDocumentAndEmitsEmptyReplaceUpdateAfterDebounce()
         {
             // Arrange
             _logDocument.AppendLine("Existing Line 1");
-            _logDocument.AppendLine("Existing Line 2");
-            _processor.UpdateFilterSettings(new SubstringFilter("test"), 1); // Set non-default state
-
-            // Advance scheduler to process any initial filter updates before clearing
-            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks);
-            _receivedUpdates.Clear(); // Clear updates received before reset
+            _processor.UpdateFilterSettings(new SubstringFilter("test"), 1);
+            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Process initial filter setting
+            _receivedUpdates.Clear(); // Clear initial update AND the one from filter setting
 
             // Act
             _processor.Reset();
 
-            // Assert LogDocument is cleared immediately
+            // Assert: LogDocument cleared immediately
             Assert.AreEqual(0, _logDocument.Count, "LogDocument should be cleared immediately by Reset.");
 
-            // There should always be exactly one replace event after reset
-            Assert.AreEqual(1, _receivedUpdates.Count, "Should receive no immediate update from _uiContext.Post in test.");
-            Assert.AreEqual(UpdateType.Replace, _receivedUpdates[0].Type, "Update type should be Replace.");
+            // Assert: Check for the immediate Post update (Needs ImmediateSynchronizationContext to run Post synchronously)
+            // IF using basic SynchronizationContext, this update might not appear synchronously here.
+            // Assuming ImmediateSynchronizationContext or similar for robust testing:
+            Assert.AreEqual(1, _receivedUpdates.Count, "Should receive one immediate update from Reset's Post.");
+            Assert.AreEqual(UpdateType.Replace, _receivedUpdates[0].Type, "Immediate Update type should be Replace.");
+            Assert.AreEqual(0, _receivedUpdates[0].Lines.Count, "Immediate Update should contain zero lines.");
 
-            // Now, advance the scheduler PAST the debounce time initiated by the
-            // UpdateFilterSettings call within Reset(). The debounce time is 300ms.
-            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Ensure we are past 300ms
+            // Act: Advance scheduler PAST the debounce time
+            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks);
 
-            // Assert: Now we should have received the update from the debounced filter run
-            Assert.AreEqual(2, _receivedUpdates.Count, "Should receive another update after Reset's debounced filter trigger.");
-
-            var update = _receivedUpdates[0];
-            Assert.AreEqual(UpdateType.Replace, update.Type, "Update type should be Replace.");
-            Assert.AreEqual(0, update.Lines.Count, "Update should contain zero lines.");
+            // Assert: Check total updates and the debounced one
+            Assert.AreEqual(2, _receivedUpdates.Count, "Should have 2 total updates after Reset (Post + Debounce)."); // FIX: Expect 2 total now
+            var debouncedUpdate = _receivedUpdates[1]; // FIX: Check the second update
+            Assert.AreEqual(UpdateType.Replace, debouncedUpdate.Type, "Debounced update type should be Replace.");
+            Assert.AreEqual(0, debouncedUpdate.Lines.Count, "Debounced update should contain zero lines.");
         }
 
         [TestMethod]
         public void Incremental_AppendsLinesAndAssignsCorrectOriginalNumbers()
         {
             // Arrange
-            _processor.UpdateFilterSettings(new TrueFilter(), 0); // Match everything initially
+            _processor.UpdateFilterSettings(new TrueFilter(), 0); // Match everything
+            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Process initial filter
             _receivedUpdates.Clear();
 
             // Act
-            _mockTailer.EmitLine("Line A");
-            _mockTailer.EmitLine("Line B");
+            _mockTailer.EmitLine("Line A"); // Orig 1
+            _mockTailer.EmitLine("Line B"); // Orig 2
+            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(150).Ticks); // Advance past buffer time (100ms)
+
+            _mockTailer.EmitLine("Line C"); // Orig 3
             _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(150).Ticks); // Advance past buffer time
 
-            _mockTailer.EmitLine("Line C");
-            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(150).Ticks); // Advance past buffer time
-
-            // Assert
+            // Assert Document Content
             Assert.AreEqual(3, _logDocument.Count, "LogDocument should have 3 lines.");
             Assert.AreEqual("Line A", _logDocument[0]);
             Assert.AreEqual("Line B", _logDocument[1]);
             Assert.AreEqual("Line C", _logDocument[2]);
 
-            // Expecting two Append updates (one for A/B, one for C)
-            Assert.AreEqual(2, _receivedUpdates.Count, "Should have received two updates.");
+            // Assert Received Updates
+            Assert.AreEqual(2, _receivedUpdates.Count, "Should have received two Append updates.");
 
             // Check first update (Lines A & B)
             var update1 = _receivedUpdates[0];
@@ -173,8 +132,10 @@ namespace Logonaut.Core.Tests
             Assert.AreEqual(2, update1.Lines.Count);
             Assert.AreEqual(1, update1.Lines[0].OriginalLineNumber);
             Assert.AreEqual("Line A", update1.Lines[0].Text);
+            Assert.IsFalse(update1.Lines[0].IsContextLine);
             Assert.AreEqual(2, update1.Lines[1].OriginalLineNumber);
             Assert.AreEqual("Line B", update1.Lines[1].Text);
+            Assert.IsFalse(update1.Lines[1].IsContextLine);
 
             // Check second update (Line C)
             var update2 = _receivedUpdates[1];
@@ -182,6 +143,7 @@ namespace Logonaut.Core.Tests
             Assert.AreEqual(1, update2.Lines.Count);
             Assert.AreEqual(3, update2.Lines[0].OriginalLineNumber);
             Assert.AreEqual("Line C", update2.Lines[0].Text);
+            Assert.IsFalse(update2.Lines[0].IsContextLine);
         }
 
         [TestMethod]
@@ -189,26 +151,31 @@ namespace Logonaut.Core.Tests
         {
             // Arrange
             _processor.UpdateFilterSettings(new SubstringFilter("MATCH"), 0);
+            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Process initial filter
             _receivedUpdates.Clear();
 
             // Act
-            _mockTailer.EmitLine("IGNORE 1");
-            _mockTailer.EmitLine("MATCH 2");
-            _mockTailer.EmitLine("IGNORE 3");
-            _mockTailer.EmitLine("MATCH 4");
-            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(150).Ticks); // Process buffer
+            _mockTailer.EmitLine("IGNORE 1");  // Orig 1
+            _mockTailer.EmitLine("MATCH 2");   // Orig 2
+            _mockTailer.EmitLine("IGNORE 3");  // Orig 3
+            _mockTailer.EmitLine("MATCH 4");   // Orig 4
+            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(150).Ticks); // Process buffer (100ms)
 
             // Assert
-            Assert.AreEqual(4, _logDocument.Count, "LogDocument should contain all lines.");
-            Assert.AreEqual(1, _receivedUpdates.Count, "Should receive one update.");
+            Assert.AreEqual(4, _logDocument.Count, "LogDocument should contain all emitted lines.");
+            Assert.AreEqual(1, _receivedUpdates.Count, "Should receive one Append update.");
 
             var update = _receivedUpdates[0];
             Assert.AreEqual(UpdateType.Append, update.Type);
             Assert.AreEqual(2, update.Lines.Count, "Update should contain only matching lines.");
+
             Assert.AreEqual(2, update.Lines[0].OriginalLineNumber); // Original line number of "MATCH 2"
             Assert.AreEqual("MATCH 2", update.Lines[0].Text);
+            Assert.IsFalse(update.Lines[0].IsContextLine);
+
             Assert.AreEqual(4, update.Lines[1].OriginalLineNumber); // Original line number of "MATCH 4"
             Assert.AreEqual("MATCH 4", update.Lines[1].Text);
+            Assert.IsFalse(update.Lines[1].IsContextLine);
         }
 
 
@@ -217,10 +184,11 @@ namespace Logonaut.Core.Tests
         {
             // Arrange: Add some initial lines and process them
             _processor.UpdateFilterSettings(new TrueFilter(), 0);
-            _mockTailer.EmitLine("Line 1 INFO");
-            _mockTailer.EmitLine("Line 2 MATCH");
-            _mockTailer.EmitLine("Line 3 INFO");
-            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(150).Ticks); // Process initial lines (results ignored for this test focus)
+            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks);
+            _mockTailer.EmitLine("Line 1 INFO");    // Orig 1
+            _mockTailer.EmitLine("Line 2 MATCH");   // Orig 2
+            _mockTailer.EmitLine("Line 3 INFO");    // Orig 3
+            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(150).Ticks); // Process initial lines
             _receivedUpdates.Clear(); // Clear initial Append updates
 
             // Act: Update filter settings and advance past debounce time
@@ -243,8 +211,9 @@ namespace Logonaut.Core.Tests
         {
             // Arrange: Add initial lines
             _processor.UpdateFilterSettings(new TrueFilter(), 0);
-            _mockTailer.EmitLine("Line 1 A");
-            _mockTailer.EmitLine("Line 2 B");
+            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks);
+            _mockTailer.EmitLine("Line 1 A"); // Orig 1
+            _mockTailer.EmitLine("Line 2 B"); // Orig 2
             _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(150).Ticks);
             _receivedUpdates.Clear();
 
@@ -252,16 +221,16 @@ namespace Logonaut.Core.Tests
             var filterB = new SubstringFilter("B");
 
             // Act: Call UpdateFilterSettings rapidly
-            _processor.UpdateFilterSettings(filterA, 0); // Time: 0ms (virtual)
-            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(100).Ticks); // Time: 100ms
-            _processor.UpdateFilterSettings(filterB, 0); // Time: 100ms
-            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(100).Ticks); // Time: 200ms
+            _processor.UpdateFilterSettings(filterA, 0); // Time: T0 (scheduler time)
+            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(100).Ticks); // Time: T0 + 100ms
+            _processor.UpdateFilterSettings(filterB, 0); // Time: T0 + 100ms
+            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(100).Ticks); // Time: T0 + 200ms
 
-            // Assert: No update yet, debounce timer restarted at 100ms
+            // Assert: No update yet, debounce timer restarted at T0 + 100ms
             Assert.AreEqual(0, _receivedUpdates.Count, "No update should occur before debounce period expires.");
 
-            // Act: Advance past the debounce period started at 100ms (100 + 300 = 400ms)
-            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(250).Ticks); // Total Time: 450ms
+            // Act: Advance past the debounce period started at T0 + 100ms (100 + 300 = 400ms needed from T0+100)
+            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(250).Ticks); // Total Time: T0 + 450ms
 
             // Assert: Should have received ONE update using the LAST filter (filterB)
             Assert.AreEqual(1, _receivedUpdates.Count, "Should receive exactly one update after debounce.");
@@ -277,6 +246,7 @@ namespace Logonaut.Core.Tests
         {
             // Arrange: Add lines
             _processor.UpdateFilterSettings(new TrueFilter(), 0);
+            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks);
             _mockTailer.EmitLine("Context Before"); // Orig 1
             _mockTailer.EmitLine("MATCH Line");     // Orig 2
             _mockTailer.EmitLine("Context After 1"); // Orig 3
@@ -295,18 +265,18 @@ namespace Logonaut.Core.Tests
             Assert.AreEqual(UpdateType.Replace, update.Type);
             Assert.AreEqual(3, update.Lines.Count, "Should include match + 1 before + 1 after.");
 
-            // Verify lines and context flag
-            Assert.AreEqual("Context Before", update.Lines[0].Text);
-            Assert.AreEqual(1, update.Lines[0].OriginalLineNumber);
-            Assert.IsTrue(update.Lines[0].IsContextLine);
+            // Verify lines and context flag in correct order
+            Assert.AreEqual(1, update.Lines[0].OriginalLineNumber, "Line 1 Orig Num");
+            Assert.AreEqual("Context Before", update.Lines[0].Text, "Line 1 Text");
+            Assert.IsTrue(update.Lines[0].IsContextLine, "Line 1 Context Flag");
 
-            Assert.AreEqual("MATCH Line", update.Lines[1].Text);
-            Assert.AreEqual(2, update.Lines[1].OriginalLineNumber);
-            Assert.IsFalse(update.Lines[1].IsContextLine); // The match itself
+            Assert.AreEqual(2, update.Lines[1].OriginalLineNumber, "Line 2 Orig Num");
+            Assert.AreEqual("MATCH Line", update.Lines[1].Text, "Line 2 Text");
+            Assert.IsFalse(update.Lines[1].IsContextLine, "Line 2 Context Flag"); // The match itself
 
-            Assert.AreEqual("Context After 1", update.Lines[2].Text);
-            Assert.AreEqual(3, update.Lines[2].OriginalLineNumber);
-            Assert.IsTrue(update.Lines[2].IsContextLine);
+            Assert.AreEqual(3, update.Lines[2].OriginalLineNumber, "Line 3 Orig Num");
+            Assert.AreEqual("Context After 1", update.Lines[2].Text, "Line 3 Text");
+            Assert.IsTrue(update.Lines[2].IsContextLine, "Line 3 Context Flag");
         }
 
         [TestMethod]
@@ -323,7 +293,9 @@ namespace Logonaut.Core.Tests
 
             // Assert
             Assert.IsNotNull(_receivedError, "Error should have been received.");
-            Assert.AreSame(expectedException, _receivedError, "Received error should be the one emitted.");
+            // Assert.AreSame(expectedException, _receivedError, "Received error should be the one emitted."); // Rx wraps exceptions
+            Assert.IsInstanceOfType(_receivedError, typeof(InvalidOperationException));
+            Assert.AreEqual(expectedException.Message, _receivedError.Message);
             Assert.AreEqual(0, _receivedUpdates.Count, "No regular updates should be received after error.");
         }
 
@@ -331,24 +303,23 @@ namespace Logonaut.Core.Tests
         public void Dispose_StopsProcessingAndCompletesObservable()
         {
             // Arrange
-            bool isCompleted = false;
-            _processor.FilteredUpdates.Subscribe(_ => { }, () => isCompleted = true); // Subscribe to completion
-
-            _mockTailer.EmitLine("Line 1");
+            _receivedUpdates.Clear();
+            _mockTailer.EmitLine("Line 1"); // Emit before dispose
             _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(150).Ticks);
+            Assert.AreEqual(1, _receivedUpdates.Count); // Ensure line was processed
             _receivedUpdates.Clear();
 
             // Act
             _processor.Dispose();
+
             // Try emitting after disposal
             _mockTailer.EmitLine("Line 2 (after dispose)");
             _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(150).Ticks);
 
             // Assert
             Assert.AreEqual(0, _receivedUpdates.Count, "No updates should be received after Dispose.");
-            Assert.IsTrue(isCompleted, "FilteredUpdates observable should complete on Dispose.");
+            Assert.IsTrue(_isCompleted, "FilteredUpdates observable should complete on Dispose.");
             // Assert.IsTrue(_mockTailer.IsDisposed); // Processor should *not* dispose injected dependencies
         }
-#endif
     }
 }

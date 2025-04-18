@@ -10,6 +10,22 @@ using Logonaut.UI.Services;
 
 namespace Logonaut.TestUtils
 {
+
+    // We don't want for WPF asynchronous operations to run in the background, so we create a custom SynchronizationContext
+    // that runs immediately. This is used in the tests to ensure that any UI updates are processed immediately.
+    public class ImmediateSynchronizationContext : SynchronizationContext
+    {
+        public override void Post(SendOrPostCallback d, object? state)
+        {
+            d(state); // Run immediately, synchronously
+        }
+
+        public override void Send(SendOrPostCallback d, object? state)
+        {
+            d(state); // Also immediate, for Send
+        }
+    }
+
     // --- Settings Service Mock ---
     public class MockSettingsService : ISettingsService
     {

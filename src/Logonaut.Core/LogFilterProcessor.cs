@@ -135,7 +135,9 @@ namespace Logonaut.Core
 
         private void HandlePipelineError(string contextMessage, Exception ex)
         {
-            throw new InvalidOperationException($"{contextMessage}: {ex}", ex);
+            // Instead of throwing, push the error to the output subject
+            System.Diagnostics.Debug.WriteLine($"{contextMessage}: {ex}"); // Keep logging
+            _filteredUpdatesSubject.OnError(ex); // Propagate error to subscribers
         }
 
         private void UpdateFilterSettings()
@@ -144,10 +146,22 @@ namespace Logonaut.Core
             // For now, just output to debug. A robust app would need more.
         }
 
+        private bool _isDisposed = false;
         public void Dispose()
         {
-            _logSubscription?.Dispose();
-            _disposables.Dispose();
+            if (!_isDisposed) // Add isDisposed check
+            {
+                _isDisposed = true; // Mark as disposed early
+
+                // Explicitly complete the subject BEFORE disposing _disposables
+                _filteredUpdatesSubject?.OnCompleted();
+
+                _logSubscription?.Dispose(); // Dispose specific subscriptions first if needed
+                _disposables.Dispose(); // Dispose subjects and remaining subscriptions
+
+                // Avoid calling OnCompleted again inside subject's Dispose
+                // _filteredUpdatesSubject?.Dispose(); // Dispose is handled by _disposables
+            }
         }
     }
 }
