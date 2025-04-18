@@ -135,7 +135,11 @@ namespace Logonaut.Core
 
         private void HandlePipelineError(string contextMessage, Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"{contextMessage}: {ex}");
+            throw new InvalidOperationException($"{contextMessage}: {ex}", ex);
+        }
+
+        private void UpdateFilterSettings()
+        {
             // Consider logging or exposing errors via another observable
             // For now, just output to debug. A robust app would need more.
         }

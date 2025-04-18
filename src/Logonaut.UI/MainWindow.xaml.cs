@@ -256,15 +256,9 @@ namespace Logonaut.UI
              _overviewRuler = FindVisualChild<Logonaut.UI.Helpers.OverviewRulerMargin>(_logOutputEditor);
 
              if (_overviewRuler != null)
-             {
-                // Hook up the event handler
                 _overviewRuler.RequestScrollOffset += OverviewRuler_RequestScrollOffset;
-             }
              else
-             {
-                // TODO: Log or handle the case where the ruler wasn't found
-                System.Diagnostics.Debug.WriteLine("OverviewRulerMargin not found in TextEditor template.");
-             }
+                throw new Exception("OverviewRulerMargin not found in TextEditor template.");
 
              // Unsubscribe when the editor unloads to prevent memory leaks
              _logOutputEditor.Unloaded += (s, ev) => {

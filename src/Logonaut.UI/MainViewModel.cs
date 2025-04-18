@@ -202,9 +202,19 @@ namespace Logonaut.UI.ViewModels
         private bool _showLineNumbers = true;
         public Visibility IsCustomLineNumberMarginVisible => ShowLineNumbers ? Visibility.Visible : Visibility.Collapsed;
 
+        partial void OnShowLineNumbersChanged(bool value)
+        {
+            SaveCurrentSettings(); // Save settings when this property changes
+        }
+
         // Controls whether timestamp highlighting rules are applied in AvalonEdit.
         [ObservableProperty]
         private bool _highlightTimestamps = true;
+
+        partial void OnHighlightTimestampsChanged(bool value)
+        {
+            SaveCurrentSettings(); // Save settings when this property changes
+        }
 
         // Collection of filter patterns (substrings/regex) for highlighting.
         // Note: This state is derived by traversing the *active* FilterProfile.
@@ -559,7 +569,12 @@ namespace Logonaut.UI.ViewModels
         [RelayCommand(CanExecute = nameof(CanSearch))] private void PreviousSearch()
         {
             if (_searchMatches.Count == 0) return;
-            _currentSearchIndex = (_currentSearchIndex - 1 + _searchMatches.Count) % _searchMatches.Count; // Wrap around
+
+            // Handle initial case explicitly for intuitive wrap-around
+            if (_currentSearchIndex == -1)
+                _currentSearchIndex = _searchMatches.Count - 1; // Go to the last match
+            else
+                _currentSearchIndex = (_currentSearchIndex - 1 + _searchMatches.Count) % _searchMatches.Count; // Standard wrap-around
             SelectAndScrollToCurrentMatch();
             OnPropertyChanged(nameof(SearchStatusText));
         }

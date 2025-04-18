@@ -132,7 +132,6 @@ namespace Logonaut.UI.Helpers
                         if (y >= 0 && y <= viewPortHeight)
                         {
                             drawingContext.DrawLine(pen, new Point(0, y), new Point(textView.ActualWidth, y));
-                            // System.Diagnostics.Debug.WriteLine($"Gap={gap}. Draw above OrigLine:{currentFilteredLine.OriginalLineNumber} at Y={y}");
                         }
                     }
                 }

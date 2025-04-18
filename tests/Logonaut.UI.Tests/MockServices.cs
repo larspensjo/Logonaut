@@ -106,16 +106,13 @@ namespace Logonaut.UI.Tests.Mocks
             ResetCallCount = 0;
             UpdateFilterSettingsCallCount = 0;
             LastFilterSettings = null; // Optional: Reset this too if tests need it
-            System.Diagnostics.Debug.WriteLine("ResetCounters() reset LastFilterSettings, UpdateFilterSettingsCallCount and ResetCallCount");
         }
 
         public void UpdateFilterSettings(IFilter newFilter, int contextLines)
         {
             if (_isDisposed) throw new ObjectDisposedException(nameof(MockLogFilterProcessor));
             UpdateFilterSettingsCallCount++;
-            System.Diagnostics.Debug.WriteLine($"UpdateFilterSettingsCallCount incremented to {UpdateFilterSettingsCallCount}");
             LastFilterSettings = (newFilter, contextLines);
-            System.Diagnostics.Debug.WriteLine($"LastFilterSettings updated to: {newFilter}, {contextLines}");
         }
 
         public void SimulateFilteredUpdate(FilteredUpdate update) { if (!_isDisposed) _filteredUpdatesSubject.OnNext(update); }

@@ -161,7 +161,6 @@ namespace Logonaut.UI.Tests.ViewModels
         [TestMethod]
         public void Constructor_LoadsSettingsAndInitializesDefaultProfile()
         {
-            System.Diagnostics.Debug.WriteLine($"Starting test Constructor_LoadsSettingsAndInitializesDefaultProfile");
             // Act (ViewModel created in Initialize)
             // Assert
             Assert.IsNotNull(_viewModel.AvailableProfiles);
@@ -179,7 +178,6 @@ namespace Logonaut.UI.Tests.ViewModels
         [TestMethod]
         public void Constructor_TriggersInitialFilterUpdateViaActiveProfileChange()
         {
-            System.Diagnostics.Debug.WriteLine($"Starting test Constructor_TriggersInitialFilterUpdateViaActiveProfileChange");
             // Assert (Processor interaction happens during construction via ActiveProfile set)
             Assert.AreEqual(1, _mockProcessor.UpdateFilterSettingsCallCount);
             Assert.IsNotNull(_mockProcessor.LastFilterSettings);
@@ -194,7 +192,6 @@ namespace Logonaut.UI.Tests.ViewModels
         [TestMethod]
         public void CreateNewProfileCommand_AddsUniqueProfile_SetsActive_SavesSettings()
         {
-            System.Diagnostics.Debug.WriteLine($"Starting test CreateNewProfileCommand_AddsUniqueProfile_SetsActive_SavesSettings");
             int initialCount = _viewModel.AvailableProfiles.Count;
             _viewModel.CreateNewProfileCommand.Execute(null);
             Assert.AreEqual(initialCount + 1, _viewModel.AvailableProfiles.Count);
@@ -211,7 +208,6 @@ namespace Logonaut.UI.Tests.ViewModels
          [TestMethod]
         public void CreateNewProfileCommand_GeneratesUniqueName()
         {
-            System.Diagnostics.Debug.WriteLine($"Starting test CreateNewProfileCommand_GeneratesUniqueName");
             _viewModel.CreateNewProfileCommand.Execute(null); // "New Profile 1"
             _viewModel.CreateNewProfileCommand.Execute(null); // "New Profile 2"
             Assert.AreEqual(3, _viewModel.AvailableProfiles.Count);
@@ -223,7 +219,6 @@ namespace Logonaut.UI.Tests.ViewModels
         [TestMethod]
         public void RenameProfileCommand_ValidName_UpdatesName_SavesSettings()
         {
-            System.Diagnostics.Debug.WriteLine($"Starting test RenameProfileCommand_ValidName_UpdatesName_SavesSettings");
             _mockInputPrompt.InputToReturn = "Renamed Profile";
             var activeProfile = _viewModel.ActiveFilterProfile;
             Assert.IsNotNull(activeProfile);
@@ -240,7 +235,6 @@ namespace Logonaut.UI.Tests.ViewModels
         [Ignore("Requires mocking/intercepting MessageBox.Show")] // Mark ignored
         public void RenameProfileCommand_DuplicateName_DoesNotRename_ShowsError()
         {
-            System.Diagnostics.Debug.WriteLine($"Starting test RenameProfileCommand_DuplicateName_DoesNotRename_ShowsError");
             // Arrange
             _viewModel.CreateNewProfileCommand.Execute(null);
             var profileToRename = _viewModel.ActiveFilterProfile;
@@ -263,7 +257,6 @@ namespace Logonaut.UI.Tests.ViewModels
         [Ignore("Requires mocking/intercepting MessageBox.Show")] // Mark ignored
         public void DeleteProfileCommand_RemovesActive_SelectsPrevious_SavesSettings()
         {
-            System.Diagnostics.Debug.WriteLine($"Starting test DeleteProfileCommand_RemovesActive_SelectsPrevious_SavesSettings");
             _viewModel.CreateNewProfileCommand.Execute(null);
             _viewModel.CreateNewProfileCommand.Execute(null);
             int initialCount = _viewModel.AvailableProfiles.Count;
@@ -287,7 +280,6 @@ namespace Logonaut.UI.Tests.ViewModels
         [Ignore("Requires mocking/intercepting MessageBox.Show")] // Mark ignored
         public void DeleteProfileCommand_DeletesLastProfile_CreatesAndSelectsDefault()
         {
-            System.Diagnostics.Debug.WriteLine($"Starting test DeleteProfileCommand_DeletesLastProfile_CreatesAndSelectsDefault");
             Assert.AreEqual(1, _viewModel.AvailableProfiles.Count);
             var lastProfile = _viewModel.ActiveFilterProfile;
             Assert.IsNotNull(lastProfile);
@@ -310,7 +302,6 @@ namespace Logonaut.UI.Tests.ViewModels
         [TestMethod]
         public void ActiveFilterProfile_Set_UpdatesState_TriggersProcessor_SavesSettings()
         {
-            System.Diagnostics.Debug.WriteLine($"Starting test ActiveFilterProfile_Set_UpdatesState_TriggersProcessor_SavesSettings");
             _viewModel.CreateNewProfileCommand.Execute(null);
             var profile1 = _viewModel.AvailableProfiles[0];
             var profile2 = _viewModel.ActiveFilterProfile;
@@ -333,8 +324,6 @@ namespace Logonaut.UI.Tests.ViewModels
         [TestMethod]
         public void AddFilterCommand_EmptyTree_AddsRoot_Selects_UpdatesProcessor_Saves()
         {
-            System.Diagnostics.Debug.WriteLine($"Starting test AddFilterCommand_EmptyTree_AddsRoot_Selects_UpdatesProcessor_Saves");
-
             // Arrange
             Assert.IsNull(_viewModel.ActiveFilterProfile?.RootFilterViewModel);
             _mockProcessor.ResetCounters();
@@ -359,8 +348,6 @@ namespace Logonaut.UI.Tests.ViewModels
         [TestMethod]
         public void AddFilterCommand_CompositeSelected_AddsChild_Selects_UpdatesProcessor_Saves()
         {
-            System.Diagnostics.Debug.WriteLine($"Starting test AddFilterCommand_CompositeSelected_AddsChild_Selects_UpdatesProcessor_Saves");
-
             // Arrange
             _viewModel.AddFilterCommand.Execute("And");
             var root = _viewModel.ActiveFilterProfile?.RootFilterViewModel;
@@ -387,8 +374,6 @@ namespace Logonaut.UI.Tests.ViewModels
         [TestMethod]
         public void RemoveFilterNodeCommand_RootSelected_ClearsTree_UpdatesProcessor_Saves()
         {
-            System.Diagnostics.Debug.WriteLine($"Starting test RemoveFilterNodeCommand_RootSelected_ClearsTree_UpdatesProcessor_Saves");
-
             // Arrange
             _viewModel.AddFilterCommand.Execute("Substring");
             _viewModel.SelectedFilterNode = _viewModel.ActiveFilterProfile?.RootFilterViewModel;
@@ -412,8 +397,6 @@ namespace Logonaut.UI.Tests.ViewModels
         [TestMethod]
         public void RemoveFilterNodeCommand_ChildSelected_RemovesChild_SelectsParent_UpdatesProcessor_Saves()
         {
-            System.Diagnostics.Debug.WriteLine($"Starting test RemoveFilterNodeCommand_ChildSelected_RemovesChild_SelectsParent_UpdatesProcessor_Saves");
-
             // Arrange
             _viewModel.AddFilterCommand.Execute("Or"); // (Calls proc, count=1)
             var root = _viewModel.ActiveFilterProfile?.RootFilterViewModel; Assert.IsNotNull(root);
@@ -440,7 +423,6 @@ namespace Logonaut.UI.Tests.ViewModels
         [TestMethod]
         public void ToggleEditNodeCommand_EndEdit_UpdatesProcessor_Saves()
         {
-            System.Diagnostics.Debug.WriteLine($"Starting test ToggleEditNodeCommand_EndEdit_UpdatesProcessor_Saves");
             // Arrange
             _viewModel.AddFilterCommand.Execute("Substring"); // (Calls proc, count=1)
             var node = _viewModel.ActiveFilterProfile?.RootFilterViewModel; Assert.IsNotNull(node);
@@ -465,8 +447,6 @@ namespace Logonaut.UI.Tests.ViewModels
         [TestMethod]
         public void FilterViewModel_EnabledChanged_TriggersProcessorUpdate_Saves()
         {
-            System.Diagnostics.Debug.WriteLine($"Starting test FilterViewModel_EnabledChanged_TriggersProcessorUpdate_Saves");
-
             // Arrange
             _viewModel.AddFilterCommand.Execute("Substring"); // (Calls proc, count=1)
             var node = _viewModel.ActiveFilterProfile?.RootFilterViewModel; Assert.IsNotNull(node);
@@ -497,7 +477,6 @@ namespace Logonaut.UI.Tests.ViewModels
         [TestMethod]
         public void SearchText_Set_UpdatesMatchesAndStatus()
         {
-            System.Diagnostics.Debug.WriteLine($"Starting test SearchText_Set_UpdatesMatchesAndStatus");
             _viewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Line one with test"));
             _viewModel.FilteredLogLines.Add(new FilteredLogLine(2, "Line two NO MATCH"));
             _viewModel.FilteredLogLines.Add(new FilteredLogLine(3, "Line three with TEST"));
@@ -516,7 +495,6 @@ namespace Logonaut.UI.Tests.ViewModels
         [TestMethod]
         public void NextSearchCommand_CyclesThroughMatches_UpdatesSelectionAndHighlight()
         {
-            System.Diagnostics.Debug.WriteLine($"Starting test NextSearchCommand_CyclesThroughMatches_UpdatesSelectionAndHighlight");
             _viewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Test 1")); // Index 0
             _viewModel.FilteredLogLines.Add(new FilteredLogLine(2, "Test 2")); // Index 1
             _viewModel.FilteredLogLines.Add(new FilteredLogLine(3, "Other"));
@@ -545,7 +523,6 @@ namespace Logonaut.UI.Tests.ViewModels
         [TestMethod]
         public void PreviousSearchCommand_CyclesThroughMatches_UpdatesSelectionAndHighlight()
         {
-            System.Diagnostics.Debug.WriteLine($"Starting test PreviousSearchCommand_CyclesThroughMatches_UpdatesSelectionAndHighlight");
             _viewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Test 1")); // Index 0
             _viewModel.FilteredLogLines.Add(new FilteredLogLine(2, "Test 2")); // Index 1
             _viewModel.FilteredLogLines.Add(new FilteredLogLine(3, "Other"));
@@ -577,7 +554,6 @@ namespace Logonaut.UI.Tests.ViewModels
         [TestMethod]
         public void OpenLogFileCommand_CallsProcessorReset_AndTailerChangeFile()
         {
-            System.Diagnostics.Debug.WriteLine($"Starting test OpenLogFileCommand_CallsProcessorReset_AndTailerChangeFile");
             _mockFileDialog.FileToReturn = "C:\\good\\log.txt";
             _viewModel.OpenLogFileCommand.Execute(null);
             Assert.AreEqual(1, _mockProcessor.ResetCallCount);
@@ -588,8 +564,6 @@ namespace Logonaut.UI.Tests.ViewModels
         [TestMethod]
         public void ApplyFilteredUpdate_Replace_ClearsAndAddsLines_UpdatesLogText_ResetsSearch()
         {
-            System.Diagnostics.Debug.WriteLine($"Starting test ApplyFilteredUpdate_Replace_ClearsAndAddsLines_UpdatesLogText_ResetsSearch");
-
             // Arrange
             _viewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Old Line 1"));
             _viewModel.SearchText = "Old";
@@ -619,8 +593,6 @@ namespace Logonaut.UI.Tests.ViewModels
         [TestMethod]
         public void ApplyFilteredUpdate_Append_AddsLines_UpdatesLogText()
         {
-            System.Diagnostics.Debug.WriteLine($"Starting test ApplyFilteredUpdate_Append_AddsLines_UpdatesLogText");
-
             // Arrange
             _viewModel.IsBusyFiltering = false; // Ensure starting state is false
             _viewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Existing 1"));
@@ -644,8 +616,6 @@ namespace Logonaut.UI.Tests.ViewModels
         [TestMethod]
         public void ApplyFilteredUpdate_Replace_RestoresHighlightBasedOnOriginalLineNumber()
         {
-            System.Diagnostics.Debug.WriteLine($"Starting test ApplyFilteredUpdate_Replace_RestoresHighlightBasedOnOriginalLineNumber");
-
             // Arrange
             _viewModel.FilteredLogLines.Add(new FilteredLogLine(5, "Line Five"));
             _viewModel.FilteredLogLines.Add(new FilteredLogLine(10, "Line Ten")); // Highlighted initially
@@ -678,8 +648,6 @@ namespace Logonaut.UI.Tests.ViewModels
         [TestMethod]
         public void ContextLines_Set_TriggersProcessorUpdate_SavesSettings()
         {
-            System.Diagnostics.Debug.WriteLine($"Starting test ContextLines_Set_TriggersProcessorUpdate_SavesSettings");
-
             // Arrange
             _mockProcessor.ResetCounters(); // Reset before Act
             _mockSettings.ResetSettings();
@@ -699,8 +667,6 @@ namespace Logonaut.UI.Tests.ViewModels
         [TestMethod]
         public void ShowLineNumbers_Set_SavesSettings_UpdatesVisibilityProperty()
         {
-            System.Diagnostics.Debug.WriteLine($"Starting test ShowLineNumbers_Set_SavesSettings_UpdatesVisibilityProperty");
-
             // Arrange
             _mockSettings.ResetSettings();
             bool initialState = _viewModel.ShowLineNumbers;
@@ -719,9 +685,7 @@ namespace Logonaut.UI.Tests.ViewModels
         [TestMethod]
         public void HighlightTimestamps_Set_SavesSettings()
         {
-            System.Diagnostics.Debug.WriteLine($"Starting test HighlightTimestamps_Set_SavesSettings");
-
-             // Arrange
+            // Arrange
             _mockSettings.ResetSettings();
             bool initialState = _viewModel.HighlightTimestamps;
 
@@ -737,8 +701,6 @@ namespace Logonaut.UI.Tests.ViewModels
          [TestMethod]
         public void IsCaseSensitiveSearch_Set_SavesSettings_UpdatesSearch()
         {
-            System.Diagnostics.Debug.WriteLine($"Starting test IsCaseSensitiveSearch_Set_SavesSettings_UpdatesSearch");
-
             // Arrange
             _viewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Test test"));
             _viewModel.GetType().GetMethod("UpdateLogTextInternal", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.Invoke(_viewModel, null);
@@ -765,7 +727,6 @@ namespace Logonaut.UI.Tests.ViewModels
         [TestMethod]
         public void HighlightedFilteredLineIndex_SetValid_UpdatesOriginalLineNumber()
         {
-            System.Diagnostics.Debug.WriteLine($"Starting test HighlightedFilteredLineIndex_SetValid_UpdatesOriginalLineNumber");
             _viewModel.FilteredLogLines.Add(new FilteredLogLine(5, "Line Five"));
             _viewModel.FilteredLogLines.Add(new FilteredLogLine(10, "Line Ten"));
             _viewModel.HighlightedFilteredLineIndex = 1;
@@ -776,7 +737,6 @@ namespace Logonaut.UI.Tests.ViewModels
         [TestMethod]
         public void HighlightedFilteredLineIndex_SetInvalid_ResetsOriginalLineNumber()
         {
-            System.Diagnostics.Debug.WriteLine($"Starting test HighlightedFilteredLineIndex_SetInvalid_ResetsOriginalLineNumber");
             _viewModel.FilteredLogLines.Add(new FilteredLogLine(5, "Line Five"));
             _viewModel.HighlightedFilteredLineIndex = 0;
             Assert.AreEqual(5, _viewModel.HighlightedOriginalLineNumber);
@@ -797,14 +757,12 @@ namespace Logonaut.UI.Tests.ViewModels
         [TestMethod]
         public void Dispose_SavesSettings_StopsTailer_DisposesProcessor()
         {
-            System.Diagnostics.Debug.WriteLine($"Starting test Dispose_SavesSettings_StopsTailer_DisposesProcessor");
-
             // Arrange
             _mockSettings.ResetSettings();
             var processor = _mockProcessor; // Capture instance
 
             // Act
-            _viewModel.Dispose(); // Dispose should call SaveCurrentSettings
+            _viewModel.Cleanup();
 
             // Assert
             Assert.IsNotNull(_mockSettings.SavedSettings); // << Should pass now
@@ -827,7 +785,6 @@ namespace Logonaut.UI.Tests.ViewModels
         [TestMethod]
         public void AddFilter_WhenActiveProfileIsEmpty_ShouldUpdateTreeViewItems_STA()
         {
-            System.Diagnostics.Debug.WriteLine($"Starting test AddFilter_WhenActiveProfileIsEmpty_ShouldUpdateTreeViewItems_STA");
              Exception? threadException = null;
              TreeView? filterTreeView = null; // Need to access this after invoke
 
@@ -886,7 +843,6 @@ namespace Logonaut.UI.Tests.ViewModels
         [TestMethod]
         public void RemoveFilter_ShouldUpdateTreeViewItems_STA()
         {
-            System.Diagnostics.Debug.WriteLine($"Starting test RemoveFilter_ShouldUpdateTreeViewItems_STA");
              Exception? threadException = null;
              TreeView? filterTreeView = null; // Capture for assertion
 
@@ -945,7 +901,6 @@ namespace Logonaut.UI.Tests.ViewModels
         [TestMethod]
         public void OpenLogFile_ShouldSetCurrentLogFilePath() // Kept - Valid logic test
         {
-            System.Diagnostics.Debug.WriteLine($"Starting test OpenLogFile_ShouldSetCurrentLogFilePath");
             _mockFileDialog.FileToReturn = "C:\\fake\\log.txt";
             _viewModel.OpenLogFileCommand.Execute(null);
             Assert.AreEqual("C:\\fake\\log.txt", _viewModel.CurrentLogFilePath);
@@ -959,7 +914,6 @@ namespace Logonaut.UI.Tests.ViewModels
         [TestMethod]
         public void PreviousSearch_WithNonEmptySearchText_ShouldNavigate()
         {
-            System.Diagnostics.Debug.WriteLine($"Starting test PreviousSearch_WithNonEmptySearchText_ShouldNavigate");
              // Arrange
              _viewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Test 1"));
              _viewModel.FilteredLogLines.Add(new FilteredLogLine(2, "Test 2"));
@@ -978,7 +932,6 @@ namespace Logonaut.UI.Tests.ViewModels
         [TestMethod]
         public void NextSearch_WithNonEmptySearchText_ShouldNavigate()
         {
-            System.Diagnostics.Debug.WriteLine($"Starting test NextSearch_WithNonEmptySearchText_ShouldNavigate");
              // Arrange
              _viewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Test 1"));
              _viewModel.FilteredLogLines.Add(new FilteredLogLine(2, "Test 2"));
