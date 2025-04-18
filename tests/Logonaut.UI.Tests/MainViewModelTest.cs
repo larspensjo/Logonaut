@@ -10,9 +10,8 @@ using System.Windows.Threading; // For Dispatcher
 using Logonaut.Common;
 using Logonaut.Core;
 using Logonaut.Filters;
-using Logonaut.UI.Services;
 using Logonaut.UI.ViewModels;
-using Logonaut.UI.Tests.Mocks; // Adjust if your mocks are elsewhere
+using Logonaut.TestUtils;
 
 namespace Logonaut.UI.Tests.ViewModels
 {

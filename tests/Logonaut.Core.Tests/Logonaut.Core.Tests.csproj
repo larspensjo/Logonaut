@@ -25,6 +25,7 @@
     <ProjectReference Include="..\..\src\Logonaut.Common\Logonaut.Common.csproj" />
     <ProjectReference Include="..\..\src\Logonaut.Filters\Logonaut.Filters.csproj" />
     <ProjectReference Include="..\..\src\Logonaut.Core\Logonaut.Core.csproj" />
+    <ProjectReference Include="..\Logonaut.TestUtils\Logonaut.TestUtils.csproj" />
   </ItemGroup>
 
 </Project>

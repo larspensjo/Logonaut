@@ -1,0 +1,16 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Logonaut.Core\Logonaut.Core.csproj" />
+    <ProjectReference Include="..\..\src\Logonaut.UI\Logonaut.UI.csproj" />
+    <ProjectReference Include="..\..\src\Logonaut.Common\Logonaut.Common.csproj" />
+    <ProjectReference Include="..\..\src\Logonaut.Filters\Logonaut.Filters.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

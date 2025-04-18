@@ -8,7 +8,7 @@ using Logonaut.Core;
 using Logonaut.Filters;
 using Logonaut.UI.Services;
 
-namespace Logonaut.UI.Tests.Mocks
+namespace Logonaut.TestUtils
 {
     // --- Settings Service Mock ---
     public class MockSettingsService : ISettingsService

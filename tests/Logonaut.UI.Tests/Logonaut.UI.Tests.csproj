@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Logonaut.UI\Logonaut.UI.csproj" />
+    <ProjectReference Include="..\Logonaut.TestUtils\Logonaut.TestUtils.csproj" />
   </ItemGroup>
 
 </Project>
