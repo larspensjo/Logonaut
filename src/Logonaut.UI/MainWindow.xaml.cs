@@ -225,6 +225,29 @@ namespace Logonaut.UI
             _chunkSeparator = null; // Release reference
         }
 
+        private void ProfileNameTextBox_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (e.Key == System.Windows.Input.Key.Enter)
+            {
+                // commit on Enter
+                var tb = (TextBox)sender;
+                if (tb.DataContext is FilterProfileViewModel vm)
+                    vm.EndRenameCommand.Execute(null);
+                // optionally move focus so LostFocus also fires
+                System.Windows.Input.Keyboard.ClearFocus();
+            }
+        }
+
+        private void ProfileNameTextBox_LostFocus(object sender, RoutedEventArgs e)
+        {
+            if (sender is TextBox tb
+            && tb.DataContext is FilterProfileViewModel vm)
+            {
+                // commit the rename
+                vm.EndRenameCommand.Execute(null);
+            }
+        }
+
         private void LogOutputEditor_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
         {
             System.Diagnostics.Debug.WriteLine($"PreviewKey pressed: {e.Key}, Modifiers: {System.Windows.Input.Keyboard.Modifiers}");

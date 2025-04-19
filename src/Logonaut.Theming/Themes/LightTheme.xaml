@@ -613,12 +613,7 @@
                             x:Name="contentPresenter"
                             HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                             SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"
-                            VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-                            Content="{TemplateBinding Content}"
-                            ContentTemplate="{TemplateBinding ContentTemplate}"
-                            ContentStringFormat="{TemplateBinding ContentStringFormat}"
-                            Margin="{TemplateBinding Padding}"
-                            IsHitTestVisible="False" />
+                            VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsHighlighted" Value="true">

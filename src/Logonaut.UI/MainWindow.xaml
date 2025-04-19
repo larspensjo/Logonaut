@@ -93,28 +93,58 @@
             <!-- Left Panel: Filter Management -->
             <Border Grid.Column="0" Style="{DynamicResource CardPanelStyle}">
                 <DockPanel>
-                     <TextBlock DockPanel.Dock="Top" Text="Filters" FontWeight="Bold" Margin="0,0,0,5"/>
+                    <TextBlock DockPanel.Dock="Top" Text="Filters" FontWeight="Bold" Margin="0,0,0,5"/>
 
-                     <!-- Profile Management Area -->
-                     <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
-                         <TextBlock Text="Active Profile:" Margin="0,0,0,2" FontSize="10" Foreground="{DynamicResource SecondaryTextBrush}"/>
-                         <ComboBox ItemsSource="{Binding AvailableProfiles}"
-                                   SelectedItem="{Binding ActiveFilterProfile}"
-                                   DisplayMemberPath="Name"
-                                   Margin="0,0,0,5">
-                             <ComboBox.ToolTip>
-                                 <ToolTip>Select the active filter profile.</ToolTip>
-                             </ComboBox.ToolTip>
-                         </ComboBox>
-                         <WrapPanel HorizontalAlignment="Center">
-                            <Button Content="New" Command="{Binding CreateNewProfileCommand}" Margin="2" ToolTip="Create a new filter profile"/>
-                            <Button Content="Rename" Command="{Binding RenameProfileCommand}" Margin="2" ToolTip="Rename the selected profile"/>
-                            <Button Content="Delete" Command="{Binding DeleteProfileCommand}" Margin="2" ToolTip="Delete the selected profile"/>
-                         </WrapPanel>
-                     </StackPanel>
+                    <!-- Profile Management Area -->
+                    <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+                        <TextBlock Text="Active Profile:"
+                                    Margin="0,0,0,2"
+                                    FontSize="10"
+                                    Foreground="{DynamicResource SecondaryTextBrush}"/>
 
-                     <!-- Buttons for NODE management (below TreeView) -->
-                     <StackPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
+                        <Grid Margin="0,0,0,5" Width="200">
+                            <!-- TextBox for inline rename. Set DataContext here so code-behind sees the profile VM directly -->
+                            <TextBox x:Name="ProfileNameTextBox"
+                                    DataContext="{Binding ActiveFilterProfile}"
+                                    Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}"
+                                    Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                    LostFocus="ProfileNameTextBox_LostFocus"
+                                    KeyDown="ProfileNameTextBox_KeyDown"
+                                    VerticalAlignment="Center"/>
+
+                            <!-- ComboBox for selection (shows arrow) -->
+                            <ComboBox ItemsSource="{Binding AvailableProfiles}"
+                                SelectedItem="{Binding ActiveFilterProfile}"
+                                DisplayMemberPath="Name"
+                                IsEditable="False"
+                                Visibility="{Binding ActiveFilterProfile.IsEditing, Converter={StaticResource InverseBoolToVis}}"
+                                VerticalAlignment="Center"
+                                Margin="0,0,0,5">
+                                <ComboBox.ToolTip>
+                                    <ToolTip>Select the active filter profile.</ToolTip>
+                                </ComboBox.ToolTip>
+                            </ComboBox>
+                        </Grid>
+
+                        <WrapPanel HorizontalAlignment="Center">
+                            <Button Content="New"
+                                    Command="{Binding CreateNewProfileCommand}"
+                                    Margin="2"
+                                    ToolTip="Create a new filter profile"/>
+                            <Button Content="Rename"
+                                    Command="{Binding ActiveFilterProfile.BeginRenameCommand}"
+                                    Margin="2"
+                                    ToolTip="Rename the selected profile"
+                                    Visibility="{Binding ActiveFilterProfile.IsEditing, Converter={StaticResource InverseBoolToVis}}"/>
+                            <Button Content="Delete"
+                                    Command="{Binding DeleteProfileCommand}"
+                                    Margin="2"
+                                    ToolTip="Delete the selected profile"/>
+                        </WrapPanel>
+                    </StackPanel>
+
+                    <!-- Buttons for NODE management (below TreeView) -->
+                    <StackPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
                         <TextBlock Text="Add Filter Node:" Margin="0,0,0,2" FontSize="10" Foreground="{DynamicResource SecondaryTextBrush}" HorizontalAlignment="Center"/>
                         <WrapPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,10">
                              <!-- Pass string parameter to identify filter type -->

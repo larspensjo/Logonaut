@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Logonaut.Common;
 using Logonaut.Filters;
 using System; // For Action
+using CommunityToolkit.Mvvm.Input;
 
 namespace Logonaut.UI.ViewModels
 {
@@ -24,6 +25,16 @@ namespace Logonaut.UI.ViewModels
 
         private readonly Action? _filterConfigurationChangedCallback;
 
+        private bool _isEditing;
+        public bool IsEditing
+        {
+            get => _isEditing;
+            set => SetProperty(ref _isEditing, value);
+        }
+
+        public IRelayCommand BeginRenameCommand { get; }
+        public IRelayCommand EndRenameCommand   { get; }
+
         public FilterProfileViewModel(FilterProfile model, Action? filterConfigurationChangedCallback)
         {
             Model = model ?? throw new ArgumentNullException(nameof(model));
@@ -35,6 +46,21 @@ namespace Logonaut.UI.ViewModels
             {
                 _rootFilterViewModel = new FilterViewModel(Model.RootFilter, _filterConfigurationChangedCallback);
             }
+
+            BeginRenameCommand = new RelayCommand(() =>
+            {
+                IsEditing = true;
+            });
+
+            EndRenameCommand = new RelayCommand(() =>
+            {
+                if (IsEditing)
+                {
+                    IsEditing = false;
+                    // TODO: save settings here if you want, or let MainVM listen for Name changes
+                    // SaveProfilesCommand?.Execute(null);
+                }
+            });
             // Important: Don't create children here recursively if FilterViewModel constructor does it.
             // Ensure FilterViewModel handles building its own children based on the passed IFilter.
         }
