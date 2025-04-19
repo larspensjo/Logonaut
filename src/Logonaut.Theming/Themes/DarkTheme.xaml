@@ -48,6 +48,17 @@
     <!-- Persistent line highlihting -->
     <SolidColorBrush x:Key="PersistedHighlightBrush" Color="#404040" /> <!-- Dark Gray -->
 
+    <!-- ComboBox misc. brushes -->
+    <SolidColorBrush x:Key="ComboBoxArrowBrush" Color="{StaticResource SecondaryForegroundColor}"/>
+    <SolidColorBrush x:Key="ComboBoxBackgroundBrush" Color="{StaticResource ControlBackgroundColor}"/>
+    <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="{StaticResource BorderColor}"/>
+    <SolidColorBrush x:Key="ComboBoxDropdownBackgroundBrush" Color="{StaticResource PanelBackgroundColor}"/>
+    <SolidColorBrush x:Key="ComboBoxDropdownBorderBrush" Color="{StaticResource BorderColor}"/>
+
+    <!-- Hover state for items in the popup list -->
+    <SolidColorBrush x:Key="ComboBoxItemHoverBackgroundBrush" Color="{StaticResource PanelBackgroundColor}"/>
+    <SolidColorBrush x:Key="ComboBoxItemHoverForegroundBrush" Color="{StaticResource PrimaryForegroundColor}"/>
+
     <!-- NEON: Glow Effect -->
     <DropShadowEffect x:Key="FocusGlowEffect" Color="{StaticResource GlowColor}" ShadowDepth="0" BlurRadius="8" Opacity="0.9"/>
     <DropShadowEffect x:Key="PanelShadowEffect" Color="#FF000000" ShadowDepth="3" BlurRadius="8" Opacity="0.4"/>
@@ -728,7 +739,9 @@
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsHighlighted" Value="true">
                             <Setter Property="Background" TargetName="Bd" Value="{DynamicResource ComboBoxItemHoverBackgroundBrush}"/>
-                            <Setter Property="Foreground" Value="{DynamicResource ComboBoxItemHoverForegroundBrush}"/> <!-- Adjust for theme -->
+                            <Setter Property="Foreground" Value="{DynamicResource ComboBoxItemHoverForegroundBrush}"/>
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                            <Setter TargetName="Bd" Property="Effect" Value="{DynamicResource FocusGlowEffect}"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="false">
                             <Setter Property="Opacity" Value="0.5"/>
