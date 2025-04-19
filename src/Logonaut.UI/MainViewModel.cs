@@ -268,7 +268,6 @@ namespace Logonaut.UI.ViewModels
         /// Setting this property triggers updates to the TreeView and filtering.
         /// </summary>
         [ObservableProperty]
-        [NotifyCanExecuteChangedFor(nameof(RenameProfileCommand))]
         [NotifyCanExecuteChangedFor(nameof(DeleteProfileCommand))]
         [NotifyCanExecuteChangedFor(nameof(AddFilterCommand))] // Enable adding nodes if profile selected
         [NotifyCanExecuteChangedFor(nameof(RemoveFilterNodeCommand))] // Depends on node selection *within* active tree
@@ -382,33 +381,6 @@ namespace Logonaut.UI.ViewModels
             }, null); // Pass null for the state object
 
             SaveCurrentSettings(); // Save changes immediately
-        }
-
-        [RelayCommand(CanExecute = nameof(CanManageActiveProfile))]
-        private void RenameProfile()
-        {
-            if (ActiveFilterProfile == null) return;
-
-            string currentName = ActiveFilterProfile.Name;
-            // Use IInputPromptService to get new name
-            string? newName = _inputPromptService.ShowInputDialog("Rename Filter Profile", $"Enter new name for '{currentName}':", currentName);
-
-            if (!string.IsNullOrWhiteSpace(newName) && newName != currentName)
-            {
-                // Check for name conflicts (case-insensitive)
-                if (AvailableProfiles.Any(p => p != ActiveFilterProfile && p.Name.Equals(newName, StringComparison.OrdinalIgnoreCase)))
-                {
-                    MessageBox.Show($"A profile named '{newName}' already exists.", "Rename Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
-                }
-                // Update the ViewModel property, which updates the Model property via its OnChanged handler
-                ActiveFilterProfile.Name = newName;
-                // Force ComboBox refresh if binding doesn't update automatically when DisplayMemberPath source changes
-                // This typically requires replacing the item or using a more complex VM structure if inline update needed.
-                // A simpler way is often to just rely on the user re-selecting if the ComboBox doesn't update visually.
-                // Or, re-sort/refresh the AvailableProfiles collection if necessary.
-                SaveCurrentSettings(); // Save changes
-            }
         }
 
         [RelayCommand(CanExecute = nameof(CanManageActiveProfile))]

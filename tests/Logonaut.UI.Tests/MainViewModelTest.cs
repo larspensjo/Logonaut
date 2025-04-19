@@ -200,42 +200,83 @@ namespace Logonaut.UI.Tests.ViewModels
             Assert.AreEqual("New Profile 2", _viewModel.ActiveFilterProfile?.Name);
         }
 
-        [TestMethod]
-        public void RenameProfileCommand_ValidName_UpdatesName_SavesSettings()
-        {
-            _mockInputPrompt.InputToReturn = "Renamed Profile";
-            var activeProfile = _viewModel.ActiveFilterProfile;
-            Assert.IsNotNull(activeProfile);
-            string oldName = activeProfile.Name;
-            _viewModel.RenameProfileCommand.Execute(null);
-            Assert.AreEqual("Renamed Profile", activeProfile.Name);
-            Assert.AreEqual("Renamed Profile", activeProfile.Model.Name);
-            Assert.AreNotEqual(oldName, activeProfile.Name);
-            Assert.IsNotNull(_mockSettings.SavedSettings);
-            Assert.AreEqual("Renamed Profile", _mockSettings.SavedSettings?.LastActiveProfileName);
-        }
-
-        [TestMethod]
-        [Ignore("Requires mocking/intercepting MessageBox.Show")] // Mark ignored
-        public void RenameProfileCommand_DuplicateName_DoesNotRename_ShowsError()
+        [TestMethod] public void ActiveProfileName_SetToValid_UpdatesModel_SavesSettings() // Renamed test
         {
             // Arrange
-            _viewModel.CreateNewProfileCommand.Execute(null);
-            var profileToRename = _viewModel.ActiveFilterProfile;
-            Assert.IsNotNull(profileToRename);
-            _mockInputPrompt.InputToReturn = "Default";
-            string originalName = profileToRename.Name;
+            var activeProfile = _viewModel.ActiveFilterProfile;
+            Assert.IsNotNull(activeProfile, "Need an active profile to test rename.");
+            string oldName = activeProfile.Name;
+            string newValidName = "Renamed Profile";
+            _mockSettings.ResetSettings(); // Clear previous save status
 
-            // Act
-            _viewModel.RenameProfileCommand.Execute(null);
+            // Act: Simulate the Name property being changed via binding
+            activeProfile.Name = newValidName;
+            // The PropertyChanged event should automatically trigger HandleActiveProfileNameChange
+            // which should call SaveCurrentSettings if validation passes.
 
             // Assert
-            Assert.AreEqual(originalName, profileToRename.Name);
-            Assert.IsTrue(_mockSettings.SavedSettings == null || _mockSettings.SavedSettings.LastActiveProfileName == originalName);
-            // Assert MessageBox was shown (needs framework)
-            Assert.Inconclusive("MessageBox verification requires UI testing framework.");
+            Assert.AreEqual(newValidName, activeProfile.Name, "VM Name should be updated.");
+            Assert.AreEqual(newValidName, activeProfile.Model.Name, "Model Name should be updated.");
+            Assert.IsNotNull(_mockSettings.SavedSettings, "Settings should have been saved.");
+            Assert.AreEqual(newValidName, _mockSettings.SavedSettings?.LastActiveProfileName, "Saved active profile name should be the new name.");
+            Assert.AreEqual(1, _mockSettings.SavedSettings?.FilterProfiles.Count, "Saved profile count should be correct.");
+            Assert.AreEqual(newValidName, _mockSettings.SavedSettings?.FilterProfiles[0].Name, "Saved profile name in list should be updated.");
         }
 
+        [TestMethod]
+        [Ignore("Requires mocking/intercepting MessageBox.Show or abstracting UI interaction")] // Keep ignored or implement mocking
+        public void ActiveProfileName_SetToDuplicate_RevertsName_DoesNotSave_ShowsError() // Renamed test
+        {
+            // Arrange: Create a second profile to cause a duplicate name conflict
+            _viewModel.CreateNewProfileCommand.Execute(null); // Creates "New Profile 1" and selects it
+            var profileToRename = _viewModel.ActiveFilterProfile;
+            Assert.IsNotNull(profileToRename, "Second profile should be active.");
+            Assert.AreEqual("New Profile 1", profileToRename.Name);
+
+            string originalName = profileToRename.Name;
+            string duplicateName = "Default"; // Name of the first profile
+            _mockSettings.ResetSettings(); // Clear previous save status
+
+            // Mock MessageBox or UI interaction service if testing the message itself
+
+            // Act: Simulate setting the Name property to a duplicate value
+            profileToRename.Name = duplicateName;
+            // The PropertyChanged event triggers HandleActiveProfileNameChange, which should detect the duplicate
+
+            // Assert
+            Assert.AreEqual(originalName, profileToRename.Name, "VM Name should be reverted back to the original.");
+            Assert.AreEqual(originalName, profileToRename.Model.Name, "Model Name should remain the original name.");
+            Assert.IsNull(_mockSettings.SavedSettings, "Settings should NOT have been saved due to validation failure.");
+
+            // Assert MessageBox was shown (requires mocking/abstraction)
+            // Assert.AreEqual(1, _mockUIService.ShowMessageCallCount);
+            Assert.Inconclusive("Verification of error message requires UI interaction abstraction/mocking.");
+        }
+
+        [TestMethod]
+        [Ignore("Requires mocking/intercepting MessageBox.Show or abstracting UI interaction")] // Keep ignored or implement mocking
+        public void ActiveProfileName_SetToEmpty_RevertsName_DoesNotSave_ShowsError() // New test for empty validation
+        {
+            // Arrange
+            var activeProfile = _viewModel.ActiveFilterProfile;
+            Assert.IsNotNull(activeProfile, "Need an active profile.");
+            string originalName = activeProfile.Name;
+            _mockSettings.ResetSettings();
+
+            // Mock MessageBox or UI interaction service if testing the message itself
+
+            // Act: Simulate setting the Name property to an empty/whitespace value
+            activeProfile.Name = "   "; // Whitespace
+            // The PropertyChanged event triggers HandleActiveProfileNameChange
+
+            // Assert
+            Assert.AreEqual(originalName, activeProfile.Name, "VM Name should be reverted back to the original.");
+            Assert.AreEqual(originalName, activeProfile.Model.Name, "Model Name should remain the original name.");
+            Assert.IsNull(_mockSettings.SavedSettings, "Settings should NOT have been saved due to validation failure.");
+
+            // Assert MessageBox was shown (requires mocking/abstraction)
+            Assert.Inconclusive("Verification of error message requires UI interaction abstraction/mocking.");
+        }
 
         [TestMethod]
         [Ignore("Requires mocking/intercepting MessageBox.Show")] // Mark ignored

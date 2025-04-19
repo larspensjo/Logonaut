@@ -58,16 +58,35 @@ This document outlines the user interaction and data flow for managing named fil
 4.  **(Flow continues as in step 2, points 4-7):** `UpdateActiveTreeRootNodes` updates the `TreeView` (it will be empty or show the default root), `TriggerFilterUpdate` applies the new (likely empty) filter.
 5.  **UI Update:** The `ComboBox` shows the new profile selected. The `TreeView` clears or shows the default root.
 
-### 4. Renaming the Active Profile
+### 4. Renaming the Active Profile (Inline Editing)
 
-1.  **Trigger:** User clicks the "Rename Profile" `Button`. Command's `CanExecute` checks `ActiveFilterProfile != null`.
-2.  **`RenameProfileCommand`:** Executes in `MainViewModel`.
-    *   Gets the current name from `ActiveFilterProfile.Name`.
-    *   Uses `IInputPromptService.ShowInputDialog` to get a new name from the user.
-    *   Validates the new name (not empty, not conflicting with other profile names).
-    *   If valid, sets `ActiveFilterProfile.Name = newName`. (The `FilterProfileViewModel.OnNameChanged` partial method updates the underlying `Model.Name`).
-    *   Calls `SaveCurrentSettings()`.
-3.  **UI Update:** The `ComboBox` display *might* not update automatically if only `DisplayMemberPath` is used. The underlying data is correct, and it will display correctly after re-selection or restart. (More complex binding or collection refreshing could force immediate UI update if required).
+1.  **Trigger:** User clicks the "Rename" `Button` next to the profile selection area. The button's `Command` is bound to `ActiveFilterProfile.BeginRenameCommand`. `CanExecute` checks `ActiveFilterProfile.IsNotEditing`.
+2.  **`FilterProfileViewModel.BeginRenameCommand`:** Executes.
+    *   Stores the current `Name` value in `_originalNameBeforeEdit`.
+    *   Sets `IsEditing = true`. This triggers UI changes via binding.
+3.  **UI Update (Template Change):**
+    *   The `ComboBox` (bound to `ActiveFilterProfile.IsNotEditing`) becomes hidden.
+    *   The `TextBox` (bound to `ActiveFilterProfile.IsEditing`) becomes visible.
+    *   The `TextBox` is automatically focused and its text selected (via `TextBoxHelper.FocusOnVisible`). It is bound two-way to `ActiveFilterProfile.Name`.
+4.  **User Input:** User types a new name into the `TextBox`. The `ActiveFilterProfile.Name` property updates with each keystroke due to `UpdateSourceTrigger=PropertyChanged`.
+5.  **Commit/Cancel:**
+    *   **Commit (Enter Key / Lost Focus):** Input bindings or triggers on the `TextBox` execute `ActiveFilterProfile.EndRenameCommand`.
+    *   **Cancel (Escape Key):** Input bindings on the `TextBox` execute `ActiveFilterProfile.CancelRenameCommand`.
+6.  **`FilterProfileViewModel.EndRenameCommand`:**
+    *   Sets `IsEditing = false`.
+    *   Clears `_originalNameBeforeEdit`.
+    *   The `ActiveFilterProfile.Name` property already holds the latest value from the `TextBox`. The change notification for this property is the key trigger for the next step.
+7.  **`FilterProfileViewModel.CancelRenameCommand`:**
+    *   Reverts `Name` property back to `_originalNameBeforeEdit` (if stored).
+    *   Sets `IsEditing = false`.
+    *   Clears `_originalNameBeforeEdit`.
+8.  **`MainViewModel` Observes Change:** `MainViewModel` (specifically in `OnActiveFilterProfileChanged`) subscribes to `PropertyChanged` events of the *current* `ActiveFilterProfile`. When the `Name` property changes (either from user typing or from `CancelRenameCommand`), the handler `MainViewModel.HandleActiveProfileNameChange` is invoked on the UI thread.
+9.  **`MainViewModel.HandleActiveProfileNameChange`:**
+    *   Retrieves the `newName` from the event source (`ActiveFilterProfile.Name`).
+    *   **Validates:** Checks if `newName` is empty/whitespace or conflicts with other profile names (case-insensitive).
+    *   **If Valid:** Ensures `ActiveFilterProfile.Model.Name` is updated and calls `SaveCurrentSettings()`.
+    *   **If Invalid:** Reverts `ActiveFilterProfile.Name` back to the last valid name stored in `Model.Name` and displays an error message (via `MessageBox` or other UI mechanism).
+10. **UI Update (Template Change):** Setting `IsEditing = false` (in step 6 or 7) causes the `TextBox` to hide and the `ComboBox` to reappear, displaying the final (validated or reverted) name.
 
 ### 5. Deleting the Active Profile
 
