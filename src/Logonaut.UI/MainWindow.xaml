@@ -6,6 +6,7 @@
         xmlns:vm="clr-namespace:Logonaut.UI.ViewModels"
         xmlns:converters="clr-namespace:Logonaut.UI.Converters"
         xmlns:local="clr-namespace:Logonaut.UI"
+        xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
         Title="Logonaut" Height="600" Width="900"
         Closing="Window_Closing"
         Style="{DynamicResource {x:Type Window}}"> <!-- NEON: Apply base window style -->
@@ -107,19 +108,32 @@
                             <TextBox x:Name="ProfileNameTextBox"
                                     DataContext="{Binding ActiveFilterProfile}"
                                     Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}"
-                                    Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                                    LostFocus="ProfileNameTextBox_LostFocus"
-                                    KeyDown="ProfileNameTextBox_KeyDown"
-                                    VerticalAlignment="Center"/>
+                                    Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                    helpers:TextBoxHelper.FocusOnVisible="True"
+                                    VerticalAlignment="Center"
+                                    MinWidth="150">
+                                <TextBox.InputBindings>
+                                    <!-- Commit on Enter -->
+                                    <KeyBinding Key="Enter" Command="{Binding EndRenameCommand}"/>
+                                    <!-- Cancel on Escape -->
+                                    <KeyBinding Key="Escape" Command="{Binding CancelRenameCommand}"/>
+                                </TextBox.InputBindings>
+                                <i:Interaction.Triggers>
+                                    <i:EventTrigger EventName="LostFocus">
+                                        <!-- Check if still editing before committing -->
+                                        <i:InvokeCommandAction Command="{Binding EndRenameCommand}" />
+                                    </i:EventTrigger>
+                                </i:Interaction.Triggers>
+                            </TextBox>
 
                             <!-- ComboBox for selection (shows arrow) -->
                             <ComboBox ItemsSource="{Binding AvailableProfiles}"
-                                SelectedItem="{Binding ActiveFilterProfile}"
-                                DisplayMemberPath="Name"
-                                IsEditable="False"
-                                Visibility="{Binding ActiveFilterProfile.IsEditing, Converter={StaticResource InverseBoolToVis}}"
-                                VerticalAlignment="Center"
-                                Margin="0,0,0,5">
+                                    SelectedItem="{Binding ActiveFilterProfile}"
+                                    DisplayMemberPath="Name"
+                                    IsEditable="False"
+                                    Visibility="{Binding ActiveFilterProfile.IsNotEditing, Converter={StaticResource BoolToVis}, FallbackValue=Visible}"
+                                    VerticalAlignment="Center"
+                                    Margin="0,0,0,5">
                                 <ComboBox.ToolTip>
                                     <ToolTip>Select the active filter profile.</ToolTip>
                                 </ComboBox.ToolTip>
@@ -133,9 +147,9 @@
                                     ToolTip="Create a new filter profile"/>
                             <Button Content="Rename"
                                     Command="{Binding ActiveFilterProfile.BeginRenameCommand}"
+                                    IsEnabled="{Binding ActiveFilterProfile.IsNotEditing}"
                                     Margin="2"
-                                    ToolTip="Rename the selected profile"
-                                    Visibility="{Binding ActiveFilterProfile.IsEditing, Converter={StaticResource InverseBoolToVis}}"/>
+                                    ToolTip="Rename the selected profile"/>
                             <Button Content="Delete"
                                     Command="{Binding DeleteProfileCommand}"
                                     Margin="2"

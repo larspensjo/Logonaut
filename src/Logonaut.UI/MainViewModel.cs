@@ -6,6 +6,8 @@ using System.Linq;
 using System.Reactive.Disposables;
 using System.Text; // Required for StringBuilder
 using System.Text.RegularExpressions;
+using System.Reactive.Linq;
+using System.ComponentModel; // For PropertyChangedEventArgs
 using System.Threading;
 using System.Windows; // For MessageBox, Visibility
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -25,6 +27,7 @@ namespace Logonaut.UI.ViewModels
         string? ShowInputDialog(string title, string prompt, string defaultValue = "");
     }
 
+    // TODO: No longer needed?
     public class InputPromptService : IInputPromptService
     {
         public string? ShowInputDialog(string title, string prompt, string defaultValue = "")
@@ -79,6 +82,11 @@ namespace Logonaut.UI.ViewModels
         // Observable property bound to OverviewRulerMargin.SearchMarkers
         [ObservableProperty]
         private ObservableCollection<SearchResult> _searchMarkers = new();
+
+        // Fields to track the active profile and its subscription
+        private FilterProfileViewModel? _observedActiveProfile;
+        private IDisposable? _activeProfileNameSubscription;
+
 
         #endregion // --- Fields ---
 
@@ -715,15 +723,78 @@ namespace Logonaut.UI.ViewModels
         // when the ActiveFilterProfile property's value changes.
         partial void OnActiveFilterProfileChanged(FilterProfileViewModel? oldValue, FilterProfileViewModel? newValue)
         {
-            // When the active profile changes:
-            // 1. Update the collection bound to the TreeView
-            UpdateActiveTreeRootNodes(newValue);
-            // 2. Clear the node selection within the TreeView
-            SelectedFilterNode = null;
-            // 3. Trigger a re-filter using the new profile's rules.
-            TriggerFilterUpdate();
-            // 4. Save the settings
+            // --- Unsubscribe from the old profile's name changes ---
+            _activeProfileNameSubscription?.Dispose();
+            _observedActiveProfile = null;
+
+            if (newValue != null)
+            {
+                _observedActiveProfile = newValue;
+                // --- Subscribe to the new profile's name changes ---
+                // Explicitly specify the Delegate type AND EventArgs type
+                _activeProfileNameSubscription = Observable.FromEventPattern<PropertyChangedEventHandler, PropertyChangedEventArgs>(
+                        handler => newValue.PropertyChanged += handler, // handler is now correctly typed
+                        handler => newValue.PropertyChanged -= handler)
+                    .Where(pattern => pattern.EventArgs.PropertyName == nameof(FilterProfileViewModel.Name)) // Check EventArgs property name
+                    // Optional: Add debounce/throttle if changes trigger too rapidly
+                    // .Throttle(TimeSpan.FromMilliseconds(200), _uiScheduler)
+                    .ObserveOn(_uiContext) // Ensure handler runs on UI thread
+                    .Subscribe(pattern => HandleActiveProfileNameChange(pattern.Sender as FilterProfileViewModel)); // pattern.Sender is the source
+
+                // Keep existing logic
+                UpdateActiveTreeRootNodes(newValue);
+                SelectedFilterNode = null;
+                TriggerFilterUpdate();
+                // SaveCurrentSettings(); // Save triggered by name change or initial selection
+            }
+            else // No active profile
+            {
+                UpdateActiveTreeRootNodes(null);
+                SelectedFilterNode = null;
+                TriggerFilterUpdate(); // Trigger with default filter
+            }
+            // Save immediately on selection change as well
             SaveCurrentSettings();
+        }
+
+
+        private void HandleActiveProfileNameChange(FilterProfileViewModel? profileVM)
+        {
+            if (profileVM == null || profileVM != ActiveFilterProfile)
+            {
+                // Stale event or profile changed again quickly, ignore.
+                return;
+            }
+
+            string newName = profileVM.Name;
+            string modelName = profileVM.Model.Name; // Get the last known committed name
+
+            // --- Validation ---
+            // Check for empty/whitespace
+            if (string.IsNullOrWhiteSpace(newName))
+            {
+                MessageBox.Show("Profile name cannot be empty.", "Rename Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+                profileVM.Name = modelName; // Revert VM property immediately
+                // No save needed here, as the invalid name wasn't saved.
+                return;
+            }
+
+            // Check for duplicates (case-insensitive, excluding self)
+            if (AvailableProfiles.Any(p => p != profileVM && p.Name.Equals(newName, StringComparison.OrdinalIgnoreCase)))
+            {
+                MessageBox.Show($"A profile named '{newName}' already exists.", "Rename Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+                profileVM.Name = modelName; // Revert VM property immediately
+                // No save needed here.
+                return;
+            }
+
+            // --- Validation Passed ---
+            // Ensure the model is updated (might be redundant if binding worked, but safe)
+            if (profileVM.Model.Name != newName)
+            {
+                profileVM.Model.Name = newName;
+            }
+            SaveCurrentSettings(); // Save the valid new name
         }
 
         /// <summary>
@@ -1024,6 +1095,7 @@ namespace Logonaut.UI.ViewModels
         {
             if (disposing)
             {
+                _activeProfileNameSubscription?.Dispose(); // Dispose the name listener
                 _disposables.Dispose(); // Disposes processor and subscriptions
             }
         }
