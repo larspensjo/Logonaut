@@ -341,7 +341,7 @@
                      </TextBlock.Text>
                 </TextBlock>
 
-                <TextBlock Text="Go To:" VerticalAlignment="Center" Margin="10,0,3,0"/>
+                <TextBlock Text="Go To (CTRL+G):" VerticalAlignment="Center" Margin="10,0,3,0"/>
                 <TextBox x:Name="JumpToLineTextBox"
                          MinWidth="60" VerticalAlignment="Center" VerticalContentAlignment="Center"
                          Text="{Binding TargetOriginalLineNumberInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
