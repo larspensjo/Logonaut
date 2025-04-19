@@ -10,7 +10,14 @@
         xmlns:System="clr-namespace:System;assembly=mscorlib"
         Title="Logonaut" Height="600" Width="900"
         Closing="Window_Closing"
-        Style="{DynamicResource {x:Type Window}}"> <!-- NEON: Apply base window style -->
+        Style="{DynamicResource {x:Type Window}}">
+
+    <Window.InputBindings>
+        <KeyBinding Modifiers="Ctrl"
+                    Key="G"
+                    Command="{x:Static local:MainWindow.GoToLineBoxFocusCommand}"/>
+        <!-- Add other window-level shortcuts here if needed -->
+    </Window.InputBindings>
 
     <Window.Resources>
         <!-- TOOD: These converters overlap with some in Converters.xaml -->
@@ -61,6 +68,13 @@
             </Setter>
         </Style>
     </Window.Resources>
+
+    <Window.CommandBindings>
+        <CommandBinding Command="{x:Static local:MainWindow.GoToLineBoxFocusCommand}"
+                        Executed="GoToLineBoxFocus_Executed"
+                        CanExecute="GoToLineBoxFocus_CanExecute"/>
+        <!-- Add other window-level command bindings here if needed -->
+    </Window.CommandBindings>
 
     <Grid>
         <Grid.RowDefinitions>

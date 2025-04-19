@@ -7,6 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
+using System.Windows.Input; // Required for RoutedUICommand
 using ICSharpCode.AvalonEdit;
 using ICSharpCode.AvalonEdit.Editing;
 using ICSharpCode.AvalonEdit.Rendering;
@@ -18,6 +19,25 @@ namespace Logonaut.UI
     // TODO: Keep track of optional selected line in log window. Use highlighting to show.
     public partial class MainWindow : Window, IDisposable
     {
+        // Define a command for focusing the Go To Line box
+        public static readonly RoutedUICommand GoToLineBoxFocusCommand = new RoutedUICommand(
+            "Focus Go To Line Box", "GoToLineBoxFocusCommand", typeof(MainWindow)
+        );
+
+        // --- Command Handlers for Go To Line Focus ---
+        private void GoToLineBoxFocus_CanExecute(object sender, CanExecuteRoutedEventArgs e)
+        {
+            // We can always try to focus the box if it exists
+            e.CanExecute = true;
+        }
+
+        private void GoToLineBoxFocus_Executed(object sender, ExecutedRoutedEventArgs e)
+        {
+            // Access the TextBox using its x:Name and set focus
+            JumpToLineTextBox.Focus();
+            JumpToLineTextBox.SelectAll(); // Select existing text for easy replacement
+        }
+
         // --- Dark Title Bar Support ---
         private const int DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1 = 19;
         private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
