@@ -6,6 +6,7 @@ using System.Windows.Data; // Required for Binding
 using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Threading;
 using ICSharpCode.AvalonEdit;
 using ICSharpCode.AvalonEdit.Editing;
 using ICSharpCode.AvalonEdit.Rendering;
@@ -115,30 +116,56 @@ namespace Logonaut.UI
         private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
             if (_chunkSeparator != null && (e.PropertyName == nameof(MainViewModel.FilteredLogLines) || e.PropertyName == nameof(MainViewModel.ContextLines)))
-            {
                 _chunkSeparator.UpdateChunks(_viewModel.FilteredLogLines, _viewModel.ContextLines);
-            }
 
             if (_selectedIndexTransformer != null && _logOutputEditor.TextArea?.TextView != null)
             {
                 if (e.PropertyName == nameof(MainViewModel.HighlightedFilteredLineIndex))
                 {
-                    int newLineNumber = _viewModel.HighlightedFilteredLineIndex >= 0
-                                          ? _viewModel.HighlightedFilteredLineIndex + 1 // Convert 0-based index to 1-based line number
-                                          : -1; // Disable if index is -1
+                    int newLineNumberInFilteredDoc = _viewModel.HighlightedFilteredLineIndex >= 0
+                                        ? _viewModel.HighlightedFilteredLineIndex + 1 // Convert 0-based index to 1-based line number
+                                        : -1; // Disable if index is -1
 
                     // Get the brush from the TextView's Tag property (where we stored the resource)
                     var highlightBrush = _logOutputEditor.TextArea.TextView.Tag as Brush;
 
                     // Update the transformer state (this method handles redraw)
-                    _selectedIndexTransformer.UpdateState(newLineNumber, highlightBrush, _logOutputEditor.TextArea.TextView);
+                    _selectedIndexTransformer.UpdateState(newLineNumberInFilteredDoc, highlightBrush, _logOutputEditor.TextArea.TextView);
+
+                    // Trigger Scroll ---
+                    if (newLineNumberInFilteredDoc > 0 && newLineNumberInFilteredDoc <= _logOutputEditor.Document.LineCount)
+                    {
+                        // Use Dispatcher to ensure layout is updated before scrolling
+                        Dispatcher.BeginInvoke(new Action(() =>
+                        {
+                            try
+                            {
+                                _logOutputEditor.ScrollToLine(newLineNumberInFilteredDoc);
+                                // Optional: Center the line slightly better
+                                var textView = _logOutputEditor.TextArea.TextView;
+                                var visualTop = textView.GetVisualTopByDocumentLine(newLineNumberInFilteredDoc);
+                                if (!double.IsNaN(visualTop) && !double.IsInfinity(visualTop))
+                                {
+                                    double centeredOffset = visualTop - (textView.ActualHeight / 3);
+                                    _logOutputEditor.ScrollToVerticalOffset(Math.Max(0, centeredOffset));
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                System.Diagnostics.Debug.WriteLine($"Error scrolling to line {newLineNumberInFilteredDoc}: {ex.Message}");
+                            }
+                        }), DispatcherPriority.Background); // Background priority is usually good here
+                    }
                 }
-                // Optional: Handle theme changes affecting the brush
-                // else if (e.PropertyName == "SomeThemeProperty" || brush resource changed)
-                // {
-                //    var highlightBrush = _logOutputEditor.TextArea.TextView.Tag as Brush;
-                //    _selectedIndexTransformer.UpdateState(_selectedIndexTransformer.HighlightedLineNumber, highlightBrush, _logOutputEditor.TextArea.TextView);
-                // }
+            }
+
+            // Clear Status Message on Successful Jump ---
+            // Optional: Could also be done via a timer in the ViewModel
+            if (e.PropertyName == nameof(MainViewModel.HighlightedOriginalLineNumber) &&
+                !string.IsNullOrEmpty(_viewModel.JumpStatusMessage) &&
+                _viewModel.HighlightedOriginalLineNumber.ToString() == _viewModel.TargetOriginalLineNumberInput)
+            {
+                _viewModel.JumpStatusMessage = string.Empty; // Clear message if jump succeeded
             }
         }
 

@@ -7,6 +7,7 @@
         xmlns:converters="clr-namespace:Logonaut.UI.Converters"
         xmlns:local="clr-namespace:Logonaut.UI"
         xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
+        xmlns:System="clr-namespace:System;assembly=mscorlib"
         Title="Logonaut" Height="600" Width="900"
         Closing="Window_Closing"
         Style="{DynamicResource {x:Type Window}}"> <!-- NEON: Apply base window style -->
@@ -303,6 +304,54 @@
                     <Run Text="/ Filtered:"/>
                     <Run Text="{Binding FilteredLogLinesCount, Mode=OneWay}" FontWeight="Bold"/>
                 </TextBlock>
+
+                <!-- Separator -->
+                <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,0"/>
+
+                <!-- Jump To Line Section -->
+                <TextBlock Text="Line: " VerticalAlignment="Center" Margin="5,0,0,0"/>
+                <TextBlock MinWidth="40" TextAlignment="Right" VerticalAlignment="Center" ToolTip="Original line number of selected line">
+                     <TextBlock.Text>
+                        <Binding Path="HighlightedOriginalLineNumber" Mode="OneWay">
+                            <Binding.TargetNullValue>
+                                <!-- Display '-' if the value is null (though int isn't nullable)
+                                     We need a converter to handle -1 -->
+                                <System:String>-</System:String>
+                            </Binding.TargetNullValue>
+                             <!-- Simple Converter Example (Implement this converter) -->
+                             <!-- <Binding.Converter>
+                                 <localConverters:NegativeToDashConverter/>
+                             </Binding.Converter> -->
+                             <!-- Or using style/trigger (more complex) -->
+                         </Binding>
+                     </TextBlock.Text>
+                </TextBlock>
+
+                <TextBlock Text="Go To:" VerticalAlignment="Center" Margin="10,0,3,0"/>
+                <TextBox x:Name="JumpToLineTextBox"
+                         MinWidth="60" VerticalAlignment="Center" VerticalContentAlignment="Center"
+                         Text="{Binding TargetOriginalLineNumberInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                    <TextBox.InputBindings>
+                        <KeyBinding Key="Enter" Command="{Binding JumpToLineCommand}"/>
+                    </TextBox.InputBindings>
+                     <i:Interaction.Triggers>
+                        <i:EventTrigger EventName="LostFocus">
+                             <!-- Optionally trigger jump on lost focus too -->
+                             <!-- <i:InvokeCommandAction Command="{Binding JumpToLineCommand}"/> -->
+                        </i:EventTrigger>
+                    </i:Interaction.Triggers>
+                     <TextBox.Style>
+                         <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+                             <Style.Triggers>
+                                 <DataTrigger Binding="{Binding IsJumpTargetInvalid}" Value="True">
+                                     <Setter Property="Background" Value="LightCoral"/>
+                                     <!-- Optional: Add animation for flashing -->
+                                 </DataTrigger>
+                             </Style.Triggers>
+                         </Style>
+                     </TextBox.Style>
+                </TextBox>
+                <TextBlock Text="{Binding JumpStatusMessage}" Foreground="OrangeRed" VerticalAlignment="Center" Margin="5,0"/>
             </StackPanel>
         </Border>
     </Grid>

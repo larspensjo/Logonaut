@@ -139,7 +139,78 @@ namespace Logonaut.UI.ViewModels
             }
         }
 
+        // Update original line number whenever the filtered index changes
+        // ALSO: Update the Target Input box when a line is clicked (if not focused)
+        partial void OnHighlightedOriginalLineNumberChanged(int value)
+        {
+            // Only update the input box if the user isn't actively editing it.
+            // We need a way to know if the TextBox has focus. We can approximate
+            // by checking if the new value matches the input, but a dedicated
+            // IsFocused property (updated via triggers in XAML) would be more robust.
+            // For simplicity now, let's just update it. The user might lose input,
+            // which is a minor inconvenience.
+            TargetOriginalLineNumberInput = (value > 0) ? value.ToString() : string.Empty;
+        }
+
         #endregion // --- Highlighted Line State ---
+
+        #region Jump To Line Command
+
+        [RelayCommand(CanExecute = nameof(CanJumpToLine))]
+        private async Task JumpToLine() // Make async for delay
+        {
+            IsJumpTargetInvalid = false; // Reset feedback
+            JumpStatusMessage = string.Empty;
+
+            if (!int.TryParse(TargetOriginalLineNumberInput, out int targetLineNumber) || targetLineNumber <= 0)
+            {
+                JumpStatusMessage = "Invalid line number.";
+                await TriggerInvalidInputFeedback();
+                return;
+            }
+
+            // Find the line in the *current* filtered list
+            var foundLine = FilteredLogLines
+                .Select((line, index) => new { line.OriginalLineNumber, Index = index })
+                .FirstOrDefault(item => item.OriginalLineNumber == targetLineNumber);
+
+            if (foundLine != null)
+            {
+                // Found the line in the filtered view!
+                // Set the highlighted index. This will trigger PropertyChanged.
+                // The MainWindow code-behind will observe this change and trigger the scroll.
+                HighlightedFilteredLineIndex = foundLine.Index;
+                // Optional: Refocus the editor after jump?
+                // RequestEditorFocus?.Invoke(this, EventArgs.Empty);
+            }
+            else
+            {
+                // Line exists in original log but not in filtered view
+                // OR line number is beyond the original log's total lines
+                // (We can't easily distinguish without checking LogDoc count, which might be large)
+                JumpStatusMessage = $"Line {targetLineNumber} not found in filtered view.";
+                await TriggerInvalidInputFeedback();
+                // Do NOT change HighlightedFilteredLineIndex
+            }
+        }
+
+        private bool CanJumpToLine() => !string.IsNullOrWhiteSpace(TargetOriginalLineNumberInput);
+
+        private async Task TriggerInvalidInputFeedback()
+        {
+            IsJumpTargetInvalid = true;
+            // Keep the message for a few seconds
+            await Task.Delay(2500); // Use Task.Delay
+            // Clear message only if it hasn't been changed by a subsequent action
+            if (IsJumpTargetInvalid)
+            {
+                IsJumpTargetInvalid = false;
+                JumpStatusMessage = string.Empty;
+            }
+            // Note: IsJumpTargetInvalid is reset immediately in JumpToLine on next attempt
+        }
+
+        #endregion // Jump To Line Command
 
         #region // --- UI State Management ---
         // Holds observable properties representing the application's state for data binding.
@@ -1030,6 +1101,23 @@ namespace Logonaut.UI.ViewModels
         }
 
         #endregion // --- Orchestration & Updates ---
+        
+        #region Jump To Line State
+
+        // Input string from the TextBox, bound TwoWay
+        [ObservableProperty]
+        [NotifyCanExecuteChangedFor(nameof(JumpToLineCommand))]
+        private string _targetOriginalLineNumberInput = string.Empty;
+
+        // Status message for jump feedback (e.g., "Line not found")
+        [ObservableProperty]
+        private string? _jumpStatusMessage;
+
+        // Used to trigger visual feedback (e.g., flash background red)
+        [ObservableProperty]
+        private bool _isJumpTargetInvalid;
+
+        #endregion
 
         #region // --- Lifecycle Management ---
         public void Dispose()
