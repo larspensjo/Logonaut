@@ -22,7 +22,6 @@ namespace Logonaut.UI.Tests.ViewModels
         private MockSettingsService _mockSettings = null!;
         private MockLogTailerService _mockTailer = null!;
         private MockFileDialogService _mockFileDialog = null!;
-        private MockInputPromptService _mockInputPrompt = null!;
         private MockLogFilterProcessor _mockProcessor = null!;
         private SynchronizationContext _testContext = null!;
 
@@ -62,7 +61,6 @@ namespace Logonaut.UI.Tests.ViewModels
             _mockSettings = new MockSettingsService();
             _mockTailer = new MockLogTailerService();
             _mockFileDialog = new MockFileDialogService();
-            _mockInputPrompt = new MockInputPromptService();
             _mockProcessor = new MockLogFilterProcessor();
             _testContext = new ImmediateSynchronizationContext();
 
@@ -73,7 +71,6 @@ namespace Logonaut.UI.Tests.ViewModels
                 _mockSettings,
                 _mockTailer,
                 _mockFileDialog,
-                _mockInputPrompt,
                 _mockProcessor,
                 _testContext
             );

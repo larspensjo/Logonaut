@@ -92,14 +92,6 @@ namespace Logonaut.TestUtils
         public string? OpenFile(string title, string filter) => ShouldCancel ? null : FileToReturn;
     }
 
-    // --- Input Prompt Service Mock ---
-    public class MockInputPromptService : Logonaut.UI.ViewModels.IInputPromptService
-    {
-        public string? InputToReturn { get; set; } = "Mock Input";
-        public bool ShouldCancel { get; set; } = false;
-        public string? ShowInputDialog(string title, string prompt, string defaultValue = "") => ShouldCancel ? null : InputToReturn;
-    }
-
     // --- Log Filter Processor Mock ---
     public class MockLogFilterProcessor : ILogFilterProcessor
     {

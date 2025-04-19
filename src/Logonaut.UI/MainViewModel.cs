@@ -19,40 +19,6 @@ using Logonaut.UI.Services; // Assuming IInputPromptService will be added here
 
 namespace Logonaut.UI.ViewModels
 {
-    // --- Placeholder/Example Interface and Service for Input Dialog ---
-    // In a real app, implement this using a proper custom dialog window.
-    public interface IInputPromptService
-    {
-        string? ShowInputDialog(string title, string prompt, string defaultValue = "");
-    }
-
-    // TODO: No longer needed?
-    public class InputPromptService : IInputPromptService
-    {
-        public string? ShowInputDialog(string title, string prompt, string defaultValue = "")
-        {
-            // Requires adding a reference to Microsoft.VisualBasic:
-            // try
-            // {
-            //    return Microsoft.VisualBasic.Interaction.InputBox(prompt, title, defaultValue);
-            // }
-            // catch (Exception ex) // Handle potential errors if VB Interaction not available/allowed
-            // {
-            //    Debug.WriteLine($"Error showing InputBox: {ex.Message}");
-            //    MessageBox.Show("Error displaying input prompt. Please implement a custom dialog.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
-            //    return null;
-            // }
-
-            // --- TEMPORARY PLACEHOLDER ---
-            // Replace this with a real dialog implementation
-            var result = MessageBox.Show($"Placeholder for Input Dialog:\n'{prompt}'\n\nClick OK to simulate entering '{defaultValue}_modified'.\nClick Cancel to simulate cancelling.", title, MessageBoxButton.OKCancel);
-            return (result == MessageBoxResult.OK) ? defaultValue + "_modified" : null;
-            // --- END TEMPORARY PLACEHOLDER ---
-        }
-    }
-    // --- End Placeholder ---
-
-
     public partial class MainViewModel : ObservableObject, IDisposable
     {
         #region // --- Fields ---
@@ -61,7 +27,6 @@ namespace Logonaut.UI.ViewModels
         private readonly IFileDialogService _fileDialogService;
         private readonly ISettingsService _settingsService;
         private readonly ILogTailerService _logTailerService;
-        private readonly IInputPromptService _inputPromptService; // For renaming
         private readonly SynchronizationContext _uiContext;
 
         // --- Core Processing Service ---
@@ -105,14 +70,12 @@ namespace Logonaut.UI.ViewModels
             ISettingsService settingsService,
             ILogTailerService logTailerService,
             IFileDialogService? fileDialogService = null,
-            IInputPromptService? inputPromptService = null,
             ILogFilterProcessor? logFilterProcessor = null,
             SynchronizationContext? uiContext = null)
         {
             _settingsService = settingsService;
             _logTailerService = logTailerService;
             _fileDialogService = fileDialogService ?? new FileDialogService();
-            _inputPromptService = inputPromptService ?? new InputPromptService(); // Use default/placeholder
             _uiContext = uiContext ?? SynchronizationContext.Current ??
                          throw new InvalidOperationException("Could not capture or receive a valid SynchronizationContext."); // Store injected or captured
 
