@@ -228,13 +228,11 @@
                 <!-- Toolbar -->
                 <Border Grid.Row="0" Style="{DynamicResource CardPanelStyle}" Padding="5" Margin="5,5,5,0">
                     <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <TextBlock Text="Display Options:" VerticalAlignment="Center" Margin="5,0,10,0"/>
-                         <!-- NEON: Use ToggleSwitchStyle -->
-                        <ToggleButton Content="Line Numbers" IsChecked="{Binding ShowLineNumbers}"
-                                      Style="{DynamicResource ToggleSwitchStyle}"
+                        <CheckBox Content="Line Numbers" IsChecked="{Binding ShowLineNumbers}"
+                                      VerticalAlignment="Center"
                                       ToolTip="Show or hide original line numbers" Margin="3"/>
-                        <ToggleButton Content="Highlight Timestamps" IsChecked="{Binding HighlightTimestamps}"
-                                      Style="{DynamicResource ToggleSwitchStyle}"
+                        <CheckBox Content="Highlight Timestamps" IsChecked="{Binding HighlightTimestamps}"
+                                      VerticalAlignment="Center"
                                       ToolTip="Highlight timestamp patterns in log entries" Margin="3"/>
 
                         <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,2"/>
@@ -312,7 +310,7 @@
         <!-- Stats Bar -->
         <Border Grid.Row="2" Style="{DynamicResource CardPanelStyle}">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock Margin="5,0,15,0" Foreground="{DynamicResource SecondaryTextBrush}">
+                <TextBlock Margin="5,0,15,0" VerticalAlignment="Center" Foreground="{DynamicResource SecondaryTextBrush}">
                     <Run Text="Total Lines:"/>
                     <Run Text="{Binding TotalLogLines, Mode=OneWay}" FontWeight="Bold"/>
                     <Run Text="/ Filtered:"/>
@@ -323,7 +321,7 @@
                 <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,0"/>
 
                 <!-- Jump To Line Section -->
-                <TextBlock Text="Line: " VerticalAlignment="Center" Margin="5,0,0,0"/>
+                <TextBlock Text="Selected line: " VerticalAlignment="Center" Margin="5,0,0,0"/>
                 <TextBlock MinWidth="40" TextAlignment="Right" VerticalAlignment="Center" ToolTip="Original line number of selected line">
                      <TextBlock.Text>
                         <Binding Path="HighlightedOriginalLineNumber" Mode="OneWay">
