@@ -4,12 +4,11 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Linq;
 using System.Reactive.Disposables;
-using System.Text; // Required for StringBuilder
 using System.Text.RegularExpressions;
 using System.Reactive.Linq;
 using System.ComponentModel; // For PropertyChangedEventArgs
-using System.Threading;
 using System.Windows; // For MessageBox, Visibility
+using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Logonaut.Common;
@@ -369,6 +368,19 @@ namespace Logonaut.UI.ViewModels
 
             AvailableProfiles.Add(newProfileVM);
             ActiveFilterProfile = newProfileVM; // Select the new profile (this triggers update via OnChanged)
+
+            // Immediately trigger the rename mode for the new profile VM
+            // Use Dispatcher.InvokeAsync to ensure UI updates (like setting ActiveFilterProfile)
+            // have likely processed before trying to execute the command that relies on it being active.
+            // Using BeginInvoke with Background priority can also work well here.
+            Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Background, () => {
+                if (ActiveFilterProfile == newProfileVM) // Double-check it's still the active one
+                {
+                    newProfileVM.BeginRenameCommand.Execute(null);
+                    // Focus should be handled automatically by TextBoxHelper.FocusOnVisible
+                }
+            });
+            
             SaveCurrentSettings(); // Save changes immediately
         }
 
