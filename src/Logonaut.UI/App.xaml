@@ -6,14 +6,12 @@
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
+                <!-- Merge converters FIRST so they are available to others -->
+                <ResourceDictionary Source="Converters.xaml"/>
                 <!-- Load default theme -->
                 <ResourceDictionary Source="/Logonaut.Theming;component/Themes/DarkTheme.xaml"/>
                 <ResourceDictionary Source="FilterTemplates.xaml"/>
             </ResourceDictionary.MergedDictionaries>
-            <converters:StringToIntConverter x:Key="StringToIntConverter" />
-            <converters:BoolToVisibilityConverter x:Key="BoolToVis"/>
-            <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVis"/>
-            <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" /> <!-- This should also use converters:    -->
         </ResourceDictionary>
     </Application.Resources>
 </Application>

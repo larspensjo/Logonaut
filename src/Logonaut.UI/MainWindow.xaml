@@ -12,8 +12,10 @@
         Style="{DynamicResource {x:Type Window}}"> <!-- NEON: Apply base window style -->
 
     <Window.Resources>
-        <converters:StringToIntConverter x:Key="StringToIntConverter"/>
-        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+        <!-- TOOD: These converters overlap with some in Converters.xaml -->
+        <converters:BoolToVisibilityConverter x:Key="BoolToVis"/>
+        <converters:StringToIntConverter x:Key="StringToIntConverter" />
+
         <Style TargetType="{x:Type avalonEdit:TextEditor}" x:Key="TextEditorWithOverviewRulerStyle">
             <!-- Use DynamicResource for theme properties -->
             <Setter Property="Foreground" Value="{DynamicResource EditorForegroundBrush}" />
@@ -244,7 +246,7 @@
                             Foreground="OrangeRed"
                             FontWeight="Bold"
                             Margin="10,0,5,0"
-                            Visibility="{Binding IsBusyFiltering, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            Visibility="{Binding IsBusyFiltering, Converter={StaticResource BoolToVis}}">
                         <TextBlock.ToolTip>
                             <ToolTip>Applying filters or loading data...</ToolTip>
                         </TextBlock.ToolTip>

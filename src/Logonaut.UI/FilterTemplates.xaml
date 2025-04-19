@@ -7,10 +7,6 @@
                     xmlns:converters="clr-namespace:Logonaut.UI.Converters"
                     xmlns:local="clr-namespace:Logonaut.UI">
 
-    <!-- NEON: Add the Icon Converter -->
-    <converters:FilterTypeToIconConverter x:Key="FilterTypeToIconConverter" />
-    <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
-
     <!-- DataTemplate for FilterViewModel in TreeView -->
     <!-- Explicitly bind to the child collection. This important, or the children will not be displayed -->
     <HierarchicalDataTemplate DataType="{x:Type vm:FilterViewModel}"
@@ -29,7 +25,7 @@
                 <Grid VerticalAlignment="Center">
                     <!-- Display TextBlock -->
                     <TextBlock Text="{Binding DisplayText}"
-                               Visibility="{Binding IsNotEditing, Converter={StaticResource BooleanToVisibilityConverter}}"
+                               Visibility="{Binding IsNotEditing, Converter={StaticResource BoolToVis}}"
                                VerticalAlignment="Center">
                          <!-- NEON: Style moved to Theme files, simplify here -->
                          <i:Interaction.Triggers>
@@ -41,7 +37,7 @@
 
                     <!-- Edit TextBox -->
                     <TextBox Text="{Binding FilterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                             Visibility="{Binding IsEditing, Converter={StaticResource BooleanToVisibilityConverter}}"
+                             Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}"
                              helpers:TextBoxHelper.FocusOnVisible="True"
                              VerticalAlignment="Center"
                              MinWidth="80"> <!-- Ensure textbox has some min width -->

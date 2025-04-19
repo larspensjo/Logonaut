@@ -373,14 +373,14 @@ namespace Logonaut.UI.ViewModels
             // Use Dispatcher.InvokeAsync to ensure UI updates (like setting ActiveFilterProfile)
             // have likely processed before trying to execute the command that relies on it being active.
             // Using BeginInvoke with Background priority can also work well here.
-            Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Background, () => {
+            _uiContext.Post(_ => { // Use the SynchronizationContext instead
                 if (ActiveFilterProfile == newProfileVM) // Double-check it's still the active one
                 {
                     newProfileVM.BeginRenameCommand.Execute(null);
                     // Focus should be handled automatically by TextBoxHelper.FocusOnVisible
                 }
-            });
-            
+            }, null); // Pass null for the state object
+
             SaveCurrentSettings(); // Save changes immediately
         }
 
