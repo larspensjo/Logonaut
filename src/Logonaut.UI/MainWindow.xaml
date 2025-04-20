@@ -16,7 +16,7 @@
         <KeyBinding Modifiers="Ctrl" Key="G" Command="{x:Static local:MainWindow.GoToLineBoxFocusCommand}"/>
         <KeyBinding Modifiers="Ctrl" Key="F" Command="{x:Static local:MainWindow.FocusSearchCommand}"/>
         <KeyBinding Key="F3" Command="{Binding NextSearchCommand}" />
-        <KeyBinding Key="F3" Modifiers="Ctrl" Command="{Binding PreviousSearchCommand}" />
+        <KeyBinding Key="F3" Modifiers="Shift" Command="{Binding PreviousSearchCommand}" />
     </Window.InputBindings>
 
     <Window.Resources>
