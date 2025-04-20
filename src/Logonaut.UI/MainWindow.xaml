@@ -13,12 +13,10 @@
         Style="{DynamicResource {x:Type Window}}">
 
     <Window.InputBindings>
-        <KeyBinding Modifiers="Ctrl"
-                    Key="G"
-                    Command="{x:Static local:MainWindow.GoToLineBoxFocusCommand}"/>
-        <KeyBinding Modifiers="Ctrl"
-                    Key="F"
-                    Command="{x:Static local:MainWindow.FocusSearchCommand}"/>
+        <KeyBinding Modifiers="Ctrl" Key="G" Command="{x:Static local:MainWindow.GoToLineBoxFocusCommand}"/>
+        <KeyBinding Modifiers="Ctrl" Key="F" Command="{x:Static local:MainWindow.FocusSearchCommand}"/>
+        <KeyBinding Key="F3" Command="{Binding NextSearchCommand}" />
+        <KeyBinding Key="F3" Modifiers="Ctrl" Command="{Binding PreviousSearchCommand}" />
     </Window.InputBindings>
 
     <Window.Resources>
@@ -303,7 +301,18 @@
                  <Border Grid.Row="2" Style="{DynamicResource CardPanelStyle}" Padding="5" Margin="5,0,5,5">
                      <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
                         <Button Content="Previous" Command="{Binding PreviousSearchCommand}" Margin="5,0"/>
-                        <TextBox x:Name="SearchTextBox" Width="250" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" Margin="5,0"/>
+                        <TextBox
+                                x:Name="SearchTextBox"
+                                Width="250"
+                                Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                                Margin="5,0">
+                            <TextBox.InputBindings>
+                                <KeyBinding Key="Enter"
+                                            Command="{Binding DataContext.NextSearchCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+                                            <!-- Binding to the command on the Window's DataContext (MainViewModel) -->
+                            </TextBox.InputBindings>
+                        </TextBox>
+
                         <Button Content="Next" Command="{Binding NextSearchCommand}" Margin="5,0" />
                         <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,0"/>
                         <CheckBox Content="Case Sensitive" IsChecked="{Binding IsCaseSensitiveSearch}" VerticalAlignment="Center" Margin="5,0">
