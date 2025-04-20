@@ -171,31 +171,6 @@ namespace Logonaut.UI
 
                     // Update the transformer state (this method handles redraw)
                     _selectedIndexTransformer.UpdateState(newLineNumberInFilteredDoc, highlightBrush, _logOutputEditor.TextArea.TextView);
-
-                    // Trigger Scroll ---
-                    if (newLineNumberInFilteredDoc > 0 && newLineNumberInFilteredDoc <= _logOutputEditor.Document.LineCount)
-                    {
-                        // Use Dispatcher to ensure layout is updated before scrolling
-                        Dispatcher.BeginInvoke(new Action(() =>
-                        {
-                            try
-                            {
-                                _logOutputEditor.ScrollToLine(newLineNumberInFilteredDoc);
-                                // Optional: Center the line slightly better
-                                var textView = _logOutputEditor.TextArea.TextView;
-                                var visualTop = textView.GetVisualTopByDocumentLine(newLineNumberInFilteredDoc);
-                                if (!double.IsNaN(visualTop) && !double.IsInfinity(visualTop))
-                                {
-                                    double centeredOffset = visualTop - (textView.ActualHeight / 3);
-                                    _logOutputEditor.ScrollToVerticalOffset(Math.Max(0, centeredOffset));
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                System.Diagnostics.Debug.WriteLine($"Error scrolling to line {newLineNumberInFilteredDoc}: {ex.Message}");
-                            }
-                        }), DispatcherPriority.Background); // Background priority is usually good here
-                    }
                 }
             }
 
@@ -402,11 +377,6 @@ namespace Logonaut.UI
                     {
                         int clickedDocumentLineNumber = clickedVisualLine.FirstDocumentLine.LineNumber;
                         clickedFilteredLineIndex = clickedDocumentLineNumber - 1;
-
-                        // Update Search based on character offset
-                        // Use the Location from positionInfo as it's already calculated
-                        var characterOffset = _logOutputEditor.Document.GetOffset(positionInfo.Value.Location);
-                        viewModel.UpdateSearchIndexFromCharacterOffset(characterOffset);
                     }
                 }
                 viewModel.HighlightedFilteredLineIndex = clickedFilteredLineIndex;
