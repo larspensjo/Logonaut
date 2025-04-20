@@ -55,7 +55,7 @@ namespace Logonaut.Common
         }
 
         /// <summary>
-        /// Retrieves a subset of lines from the document.
+        /// Retrieves a subset of lines from the document. To facilitate unit testing.
         /// </summary>
         /// <param name="start">Zero-based start index.</param>
         /// <param name="count">Number of lines to retrieve.</param>
