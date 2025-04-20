@@ -38,6 +38,24 @@ namespace Logonaut.UI
             JumpToLineTextBox.SelectAll(); // Select existing text for easy replacement
         }
 
+        // Define a command for focusing the Search box
+        public static readonly RoutedUICommand FocusSearchCommand = new RoutedUICommand(
+            "Focus Search Box", "FocusSearchCommand", typeof(MainWindow)
+        );
+
+        // Command Handlers for Search Focus <<<
+        private void FocusSearch_CanExecute(object sender, CanExecuteRoutedEventArgs e)
+        {
+            // Can always execute if the search box exists (which it should)
+            e.CanExecute = true;
+        }
+
+        private void FocusSearch_Executed(object sender, ExecutedRoutedEventArgs e)
+        {
+            SearchTextBox.Focus();
+            SearchTextBox.SelectAll(); // Select existing text
+        }
+
         // --- Dark Title Bar Support ---
         private const int DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1 = 19;
         private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
