@@ -7,7 +7,6 @@ namespace Logonaut.Common
     /// Represents a log document as a collection of lines.
     /// Supports thread-safe appending and retrieving of log lines.
     /// </summary>
-    // TODO: This class contains various members that are not used in the current implementation.
     public class LogDocument
     {
         private readonly List<string> _lines = new();
