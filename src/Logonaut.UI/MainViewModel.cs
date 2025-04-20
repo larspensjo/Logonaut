@@ -593,14 +593,12 @@ namespace Logonaut.UI.ViewModels
 
         partial void OnSearchTextChanged(string value) => UpdateSearchMatches(); // Trigger search update
 
-        [RelayCommand] private void UpdateFilterSubstrings() // Triggered by TriggerFilterUpdate
+        private void UpdateFilterSubstrings() // Triggered by TriggerFilterUpdate
         {
             var newFilterSubstrings = new ObservableCollection<string>();
             // Traverse the tree of the *currently active* profile
             if (ActiveFilterProfile?.RootFilterViewModel != null)
-            {
                 TraverseFilterTreeForHighlighting(ActiveFilterProfile.RootFilterViewModel, newFilterSubstrings);
-            }
             FilterSubstrings = newFilterSubstrings; // Update the property bound to AvalonEditHelper
         }
 
@@ -663,7 +661,7 @@ namespace Logonaut.UI.ViewModels
                 _logFilterProcessor.UpdateFilterSettings(filterToApply, ContextLines);
 
                 // Update highlighting rules based on the *active* filter tree
-                UpdateFilterSubstringsCommand.Execute(null);
+                UpdateFilterSubstrings();
             }, null);
         }
 
