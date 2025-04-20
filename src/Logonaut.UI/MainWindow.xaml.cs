@@ -302,26 +302,50 @@ namespace Logonaut.UI
 
         private void LogOutputEditor_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
         {
-            System.Diagnostics.Debug.WriteLine($"PreviewKey pressed: {e.Key}, Modifiers: {System.Windows.Input.Keyboard.Modifiers}");
-            if (e.Key == System.Windows.Input.Key.V && 
-                (System.Windows.Input.Keyboard.Modifiers & System.Windows.Input.ModifierKeys.Control) == System.Windows.Input.ModifierKeys.Control &&
-                !(System.Windows.Input.Keyboard.Modifiers.HasFlag(System.Windows.Input.ModifierKeys.Alt)))
+            // Ctrl+V Paste Logic
+            if (e.Key == System.Windows.Input.Key.V && Keyboard.Modifiers == ModifierKeys.Control)
             {
                 if (System.Windows.Clipboard.ContainsText())
                 {
                     string clipboardText = System.Windows.Clipboard.GetText();
                     if (!string.IsNullOrEmpty(clipboardText))
                     {
-                        // Get the MainViewModel
-                        if (DataContext is ViewModels.MainViewModel viewModel)
-                        {
-                            // Load the clipboard text as if it were a file
-                            viewModel.LoadLogFromText(clipboardText);
-                            e.Handled = true;
-                        }
+                        _viewModel.LoadLogFromText(clipboardText);
+                        e.Handled = true;
+                        return; // Handled
                     }
                 }
             }
+
+            // Ctrl+F3 Search Selected Text
+            if (e.Key == System.Windows.Input.Key.F3 && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                // Check if there is selected text in the editor
+                if (_logOutputEditor.SelectionLength > 0 && !string.IsNullOrEmpty(_logOutputEditor.SelectedText))
+                {
+                    string selected = _logOutputEditor.SelectedText;
+
+                    // Update the ViewModel's SearchText
+                    _viewModel.SearchText = selected;
+
+                    // Trigger "Find Next" immediately
+                    // (Setting SearchText likely triggers CanExecuteChanged if needed)
+                    if (_viewModel.NextSearchCommand.CanExecute(null))
+                    {
+                        _viewModel.NextSearchCommand.Execute(null); // The first search will find the string currently selected
+                        _viewModel.NextSearchCommand.Execute(null);
+                    }
+
+                    e.Handled = true; // Mark as handled
+                }
+                // If no text is selected, Ctrl+F3 currently does nothing in the editor.
+                // You could potentially add fallback behavior here if desired.
+                return; // Handled or nothing to do for Ctrl+F3
+            }
+
+            // Note: F3 and Shift+F3 are now handled by the Window.InputBindings
+            //       because they should work globally, not just when the editor has focus.
+            //       If we handled them here, they wouldn't work when e.g. the search box has focus.
         }
 
         private void LogOutputEditor_Loaded(object sender, RoutedEventArgs e)

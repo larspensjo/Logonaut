@@ -742,7 +742,6 @@ namespace Logonaut.UI.ViewModels
             SearchMarkers.Clear(); // Clear ruler markers
             _currentSearchIndex = -1; // Reset search index
             SelectAndScrollToCurrentMatch(); // Clear editor selection
-
         }
 
         // Schedules the LogText update to run after current UI operations.
