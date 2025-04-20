@@ -255,7 +255,7 @@ namespace Logonaut.UI.ViewModels
 
         partial void OnShowLineNumbersChanged(bool value)
         {
-            SaveCurrentSettings(); // Save settings when this property changes
+            SaveCurrentSettingsDelayed();
         }
 
         // Controls whether timestamp highlighting rules are applied in AvalonEdit.
@@ -264,7 +264,7 @@ namespace Logonaut.UI.ViewModels
 
         partial void OnHighlightTimestampsChanged(bool value)
         {
-            SaveCurrentSettings(); // Save settings when this property changes
+            SaveCurrentSettingsDelayed();
         }
 
         // Collection of filter patterns (substrings/regex) for highlighting.
@@ -308,7 +308,11 @@ namespace Logonaut.UI.ViewModels
             IsCaseSensitiveSearch = settings.IsCaseSensitiveSearch;
             // TODO: Apply theme based on settings.LastTheme
             ContextLines = settings.ContextLines; // This will trigger the OnContextLinesChanged event handler, which will save settings
-         }
+        }
+
+        private void SaveCurrentSettingsDelayed() {
+            _uiContext.Post(_ => { SaveCurrentSettings(); }, null);
+        }
 
         private void SaveCurrentSettings()
         {
@@ -398,7 +402,7 @@ namespace Logonaut.UI.ViewModels
                 SelectedFilterNode.BeginEditCommand.Execute(null);
              }
              // TriggerFilterUpdate() is handled by callbacks within AddChildFilter/SetModelRootFilter
-             SaveCurrentSettings();
+            SaveCurrentSettingsDelayed();
         }
 
         // Can add if a profile is active. Adding logic handles where it goes.
@@ -440,7 +444,7 @@ namespace Logonaut.UI.ViewModels
                 parent.RemoveChild(nodeToRemove); // RemoveChild uses callback internally
             }
             // TriggerFilterUpdate(); // Handled by callbacks
-            SaveCurrentSettings();
+            SaveCurrentSettingsDelayed();
         }
         private bool CanRemoveFilterNode() => SelectedFilterNode != null && ActiveFilterProfile != null;
 
@@ -454,7 +458,7 @@ namespace Logonaut.UI.ViewModels
                 else {
                     SelectedFilterNode.EndEditCommand.Execute(null); // EndEdit uses callback, which triggers save
                     // Save settings after editing is complete
-                    SaveCurrentSettings();
+                    SaveCurrentSettingsDelayed();
                 }
             }
         }
@@ -607,7 +611,7 @@ namespace Logonaut.UI.ViewModels
         {
             DecrementContextLinesCommand.NotifyCanExecuteChanged();
             TriggerFilterUpdate(); // Trigger re-filter when context changes
-            SaveCurrentSettings();
+            SaveCurrentSettingsDelayed();
         }
 
         #endregion // --- Command Handling ---
@@ -808,7 +812,7 @@ namespace Logonaut.UI.ViewModels
         partial void OnIsCaseSensitiveSearchChanged(bool value)
         {
             UpdateSearchMatches(); // This already happened due to [NotifyPropertyChangedFor] equivalent
-            SaveCurrentSettings(); // <<< FIX: Save settings >>>
+            SaveCurrentSettingsDelayed();
         }
 
         public void LoadLogFromText(string text)
