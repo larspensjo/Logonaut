@@ -726,11 +726,8 @@ namespace Logonaut.UI.ViewModels
 
         private void ReplaceFilteredLines(IReadOnlyList<FilteredLogLine> newLines)
         {
+            ResetSearchState();
             FilteredLogLines.Clear();
-            _searchMatches.Clear(); // Clear internal match list on replace
-            SearchMarkers.Clear(); // Clear ruler markers
-            _currentSearchIndex = -1; // Reset search index
-            SelectAndScrollToCurrentMatch(); // Clear editor selection
 
             foreach (var line in newLines)
             {
@@ -738,6 +735,14 @@ namespace Logonaut.UI.ViewModels
             }
             OnPropertyChanged(nameof(FilteredLogLinesCount));
             // ScheduleLogTextUpdate(); // Schedule is called by ApplyFilteredUpdate now
+        }
+
+        private void ResetSearchState() {
+            _searchMatches.Clear(); // Clear internal match list on replace
+            SearchMarkers.Clear(); // Clear ruler markers
+            _currentSearchIndex = -1; // Reset search index
+            SelectAndScrollToCurrentMatch(); // Clear editor selection
+
         }
 
         // Schedules the LogText update to run after current UI operations.
@@ -784,11 +789,7 @@ namespace Logonaut.UI.ViewModels
              string textToSearch = LogText; // Use local copy
 
              // Clear previous results
-             // TODO: Some code here is duplicated with ReplaceFilteredLines. Consider refactoring.
-             _searchMatches.Clear();
-             SearchMarkers.Clear(); // Clear the collection for the ruler
-             _currentSearchIndex = -1;
-             SelectAndScrollToCurrentMatch(); // Clear selection in editor
+             ResetSearchState();
 
              if (string.IsNullOrEmpty(currentSearchTerm) || string.IsNullOrEmpty(textToSearch))
              {
