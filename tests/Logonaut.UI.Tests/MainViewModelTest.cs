@@ -1,8 +1,3 @@
-using Microsoft.VisualStudio.TestTools.UnitTesting;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
 using System.Windows; // For DispatcherPriority, Size, Rect
 using System.Windows.Controls; // For TreeView
 using System.Windows.Media; // For VisualTreeHelper
@@ -62,6 +57,7 @@ namespace Logonaut.UI.Tests.ViewModels
             _mockTailer = new MockLogTailerService();
             _mockFileDialog = new MockFileDialogService();
             _mockProcessor = new MockLogFilterProcessor();
+            // Use ImmediateSynchronizationContext for predictable Post behavior
             _testContext = new ImmediateSynchronizationContext();
 
             // Use default settings initially unless a test overrides
@@ -137,7 +133,57 @@ namespace Logonaut.UI.Tests.ViewModels
              return foundChild;
         }
 
-        #region Initialization Tests (NEW)
+        #region Initialization and Persistence Tests
+
+        [TestMethod] public void Constructor_LoadsAutoScrollSetting_True()
+        {
+            // Arrange
+            var settings = MockSettingsService.CreateDefaultTestSettings();
+            settings.AutoScrollToTail = true;
+            _mockSettings.SettingsToReturn = settings;
+
+            // Act: Recreate ViewModel with specific settings
+            _viewModel = new MainViewModel(_mockSettings, _mockTailer, _mockFileDialog, _mockProcessor, _testContext);
+
+            // Assert
+            Assert.IsTrue(_viewModel.IsAutoScrollEnabled);
+        }
+    
+        [TestMethod] public void Constructor_LoadsAutoScrollSetting_False()
+        {
+            // Arrange
+            var settings = MockSettingsService.CreateDefaultTestSettings();
+            settings.AutoScrollToTail = false;
+            _mockSettings.SettingsToReturn = settings;
+
+            // Act: Recreate ViewModel with specific settings
+            _viewModel = new MainViewModel(_mockSettings, _mockTailer, _mockFileDialog, _mockProcessor, _testContext);
+
+            // Assert
+            Assert.IsFalse(_viewModel.IsAutoScrollEnabled);
+        }
+
+        [TestMethod] public void IsAutoScrollEnabled_Set_SavesSettings()
+        {
+            // Arrange
+            Assert.IsTrue(_viewModel.IsAutoScrollEnabled, "Initial state should be true"); // Based on default settings
+            _mockSettings.ResetSettings(); // Clear saved state
+
+            // Act
+            _viewModel.IsAutoScrollEnabled = false;
+
+            // Assert
+            Assert.IsNotNull(_mockSettings.SavedSettings, "Settings should have been saved.");
+            Assert.IsFalse(_mockSettings.SavedSettings?.AutoScrollToTail, "Saved setting should be false.");
+            _mockSettings.ResetSettings();
+
+            // Act
+            _viewModel.IsAutoScrollEnabled = true;
+
+            // Assert
+            Assert.IsNotNull(_mockSettings.SavedSettings, "Settings should have been saved again.");
+            Assert.IsTrue(_mockSettings.SavedSettings?.AutoScrollToTail, "Saved setting should be true.");
+        }
 
         [TestMethod]
         public void Constructor_LoadsSettingsAndInitializesDefaultProfile()
@@ -970,7 +1016,67 @@ namespace Logonaut.UI.Tests.ViewModels
              StringAssert.Contains(_viewModel.SearchStatusText, "Match 1 of 2");
         }
 
-
         #endregion
+
+        #region Auto-Scroll Event Triggering Tests
+
+        [TestMethod]
+        public void RequestScrollToEnd_Fires_When_AppendUpdate_And_AutoScrollEnabled()
+        {
+            // Arrange
+            _viewModel.IsAutoScrollEnabled = true;
+            bool eventFired = false;
+            _viewModel.RequestScrollToEnd += (s, e) => eventFired = true;
+            var appendUpdate = new FilteredUpdate(UpdateType.Append, new List<FilteredLogLine> { new FilteredLogLine(1, "Appended") });
+
+            // Act
+            _mockProcessor.SimulateFilteredUpdate(appendUpdate);
+            // Simulate the Post callback running using the immediate context
+            _testContext.Send(_ => { }, null); // Ensure the Post callback from ScheduleLogTextUpdate executes
+
+            // Assert
+            Assert.IsTrue(eventFired, "RequestScrollToEnd event should have fired.");
+        }
+
+        [TestMethod]
+        public void RequestScrollToEnd_DoesNotFire_When_AppendUpdate_And_AutoScrollDisabled()
+        {
+            // Arrange
+            _viewModel.IsAutoScrollEnabled = false; // Disable auto-scroll
+            bool eventFired = false;
+            _viewModel.RequestScrollToEnd += (s, e) => eventFired = true;
+            var appendUpdate = new FilteredUpdate(UpdateType.Append, new List<FilteredLogLine> { new FilteredLogLine(1, "Appended") });
+
+            // Act
+            _mockProcessor.SimulateFilteredUpdate(appendUpdate);
+            _testContext.Send(_ => { }, null); // Ensure the Post callback from ScheduleLogTextUpdate executes
+
+            // Assert
+            Assert.IsFalse(eventFired, "RequestScrollToEnd event should NOT have fired.");
+        }
+
+        [TestMethod]
+        public void RequestScrollToEnd_DoesNotFire_When_ReplaceUpdate_And_AutoScrollEnabled()
+        {
+            // Arrange
+            _viewModel.IsAutoScrollEnabled = true; // Auto-scroll is enabled
+            bool eventFired = false;
+            _viewModel.RequestScrollToEnd += (s, e) =>
+            {
+                eventFired = true;
+            };
+            // Add some initial data to be replaced
+            _viewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Initial Line"));
+            var replaceUpdate = new FilteredUpdate(UpdateType.Replace, new List<FilteredLogLine> { new FilteredLogLine(10, "Replaced") });
+
+            // Act
+            _mockProcessor.SimulateFilteredUpdate(replaceUpdate);
+            _testContext.Send(_ => { }, null); // Ensure the Post callback from ScheduleLogTextUpdate executes
+
+            // Assert
+            Assert.IsFalse(eventFired, "RequestScrollToEnd event should NOT fire on Replace updates.");
+        }
+
+        #endregion // Auto-Scroll Event Triggering Tests
     }
 }

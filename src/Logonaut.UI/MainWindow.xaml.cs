@@ -99,8 +99,9 @@ namespace Logonaut.UI
             DataContext = viewModel;
             _viewModel = viewModel;
 
-            // Subscribe to model updates to update chunk separators
-            _viewModel.PropertyChanged += ViewModel_PropertyChanged;
+            
+            _viewModel.PropertyChanged += ViewModel_PropertyChanged; // Subscribe to model updates to update chunk separators
+            _viewModel.RequestScrollToEnd += ViewModel_RequestScrollToEnd;
 
             // Apply dark title bar if supported
             if (IsWindows10OrGreater())
@@ -140,11 +141,12 @@ namespace Logonaut.UI
                 // Ensure editor unload cleanup runs if window closes before unload fires
                 LogOutputEditor_Unloaded(null, null);
 
-                // Dispose ViewModel
-                _viewModel?.Cleanup(); // Use existing cleanup which includes Dispose
-
-                if (_viewModel != null)
+                if (_viewModel != null) {
                     _viewModel.PropertyChanged -= ViewModel_PropertyChanged;
+                    _viewModel.RequestScrollToEnd -= ViewModel_RequestScrollToEnd;
+                    // Dispose ViewModel
+                    _viewModel.Cleanup(); // Use existing cleanup which includes Dispose
+                }
 
                 _disposed = true;
                 GC.SuppressFinalize(this); // If you add a finalizer
@@ -205,6 +207,16 @@ namespace Logonaut.UI
             {
                 _viewModel.JumpStatusMessage = string.Empty; // Clear message if jump succeeded
             }
+        }
+
+        private void ViewModel_RequestScrollToEnd(object? sender, EventArgs e)
+        {
+            // Ensure this runs on the UI thread if there's any doubt,
+            // but it should be called from the VM's Post callback.
+            // Dispatcher.BeginInvoke(new Action(() =>
+            // {
+                 _logOutputEditor?.ScrollToEnd();
+            // }), DispatcherPriority.Background); // Background is usually safe
         }
 
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)

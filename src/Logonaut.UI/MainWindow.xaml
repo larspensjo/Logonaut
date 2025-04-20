@@ -238,6 +238,9 @@
                         <CheckBox Content="Highlight Timestamps" IsChecked="{Binding HighlightTimestamps}"
                                       VerticalAlignment="Center"
                                       ToolTip="Highlight timestamp patterns in log entries" Margin="3"/>
+                        <CheckBox Content="Auto Scroll" IsChecked="{Binding IsAutoScrollEnabled}"
+                                      VerticalAlignment="Center"
+                                      ToolTip="Automatically scroll to the end when new lines are added" Margin="3,3,0,3"/>
 
                         <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,2"/>
 

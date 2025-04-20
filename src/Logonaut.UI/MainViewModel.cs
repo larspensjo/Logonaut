@@ -38,8 +38,11 @@ namespace Logonaut.UI.ViewModels
         private int _currentSearchIndex = -1;
 
         // Observable property bound to OverviewRulerMargin.SearchMarkers
-        [ObservableProperty]
-        private ObservableCollection<SearchResult> _searchMarkers = new();
+        [ObservableProperty] private ObservableCollection<SearchResult> _searchMarkers = new();
+
+        [ObservableProperty] private bool _isAutoScrollEnabled = true;
+
+        public event EventHandler? RequestScrollToEnd; // Triggered when Auto Scroll is enabled
 
         #endregion // --- Fields ---
 
@@ -204,6 +207,12 @@ namespace Logonaut.UI.ViewModels
         #region // --- UI State Management ---
         // Holds observable properties representing the application's state for data binding.
 
+        // Save setting when property changes
+        partial void OnIsAutoScrollEnabledChanged(bool value)
+        {
+            SaveCurrentSettingsDelayed();
+        }
+
         public ThemeViewModel Theme { get; }
 
         // Central store for all original log lines, passed to processor but owned here.
@@ -302,12 +311,13 @@ namespace Logonaut.UI.ViewModels
             settings = _settingsService.LoadSettings();
 
             // Apply loaded settings to ViewModel properties
+            // TODO: Apply theme based on settings.LastTheme
             LoadFilterProfiles(settings);
             ShowLineNumbers = settings.ShowLineNumbers;
             HighlightTimestamps = settings.HighlightTimestamps;
             IsCaseSensitiveSearch = settings.IsCaseSensitiveSearch;
-            // TODO: Apply theme based on settings.LastTheme
-            ContextLines = settings.ContextLines; // This will trigger the OnContextLinesChanged event handler, which will save settings
+            ContextLines = settings.ContextLines;
+            IsAutoScrollEnabled = settings.AutoScrollToTail;
         }
 
         private void SaveCurrentSettingsDelayed() {
@@ -323,6 +333,7 @@ namespace Logonaut.UI.ViewModels
                 ShowLineNumbers = this.ShowLineNumbers,
                 HighlightTimestamps = this.HighlightTimestamps,
                 IsCaseSensitiveSearch = this.IsCaseSensitiveSearch,
+                AutoScrollToTail = this.IsAutoScrollEnabled,
                 // TODO: Add theme, window state etc.
             };
             SaveFilterProfiles(settingsToSave);
@@ -476,7 +487,7 @@ namespace Logonaut.UI.ViewModels
             _logFilterProcessor.Reset(); // Reset processor state (clears doc, etc.)
             FilteredLogLines.Clear();    // Clear UI collection immediately
             OnPropertyChanged(nameof(FilteredLogLinesCount)); // Notify count changed
-            ScheduleLogTextUpdate();     // Update AvalonEdit to empty
+            ScheduleLogTextUpdate(UpdateType.Replace);     // Update AvalonEdit to empty
             CurrentLogFilePath = selectedFile; // Update state
 
             try
@@ -656,7 +667,6 @@ namespace Logonaut.UI.ViewModels
             }, null);
         }
 
-
         // Called by the processor subscription to apply incoming updates.
         private void ApplyFilteredUpdate(FilteredUpdate update)
         {
@@ -674,10 +684,11 @@ namespace Logonaut.UI.ViewModels
             {
                 AddFilteredLines(update.Lines); // Updates UI State (FilteredLogLines)
                 // Don't change IsBusyFiltering for Appends
+                // Auto-scroll check will happen *after* LogText is updated by ScheduleLogTextUpdate
             }
 
             // Schedule the LogText update AFTER updating FilteredLogLines
-            ScheduleLogTextUpdate(); // This now also triggers UpdateSearchMatches
+            ScheduleLogTextUpdate(update.Type); // This now also triggers UpdateSearchMatches
 
             // Turn off busy indicator only after a full Replace operation completes
             if (wasReplace)
@@ -732,7 +743,7 @@ namespace Logonaut.UI.ViewModels
         }
 
         // Schedules the LogText update to run after current UI operations.
-        private void ScheduleLogTextUpdate()
+        private void ScheduleLogTextUpdate(UpdateType triggeringUpdateType)
         {
             lock (_logTextUpdateLock)
             {
@@ -743,6 +754,11 @@ namespace Logonaut.UI.ViewModels
                     {
                         lock (_logTextUpdateLock) { _logTextUpdateScheduled = false; }
                         UpdateLogTextInternal(); // Execute the update
+                        if (IsAutoScrollEnabled && triggeringUpdateType == UpdateType.Append)
+                        {
+                             // Raise event for the view to handle scrolling
+                            RequestScrollToEnd?.Invoke(this, EventArgs.Empty);
+                        }
                     }, null);
                 }
             }

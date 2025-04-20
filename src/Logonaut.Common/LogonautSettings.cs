@@ -25,6 +25,7 @@ namespace Logonaut.Common
         public bool ShowLineNumbers { get; set; } = true;
         public bool HighlightTimestamps { get; set; } = true;
         public bool IsCaseSensitiveSearch { get; set; } = false;
+        public bool AutoScrollToTail { get; set; } = true;
 
         public LogonautSettings() { }
     }

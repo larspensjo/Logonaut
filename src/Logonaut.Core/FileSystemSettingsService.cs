@@ -92,7 +92,8 @@ namespace Logonaut.Core // Or Infrastructure namespace
                 ContextLines = 0,
                 ShowLineNumbers = true,
                 HighlightTimestamps = true,
-                IsCaseSensitiveSearch = false
+                IsCaseSensitiveSearch = false,
+                AutoScrollToTail = true
             };
             return settings;
         }
