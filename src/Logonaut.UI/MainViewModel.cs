@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Reactive.Disposables;
 using System.Text.RegularExpressions;
 using System.Reactive.Linq;
+using System.Reactive.Concurrency;
 using System.Windows; // For MessageBox, Visibility
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -84,7 +85,10 @@ namespace Logonaut.UI.ViewModels
                     ex => HandleProcessorError("Log Processing Error", ex)
                 );
 
+            var samplingScheduler = Scheduler.Default;
             _totalLinesSubscription = _logFilterProcessor.TotalLinesProcessed
+                // Sample the stream, emitting the latest value every 200 milliseconds. Without a throttle, the UI thread can freeze up.
+                .Sample(TimeSpan.FromMilliseconds(200), samplingScheduler)
                 .ObserveOn(_uiContext) // Ensure handler runs on UI thread
                 .Subscribe(
                     count => ProcessTotalLinesUpdate(count), // Call dedicated method
@@ -206,26 +210,7 @@ namespace Logonaut.UI.ViewModels
 
         private void ProcessTotalLinesUpdate(long count)
         {
-            TotalLogLines = count; // Update the UI property
-
-            // Check if this update signals the end of the initial load's "busy" period.
-            // We consider the load "done" for busy indicator purposes when the processor
-            // starts reporting lines (count > 0) *or* when the Reset-triggered
-            // filter pass completes (indicated by IsPerformingInitialLoad becoming false
-            // in ApplyFilteredUpdate after the first Replace).
-            // We need to handle the case where the file is empty (count remains 0).
-            // Let ApplyFilteredUpdate handle turning off the flag for filter *changes*.
-            // Let *this* handler turn off the flag *only* after initial load *if* lines > 0.
-            // The IsPerformingInitialLoad flag in ApplyFilteredUpdate handles the empty file case.
-
-            // Simpler approach: Turn off busy when TotalLines FIRST becomes > 0 after load starts.
-            if (IsPerformingInitialLoad && IsBusyFiltering && count > 0)
-            {
-                // We've started processing actual lines from the file load.
-                // Turn off the busy indicator now.
-                IsPerformingInitialLoad = false; // Mark initial load phase as done for this purpose
-                IsBusyFiltering = false;
-            }
+             TotalLogLines = count;
         }
 
         // Save setting when property changes
@@ -510,6 +495,7 @@ namespace Logonaut.UI.ViewModels
         {
             string? selectedFile = _fileDialogService.OpenFile("Select a log file", "Log Files|*.log;*.txt|All Files|*.*");
             if (string.IsNullOrEmpty(selectedFile)) return;
+            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} OpenLogFile: '{selectedFile}'");
 
             IsBusyFiltering = true;
             IsPerformingInitialLoad = true;
@@ -759,26 +745,23 @@ namespace Logonaut.UI.ViewModels
                 _uiContext.Post(_ => { HighlightedFilteredLineIndex = -1; }, null);
             }
 
-            // --- Turn off Busy Indicator ---
-            // Only turn off if this Replace was triggered by a user filter change
-            // (i.e., not during the initial file load sequence).
-            if (!IsPerformingInitialLoad && IsBusyFiltering)
-            {
-                _uiContext.Post(_ => { IsBusyFiltering = false; }, null);
-            }
-
-            // If this Replace *was* part of the initial load (from Reset),
-            // mark the initial load filter pass as complete. The busy indicator
-            // remains ON until explicitly turned off elsewhere (e.g., next filter change).
+            // Check if this Replace corresponds to the completion of the initial load's filtering pass.
             if (IsPerformingInitialLoad)
             {
-                 // If TotalLines is still 0 after this Replace (meaning empty file),
-                 // turn off the indicator now. Otherwise, ProcessTotalLinesUpdate will handle it.
-                 if (TotalLogLines == 0)
-                 {
-                      _uiContext.Post(_ => { IsBusyFiltering = false; }, null);
-                 }
-                 IsPerformingInitialLoad = false; // Mark filter pass as done
+                // Yes, this is the first Replace after initiating the load.
+                // Mark the initial load process as complete *and* turn off the busy indicator.
+                _uiContext.Post(_ =>
+                {
+                    IsPerformingInitialLoad = false;
+                    IsBusyFiltering = false;
+                    Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} ---> Initial Load UI Update Complete. IsPerformingInitialLoad=false, IsBusyFiltering=false (Filtered results displayed)");
+                }, null);
+            }
+            // If this Replace was triggered by a *subsequent* filter change (not initial load),
+            // just turn off the busy indicator that was set when the change was triggered.
+            else if (IsBusyFiltering) // Check IsBusyFiltering specifically
+            {
+                _uiContext.Post(_ => { IsBusyFiltering = false; }, null);
             }
         }
 

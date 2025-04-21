@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 
 namespace Logonaut.Common
 {
@@ -78,8 +79,10 @@ namespace Logonaut.Common
         /// </summary>
         public IReadOnlyList<string> ToList()
         {
+            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} Logdocument.ToList() before lock");
             lock (_lock)
             {
+                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} Logdocument.ToList() inside lock");
                 return _lines.AsReadOnly();
             }
         }

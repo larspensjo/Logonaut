@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Reactive.Concurrency;
 using System.Reactive.Disposables;
@@ -115,7 +116,10 @@ namespace Logonaut.Core
         private IReadOnlyList<FilteredLogLine> ApplyFullFilter(IFilter filter, int contextLines)
         {
             // Apply filter to the entire document snapshot
-            return FilterEngine.ApplyFilters(_logDocument, filter, contextLines);
+            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} LogFitlerProcessor.ApplyFullFilter() before ApplyFilters");
+            var tmp = FilterEngine.ApplyFilters(_logDocument, filter, contextLines);
+            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} LogFitlerProcessor.ApplyFullFilter() after ApplyFilters");
+            return tmp;
         }
 
         public void UpdateFilterSettings(IFilter newFilter, int contextLines)

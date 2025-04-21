@@ -1,4 +1,5 @@
 using System.Reactive.Subjects;
+using System.Diagnostics;
 
 // This implementation uses a combination of FileSystemWatcher and asynchronous file reading to monitor a file for changes,
 // and it leverages Reactive Extensions (Rx.NET) to expose an observable stream of new log lines.
@@ -91,6 +92,11 @@ namespace Logonaut.LogTailing
                             {
                                 _logLinesSubject.OnNext(line);
                             }
+                        }
+
+                        if (stream.Position > _lastPosition) // Only log if reading actually happened
+                        {
+                            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} ---> LogTailer initial read pass finished. Read up to position {stream.Position}.");
                         }
 
                         // Update the last read position.
