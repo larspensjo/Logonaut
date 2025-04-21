@@ -330,6 +330,7 @@ namespace Logonaut.UI
 
                     // Trigger "Find Next" immediately
                     // (Setting SearchText likely triggers CanExecuteChanged if needed)
+                    // TODO: Should start search from current position, not from the beginning.
                     if (_viewModel.NextSearchCommand.CanExecute(null))
                     {
                         _viewModel.NextSearchCommand.Execute(null); // The first search will find the string currently selected

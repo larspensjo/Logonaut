@@ -84,20 +84,17 @@ namespace Logonaut.UI.ViewModels
                     ex => HandleProcessorError("Log Processing Error", ex)
                 );
 
-            // Subscribe to TotalLinesProcessed >>>
-            var totalLinesSubscription = _logFilterProcessor.TotalLinesProcessed
-                // No need to ObserveOn UI context if processor ensures UI thread updates,
-                // but safer to explicitly marshal here just in case.
-                // .ObserveOn(_uiContext) // Optional: Use if processor might emit on background
+            _totalLinesSubscription = _logFilterProcessor.TotalLinesProcessed
+                .ObserveOn(_uiContext) // Ensure handler runs on UI thread
                 .Subscribe(
-                    count => _uiContext.Post(_ => TotalLogLines = count, null), // Update property on UI thread
+                    count => ProcessTotalLinesUpdate(count), // Call dedicated method
                     ex => HandleProcessorError("Total Lines Error", ex)
                 );
 
             // --- Lifecycle Management ---
             _disposables.Add(_logFilterProcessor);
             _disposables.Add(filterSubscription);
-            _disposables.Add(totalLinesSubscription);
+            _disposables.Add(_totalLinesSubscription);
 
             // --- Initial State Setup ---
             Theme = new ThemeViewModel(); // Part of UI State
@@ -207,6 +204,30 @@ namespace Logonaut.UI.ViewModels
         #region // --- UI State Management ---
         // Holds observable properties representing the application's state for data binding.
 
+        private void ProcessTotalLinesUpdate(long count)
+        {
+            TotalLogLines = count; // Update the UI property
+
+            // Check if this update signals the end of the initial load's "busy" period.
+            // We consider the load "done" for busy indicator purposes when the processor
+            // starts reporting lines (count > 0) *or* when the Reset-triggered
+            // filter pass completes (indicated by IsPerformingInitialLoad becoming false
+            // in ApplyFilteredUpdate after the first Replace).
+            // We need to handle the case where the file is empty (count remains 0).
+            // Let ApplyFilteredUpdate handle turning off the flag for filter *changes*.
+            // Let *this* handler turn off the flag *only* after initial load *if* lines > 0.
+            // The IsPerformingInitialLoad flag in ApplyFilteredUpdate handles the empty file case.
+
+            // Simpler approach: Turn off busy when TotalLines FIRST becomes > 0 after load starts.
+            if (IsPerformingInitialLoad && IsBusyFiltering && count > 0)
+            {
+                // We've started processing actual lines from the file load.
+                // Turn off the busy indicator now.
+                IsPerformingInitialLoad = false; // Mark initial load phase as done for this purpose
+                IsBusyFiltering = false;
+            }
+        }
+
         // Save setting when property changes
         partial void OnIsAutoScrollEnabledChanged(bool value)
         {
@@ -268,8 +289,7 @@ namespace Logonaut.UI.ViewModels
         }
 
         // Controls whether timestamp highlighting rules are applied in AvalonEdit.
-        [ObservableProperty]
-        private bool _highlightTimestamps = true;
+        [ObservableProperty] private bool _highlightTimestamps = true;
 
         partial void OnHighlightTimestampsChanged(bool value)
         {
@@ -278,11 +298,19 @@ namespace Logonaut.UI.ViewModels
 
         // Collection of filter patterns (substrings/regex) for highlighting.
         // Note: This state is derived by traversing the *active* FilterProfile.
-        [ObservableProperty]
-        private ObservableCollection<string> _filterSubstrings = new();
+        [ObservableProperty] private ObservableCollection<string> _filterSubstrings = new();
 
         [ObservableProperty]
-        private bool _isBusyFiltering = false;
+        [NotifyPropertyChangedFor(nameof(IsProcessingIndicatorVisible))] // Notify combined property
+        private bool _isBusyFiltering = false;         // The MainViewModel object is in a busy state.
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(IsProcessingIndicatorVisible))] // Notify combined property
+        private bool _isPerformingInitialLoad = false; // Flag to track initial file load state
+
+        public bool IsProcessingIndicatorVisible => IsBusyFiltering || IsPerformingInitialLoad;
+
+        private IDisposable? _totalLinesSubscription;
 
         // Controls whether search is case sensitive
         [ObservableProperty]
@@ -478,27 +506,28 @@ namespace Logonaut.UI.ViewModels
         // === Other Commands (File, Search, Context Lines) ===
         // Ensure they interact correctly with the Active Profile concept if needed
 
-        [RelayCommand]
-        private void OpenLogFile()
+        [RelayCommand] private void OpenLogFile()
         {
             string? selectedFile = _fileDialogService.OpenFile("Select a log file", "Log Files|*.log;*.txt|All Files|*.*");
             if (string.IsNullOrEmpty(selectedFile)) return;
 
-            _logFilterProcessor.Reset(); // Reset processor state (clears doc, etc.)
-            FilteredLogLines.Clear();    // Clear UI collection immediately
-            OnPropertyChanged(nameof(FilteredLogLinesCount)); // Notify count changed
-            ScheduleLogTextUpdate(UpdateType.Replace);     // Update AvalonEdit to empty
-            CurrentLogFilePath = selectedFile; // Update state
+            IsBusyFiltering = true;
+            IsPerformingInitialLoad = true;
 
             try
             {
-                _logTailerService.ChangeFile(selectedFile);
+                _logFilterProcessor.Reset(); // Resets processor, queues debounced filter
+                FilteredLogLines.Clear();
+                OnPropertyChanged(nameof(FilteredLogLinesCount));
+                ScheduleLogTextUpdate(UpdateType.Replace); // Clear editor text
+                CurrentLogFilePath = selectedFile;
 
-                TriggerFilterUpdate(); // TODO: Not sure this is needed.
+                _logTailerService.ChangeFile(selectedFile); // Starts tailer
             }
             catch (Exception ex)
             {
-                IsBusyFiltering = false; // Ensure busy indicator off on error
+                IsBusyFiltering = false; // Reset on error
+                IsPerformingInitialLoad = false; // Reset on error
                 MessageBox.Show($"Error opening or monitoring log file '{selectedFile}':\n{ex.Message}", "File Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 CurrentLogFilePath = null; // Reset state
                 _logFilterProcessor.Reset(); // Ensure processor is reset on error too
@@ -650,8 +679,8 @@ namespace Logonaut.UI.ViewModels
         // TODO: Whenever the filter settings are changed, we should ensure the line currently selected in the editor is still visible. Preferably at the same window position.
         private void TriggerFilterUpdate()
         {
-            // Post the work to the UI thread's dispatcher queue. This allows the
-            // IsBusyFiltering = true change to render before potentially blocking work.
+            IsBusyFiltering = true; // Set IsBusyFiltering = true; before starting to work.
+            IsPerformingInitialLoad = false; // Explicit filter changes are not initial loads
             _uiContext.Post(_ =>
             {
                 // Get the filter model from the *currently selected* profile VM
@@ -665,51 +694,91 @@ namespace Logonaut.UI.ViewModels
             }, null);
         }
 
-        // Called by the processor subscription to apply incoming updates.
+        /// <summary>
+        /// Orchestrates the presentation of filtered log data, fulfilling Logonaut's core purpose.
+        /// This method acts as the crucial bridge between the results generated by the background
+        /// `LogFilterProcessor` and the user-facing UI state managed by this ViewModel.
+        /// It receives processed `FilteredUpdate`s and is responsible for:
+        ///   1. Updating the primary `FilteredLogLines` collection, which dictates the content
+        ///      shown in the log viewer and the original line numbers.
+        ///   2. Scheduling the generation of the `LogText` property bound to the AvalonEdit control,
+        ///      ensuring the editor displays the correct filtered text.
+        ///   3. Managing the application's busy indicator (`IsBusyFiltering`) to provide visual
+        ///      feedback during potentially long `Replace` operations (like full re-filters or
+        ///      initial loads).
+        ///   4. Attempting to preserve the user's highlighted line selection across `Replace`
+        ///      updates, maintaining user context during filter changes.
+        /// </summary>
+        /// <param name="update">The update containing new lines and the update type (Replace or Append).</param>
         private void ApplyFilteredUpdate(FilteredUpdate update)
         {
             bool wasReplace = update.Type == UpdateType.Replace;
-            int originalLineToRestore = -1; // Store the original line number
+            // To maintain user context, remember the original line number of the currently
+            // highlighted line before modifying the displayed collection.
+            int originalLineToRestore = HighlightedOriginalLineNumber;
 
             if (wasReplace)
             {
-                IsBusyFiltering = true; // Indicate UI update is starting
-                originalLineToRestore = HighlightedOriginalLineNumber; // Store before clearing
-                ReplaceFilteredLines(update.Lines); // Updates UI State (FilteredLogLines)
-                // Search markers are cleared and updated after LogText changes
+                // A Replace update signifies a complete refresh of the filtered view.
+                // Clear the existing collection and replace it with the new lines.
+                ReplaceFilteredLines(update.Lines);
             }
-            else // Append
+            else
             {
-                AddFilteredLines(update.Lines); // Updates UI State (FilteredLogLines)
-                // Don't change IsBusyFiltering for Appends
-                // Auto-scroll check will happen *after* LogText is updated by ScheduleLogTextUpdate
+                // An Append update adds new lines to the end of the current view,
+                // typically from new lines arriving in the tailed log file.
+                AddFilteredLines(update.Lines);
             }
 
-            // Schedule the LogText update AFTER updating FilteredLogLines
-            ScheduleLogTextUpdate(update.Type); // This now also triggers UpdateSearchMatches
+            // Updating the LogText bound to AvalonEdit involves potentially expensive string
+            // manipulation and UI updates. Schedule this work to run after the FilteredLogLines
+            // collection changes are complete to avoid race conditions and batch UI updates.
+            ScheduleLogTextUpdate(update.Type);
 
-            // Turn off busy indicator only after a full Replace operation completes
-            if (wasReplace)
+            if (!wasReplace)
+                return;
+
+            // Post-update actions specific to Replace operations.
+
+            // --- Restore Highlight ---
+            // Attempt to re-select the line the user had highlighted before the Replace,
+            // preserving their focus point across filter changes.
+            if (originalLineToRestore > 0)
             {
-                // --- Restore Highlight After Replace ---
-                if (originalLineToRestore > 0)
-                {
-                    // Find the new index of the line with the stored original number
-                    int newIndex = FilteredLogLines
-                        .Select((line, index) => new { line.OriginalLineNumber, Index = index })
-                        .FirstOrDefault(item => item.OriginalLineNumber == originalLineToRestore)?.Index ?? -1;
+                // Find the new index (if any) of the previously highlighted line.
+                int newIndex = FilteredLogLines
+                    .Select((line, index) => new { line.OriginalLineNumber, Index = index })
+                    .FirstOrDefault(item => item.OriginalLineNumber == originalLineToRestore)?.Index ?? -1;
 
-                    // Update the highlight index *after* the UI potentially updates from ReplaceFilteredLines
-                    _uiContext.Post(_ => { HighlightedFilteredLineIndex = newIndex; }, null);
-                }
-                else
-                {
-                    // If no line was previously highlighted, ensure it's reset
-                    _uiContext.Post(_ => { HighlightedFilteredLineIndex = -1; }, null);
-                }
+                // Queue the highlight update on the UI thread to ensure it happens after layout updates.
+                _uiContext.Post(_ => { HighlightedFilteredLineIndex = newIndex; }, null);
+            }
+            else
+            {
+                // Ensure any previous highlight is cleared if nothing was selected before.
+                _uiContext.Post(_ => { HighlightedFilteredLineIndex = -1; }, null);
+            }
 
-                // Ensure this runs *after* the UI updates from ReplaceFilteredLines have likely settled.
+            // --- Turn off Busy Indicator ---
+            // Only turn off if this Replace was triggered by a user filter change
+            // (i.e., not during the initial file load sequence).
+            if (!IsPerformingInitialLoad && IsBusyFiltering)
+            {
                 _uiContext.Post(_ => { IsBusyFiltering = false; }, null);
+            }
+
+            // If this Replace *was* part of the initial load (from Reset),
+            // mark the initial load filter pass as complete. The busy indicator
+            // remains ON until explicitly turned off elsewhere (e.g., next filter change).
+            if (IsPerformingInitialLoad)
+            {
+                 // If TotalLines is still 0 after this Replace (meaning empty file),
+                 // turn off the indicator now. Otherwise, ProcessTotalLinesUpdate will handle it.
+                 if (TotalLogLines == 0)
+                 {
+                      _uiContext.Post(_ => { IsBusyFiltering = false; }, null);
+                 }
+                 IsPerformingInitialLoad = false; // Mark filter pass as done
             }
         }
 

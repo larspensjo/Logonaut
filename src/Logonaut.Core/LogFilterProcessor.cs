@@ -131,9 +131,9 @@ namespace Logonaut.Core
             _currentFilter = new TrueFilter(); // Reset to default
             _currentContextLines = 0;
             _totalLinesSubject.OnNext(0); // Reset line count
-             // Push an empty Replace update immediately on the UI thread
-            _uiContext.Post(_ => _filteredUpdatesSubject.OnNext(new FilteredUpdate(UpdateType.Replace, Array.Empty<FilteredLogLine>())), null);
-             // Also trigger a (debounced) filter application with the reset state
+            // Push an empty Replace update immediately on the UI thread. Removed for now as it clears the IsBusyFiltering.
+            // _uiContext.Post(_ => _filteredUpdatesSubject.OnNext(new FilteredUpdate(UpdateType.Replace, Array.Empty<FilteredLogLine>())), null);
+            // Also trigger a (debounced) filter application with the reset state
             UpdateFilterSettings(_currentFilter, _currentContextLines);
         }
 
