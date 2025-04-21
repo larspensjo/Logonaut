@@ -64,6 +64,8 @@
     <SolidColorBrush x:Key="ComboBoxItemHoverBackgroundBrush" Color="{StaticResource PanelBackgroundColor}"/>
     <SolidColorBrush x:Key="ComboBoxItemHoverForegroundBrush" Color="{StaticResource PrimaryForegroundColor}"/>
 
+    <!-- CLINICAL NEON Spinner -->
+    <SolidColorBrush x:Key="SpinnerPrimaryBrush" Color="{StaticResource NeonAccentColor}"/>
 
     <!-- NEON: Subtle Shadow Effect -->
     <DropShadowEffect x:Key="FocusGlowEffect" Color="{StaticResource GlowColor}" ShadowDepth="0" BlurRadius="8" Opacity="0.9"/>

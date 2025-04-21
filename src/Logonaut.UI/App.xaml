@@ -1,7 +1,6 @@
 ﻿<Application x:Class="Logonaut.UI.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:converters="clr-namespace:Logonaut.UI.Converters"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
         <ResourceDictionary>
@@ -11,6 +10,8 @@
                 <!-- Load default theme -->
                 <ResourceDictionary Source="/Logonaut.Theming;component/Themes/DarkTheme.xaml"/>
                 <ResourceDictionary Source="FilterTemplates.xaml"/>
+                <!-- Load Custom Control Styles AFTER the theme -->
+                <ResourceDictionary Source="ControlsStyles.xaml"/>
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>

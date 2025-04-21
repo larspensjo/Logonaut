@@ -59,6 +59,9 @@
     <SolidColorBrush x:Key="ComboBoxItemHoverBackgroundBrush" Color="{StaticResource PanelBackgroundColor}"/>
     <SolidColorBrush x:Key="ComboBoxItemHoverForegroundBrush" Color="{StaticResource PrimaryForegroundColor}"/>
 
+    <!-- NEON NIGHT Spinner -->
+    <SolidColorBrush x:Key="SpinnerPrimaryBrush" Color="{StaticResource NeonAccentColor}"/>
+
     <!-- NEON: Glow Effect -->
     <DropShadowEffect x:Key="FocusGlowEffect" Color="{StaticResource GlowColor}" ShadowDepth="0" BlurRadius="8" Opacity="0.9"/>
     <DropShadowEffect x:Key="PanelShadowEffect" Color="#FF000000" ShadowDepth="3" BlurRadius="8" Opacity="0.4"/>

@@ -98,7 +98,6 @@ namespace Logonaut.UI
             _logOutputEditor = LogOutputEditor; // This will trigger an Intellisense error
             DataContext = viewModel;
             _viewModel = viewModel;
-
             
             _viewModel.PropertyChanged += ViewModel_PropertyChanged; // Subscribe to model updates to update chunk separators
             _viewModel.RequestScrollToEnd += ViewModel_RequestScrollToEnd;

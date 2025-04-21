@@ -3,3 +3,4 @@
 * Support multiple log windows, as tabs.
 * Advanced spinner: Custom FrameworkElement + DrawingContext + CompositionTarget.Rendering
 * Second time loading a new log file, the "Processing..." isn't shown.
+* When loading a big file, the application freezes.
