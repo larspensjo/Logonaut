@@ -11,6 +11,8 @@ using Logonaut.Common;
 using Logonaut.Core;
 using Logonaut.Filters;
 using Logonaut.UI.Services; // Assuming IInputPromptService will be added here
+using ICSharpCode.AvalonEdit;
+using ICSharpCode.AvalonEdit.Document;
 
 namespace Logonaut.UI.ViewModels
 {
@@ -26,10 +28,6 @@ namespace Logonaut.UI.ViewModels
 
         // --- Core Processing Service ---
         private readonly ILogFilterProcessor _logFilterProcessor;
-
-        // --- Log Display Text Generation ---
-        private bool _logTextUpdateScheduled = false;
-        private readonly object _logTextUpdateLock = new object();
 
         // --- Lifecycle Management ---
         private readonly CompositeDisposable _disposables = new();
@@ -227,9 +225,18 @@ namespace Logonaut.UI.ViewModels
         // Collection of filtered lines currently displayed in the UI.
         public ObservableCollection<FilteredLogLine> FilteredLogLines { get; } = new();
 
-        // Raw text content derived from FilteredLogLines, bound to AvalonEdit.
-        [ObservableProperty]
-        private string _logText = string.Empty;
+        // While not pure MVVM, the simplest way for this specific performance optimization is to allow the ViewModel to interact directly (but safely via the dispatcher)
+        // with the TextEditor's document.
+        private TextEditor? _logEditorInstance;
+        public void SetLogEditorInstance(TextEditor editor)
+        {
+            _logEditorInstance = editor;
+            // Optional: Trigger an initial full text update if needed when editor is first set
+            if (FilteredLogLines.Any())
+            {
+                ScheduleLogTextUpdate(UpdateType.Replace, FilteredLogLines);
+            }
+        }
 
         // Text entered by the user for searching.
         [ObservableProperty]
@@ -498,30 +505,48 @@ namespace Logonaut.UI.ViewModels
             Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} OpenLogFileAsync: '{selectedFile}'");
 
             IsBusyFiltering = true;
-            IsPerformingInitialLoad = true;
+            IsPerformingInitialLoad = true; // Set flags before async work
 
             try
             {
-                _logFilterProcessor.Reset(); // Resets processor, queues debounced filter
+                // 1. Reset Processor State (sets internal flag)
+                _logFilterProcessor.Reset();
+
+                // 2. Clear ViewModel/UI State
                 FilteredLogLines.Clear();
                 OnPropertyChanged(nameof(FilteredLogLinesCount));
-                ScheduleLogTextUpdate(UpdateType.Replace); // Clear editor text
-                CurrentLogFilePath = selectedFile;
+                ScheduleLogTextUpdate(UpdateType.Replace, FilteredLogLines); // Clear editor
+                CurrentLogFilePath = selectedFile; // Update displayed path
 
-                await _logTailerService.ChangeFileAsync(selectedFile).ConfigureAwait(true);
+                // 3. Perform Initial Read & Start Tailing (populates LogDoc)
+                long initialLines = await _logTailerService.ChangeFileAsync(selectedFile, this.LogDoc).ConfigureAwait(true);
+
+                // 4. Update Total Lines Display immediately after initial read
+                 _uiContext.Post(_ => TotalLogLines = initialLines, null); // Use UI context
+
+                // 5. Trigger the First Filter Explicitly
+                 IFilter? firstFilter = ActiveFilterProfile?.Model?.RootFilter ?? new TrueFilter();
+                _logFilterProcessor.UpdateFilterSettings(firstFilter, ContextLines);
+                // Update highlighting rules based on the active filter
+                UpdateFilterSubstrings();
+
+                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} OpenLogFileAsync: ChangeFileAsync completed ({initialLines} lines). First filter triggered.");
+                // Busy flags (IsBusyFiltering, IsPerformingInitialLoad) will be reset
+                // by ApplyFilteredUpdate when it receives the Replace update from the processor.
             }
             catch (Exception ex)
             {
-                IsBusyFiltering = false; // Reset on error
-                IsPerformingInitialLoad = false; // Reset on error
-                MessageBox.Show($"Error opening or monitoring log file '{selectedFile}':\n{ex.Message}", "File Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                CurrentLogFilePath = null; // Reset state
-                _logFilterProcessor.Reset(); // Ensure processor is reset on error too
-                 // Ensure counts are visually reset on error too
+                // Reset flags on error
+                IsBusyFiltering = false;
+                IsPerformingInitialLoad = false;
+                MessageBox.Show($"Error opening or reading log file '{selectedFile}':\n{ex.Message}", "File Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                CurrentLogFilePath = null; // Clear path
+                // Reset processor again to be safe? Maybe not needed if Reset only sets flag.
+                // Clear UI collections again
                 _uiContext.Post(_ => {
                     FilteredLogLines.Clear();
                     OnPropertyChanged(nameof(FilteredLogLinesCount));
-                    TotalLogLines = 0; // Directly reset UI property
+                    TotalLogLines = 0; // Reset total lines display
                 }, null);
             }
         }
@@ -559,7 +584,7 @@ namespace Logonaut.UI.ViewModels
                 CurrentMatchLength = match.Length;
 
                 // Need LogText to map offset to line
-                string currentLogText = LogText; // Use local copy for safety
+                string currentLogText = GetCurrentDocumentText(); // Use local copy for safety
                 if (!string.IsNullOrEmpty(currentLogText) && CurrentMatchOffset >= 0 && CurrentMatchOffset < currentLogText.Length)
                 {
                     // This requires creating a temporary TextDocument to use GetLineByOffset reliably
@@ -680,88 +705,89 @@ namespace Logonaut.UI.ViewModels
             }, null);
         }
 
-        /// <summary>
-        /// Orchestrates the presentation of filtered log data, fulfilling Logonaut's core purpose.
-        /// This method acts as the crucial bridge between the results generated by the background
-        /// `LogFilterProcessor` and the user-facing UI state managed by this ViewModel.
-        /// It receives processed `FilteredUpdate`s and is responsible for:
-        ///   1. Updating the primary `FilteredLogLines` collection, which dictates the content
-        ///      shown in the log viewer and the original line numbers.
-        ///   2. Scheduling the generation of the `LogText` property bound to the AvalonEdit control,
-        ///      ensuring the editor displays the correct filtered text.
-        ///   3. Managing the application's busy indicator (`IsBusyFiltering`) to provide visual
-        ///      feedback during potentially long `Replace` operations (like full re-filters or
-        ///      initial loads).
-        ///   4. Attempting to preserve the user's highlighted line selection across `Replace`
-        ///      updates, maintaining user context during filter changes.
-        /// </summary>
-        /// <param name="update">The update containing new lines and the update type (Replace or Append).</param>
+        private string GetCurrentDocumentText()
+        {
+            // Priority 1: Use the actual editor document if available (running in UI)
+            // Reading Text property is generally thread-safe.
+            if (_logEditorInstance?.Document != null)
+            {
+                return _logEditorInstance.Document.Text;
+            }
+
+            // Priority 2: Fallback for testing or before editor is initialized.
+            // Simulate the document content by joining the FilteredLogLines.
+            // This allows internal logic like search to work correctly in unit tests.
+            if (FilteredLogLines.Any())
+            {
+                // Use StringBuilder for potentially large test data sets too
+                var sb = new System.Text.StringBuilder();
+                bool first = true;
+                foreach (var line in FilteredLogLines)
+                {
+                    if (!first) { sb.Append(Environment.NewLine); }
+                    sb.Append(line.Text);
+                    first = false;
+                }
+                return sb.ToString();
+            }
+
+            // Default: Return empty if editor not set AND no filtered lines
+            return string.Empty;
+        }
+
+        /*
+        * Processes updates from the LogFilterProcessor to update the UI state.
+        *
+        * Responsibilities include:
+        *   - Updating the FilteredLogLines collection.
+        *   - Scheduling direct TextEditor.Document updates (Append/Replace) on the UI thread.
+        *   - Managing busy indicators (IsBusyFiltering, IsPerformingInitialLoad).
+        *   - Preserving highlighted line selection during Replace updates.
+        *
+        * Accepts a FilteredUpdate object containing new lines and the update type (Replace or Append).
+        */
         private void ApplyFilteredUpdate(FilteredUpdate update)
         {
-            bool wasReplace = update.Type == UpdateType.Replace;
-            // To maintain user context, remember the original line number of the currently
-            // highlighted line before modifying the displayed collection.
+            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> ApplyFilteredUpdate received {update.Type}. Lines={update.Lines.Count}");
+
             int originalLineToRestore = HighlightedOriginalLineNumber;
 
-            if (wasReplace)
+            if (update.Type == UpdateType.Replace)
             {
-                // A Replace update signifies a complete refresh of the filtered view.
-                // Clear the existing collection and replace it with the new lines.
                 ReplaceFilteredLines(update.Lines);
-            }
-            else
-            {
-                // An Append update adds new lines to the end of the current view,
-                // typically from new lines arriving in the tailed log file.
-                AddFilteredLines(update.Lines);
-            }
+                ScheduleLogTextUpdate(update.Type, FilteredLogLines); // Pass full list
 
-            // Updating the LogText bound to AvalonEdit involves potentially expensive string
-            // manipulation and UI updates. Schedule this work to run after the FilteredLogLines
-            // collection changes are complete to avoid race conditions and batch UI updates.
-            ScheduleLogTextUpdate(update.Type);
+                // --- Restore Highlight ---
+                // Attempt to re-select the line the user had highlighted before the Replace,
+                // preserving their focus point across filter changes.
+                if (originalLineToRestore > 0)
+                {
+                    // Find the new index (if any) of the previously highlighted line.
+                    int newIndex = FilteredLogLines
+                        .Select((line, index) => new { line.OriginalLineNumber, Index = index })
+                        .FirstOrDefault(item => item.OriginalLineNumber == originalLineToRestore)?.Index ?? -1;
 
-            if (!wasReplace)
-                return;
+                    // Queue the highlight update on the UI thread to ensure it happens after layout updates.
+                    _uiContext.Post(_ => { HighlightedFilteredLineIndex = newIndex; }, null);
+                } else {
+                    // Ensure any previous highlight is cleared if nothing was selected before.
+                    _uiContext.Post(_ => { HighlightedFilteredLineIndex = -1; }, null);
+                }
 
-            // Post-update actions specific to Replace operations.
-
-            // --- Restore Highlight ---
-            // Attempt to re-select the line the user had highlighted before the Replace,
-            // preserving their focus point across filter changes.
-            if (originalLineToRestore > 0)
-            {
-                // Find the new index (if any) of the previously highlighted line.
-                int newIndex = FilteredLogLines
-                    .Select((line, index) => new { line.OriginalLineNumber, Index = index })
-                    .FirstOrDefault(item => item.OriginalLineNumber == originalLineToRestore)?.Index ?? -1;
-
-                // Queue the highlight update on the UI thread to ensure it happens after layout updates.
-                _uiContext.Post(_ => { HighlightedFilteredLineIndex = newIndex; }, null);
-            }
-            else
-            {
-                // Ensure any previous highlight is cleared if nothing was selected before.
-                _uiContext.Post(_ => { HighlightedFilteredLineIndex = -1; }, null);
-            }
-
-            // Check if this Replace corresponds to the completion of the initial load's filtering pass.
-            if (IsPerformingInitialLoad)
-            {
-                // Yes, this is the first Replace after initiating the load.
-                // Mark the initial load process as complete *and* turn off the busy indicator.
+                // --- Manage Busy Indicators ---
+                // The processor handles its internal state; the VM just reacts.
+                // Reset both flags after receiving the *definitive* Replace update.
                 _uiContext.Post(_ =>
                 {
                     IsPerformingInitialLoad = false;
                     IsBusyFiltering = false;
-                    Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} ---> Initial Load UI Update Complete. IsPerformingInitialLoad=false, IsBusyFiltering=false (Filtered results displayed)");
+                    Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} ---> ApplyFilteredUpdate: UI Update Complete. IsPerformingInitialLoad=false, IsBusyFiltering=false");
                 }, null);
             }
-            // If this Replace was triggered by a *subsequent* filter change (not initial load),
-            // just turn off the busy indicator that was set when the change was triggered.
-            else if (IsBusyFiltering) // Check IsBusyFiltering specifically
+            else
             {
-                _uiContext.Post(_ => { IsBusyFiltering = false; }, null);
+                AddFilteredLines(update.Lines);
+                ScheduleLogTextUpdate(update.Type, update.Lines); // Pass only appended lines
             }
         }
 
@@ -772,7 +798,6 @@ namespace Logonaut.UI.ViewModels
             {
                 FilteredLogLines.Add(line);
             }
-            // ScheduleLogTextUpdate(); // Schedule is called by ApplyFilteredUpdate now
             OnPropertyChanged(nameof(FilteredLogLinesCount));
         }
 
@@ -786,7 +811,6 @@ namespace Logonaut.UI.ViewModels
                 FilteredLogLines.Add(line);
             }
             OnPropertyChanged(nameof(FilteredLogLinesCount));
-            // ScheduleLogTextUpdate(); // Schedule is called by ApplyFilteredUpdate now
         }
 
         private void ResetSearchState() {
@@ -797,74 +821,125 @@ namespace Logonaut.UI.ViewModels
         }
 
         // Schedules the LogText update to run after current UI operations.
-        private void ScheduleLogTextUpdate(UpdateType triggeringUpdateType)
+        private void ScheduleLogTextUpdate(UpdateType updateType, IReadOnlyList<FilteredLogLine> relevantLines)
         {
-            lock (_logTextUpdateLock)
+            // Clone relevantLines if it might be modified elsewhere before Post executes?
+            // ObservableCollection snapshot for Replace is safe. List passed for Append is safe.
+            var linesSnapshot = relevantLines.ToList(); // Create shallow copy for safety
+
+            _uiContext.Post(state =>
             {
-                if (!_logTextUpdateScheduled)
+                var args = ((UpdateType type, List<FilteredLogLine> lines))state!;
+
+                if (_logEditorInstance?.Document == null)
+                    return;
+
+                try
                 {
-                    _logTextUpdateScheduled = true;
-                    _uiContext.Post(_ =>
+                    // Call the appropriate internal method
+                    if (args.type == UpdateType.Replace)
                     {
-                        lock (_logTextUpdateLock) { _logTextUpdateScheduled = false; }
-                        UpdateLogTextInternal(); // Execute the update
-                        if (IsAutoScrollEnabled && triggeringUpdateType == UpdateType.Append)
-                        {
-                             // Raise event for the view to handle scrolling
-                            RequestScrollToEnd?.Invoke(this, EventArgs.Empty);
-                        }
-                    }, null);
+                        ReplaceLogTextInternal(args.lines);
+                    }
+                    else // Append
+                    {
+                        AppendLogTextInternal(args.lines);
+                    }
+                    // Update search AFTER text changes
+                    UpdateSearchMatches(); // Now reads from document directly
                 }
-            }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Error during editor text update ({args.type}): {ex}");
+                    // Potentially show error to user or log more formally
+                }
+
+            }, (updateType, linesSnapshot)); // Pass type and lines as state tuple
         }
 
-        // Performs the actual update of the LogText property.
-        private void UpdateLogTextInternal()
+        private void ReplaceLogTextInternal(IReadOnlyList<FilteredLogLine> allLines)
         {
-            try
-            {
-                // Simple case - just join all lines
-                LogText = string.Join(Environment.NewLine, FilteredLogLines.Select(line => line.Text));
+            if (_logEditorInstance?.Document == null) return;
 
-                // Update search matches and markers AFTER LogText is updated
-                UpdateSearchMatches();
+            // Generate the full text string *once*
+            // Use StringBuilder for efficiency with many lines
+            var sb = new System.Text.StringBuilder();
+            bool first = true;
+            foreach (var line in allLines)
+            {
+                if (!first) { sb.Append(Environment.NewLine); }
+                sb.Append(line.Text);
+                first = false;
             }
-            catch (InvalidOperationException ioex) { Debug.WriteLine($"Error during UpdateLogTextInternal (Collection modified?): {ioex}"); }
-            catch (Exception ex) { Debug.WriteLine($"Generic error during UpdateLogTextInternal: {ex}"); }
+            string fullText = sb.ToString();
+
+            // Set the document text (must be on UI thread)
+            _logEditorInstance.Document.Text = fullText;
+
+            // No auto-scroll on replace typically
+        }
+
+        private void AppendLogTextInternal(IReadOnlyList<FilteredLogLine> addedLines)
+        {
+            if (_logEditorInstance?.Document == null || !addedLines.Any()) return;
+
+            // Generate text chunk for *only the added lines*
+            var sb = new System.Text.StringBuilder();
+            // Prepend newline if document isn't empty
+            if (_logEditorInstance.Document.TextLength > 0)
+            {
+                sb.Append(Environment.NewLine);
+            }
+            bool first = true;
+            foreach (var line in addedLines)
+            {
+                if (!first) { sb.Append(Environment.NewLine); }
+                sb.Append(line.Text);
+                first = false;
+            }
+            string textChunk = sb.ToString();
+
+            // Append text (must be on UI thread)
+            _logEditorInstance.Document.BeginUpdate();
+            _logEditorInstance.Document.Insert(_logEditorInstance.Document.TextLength, textChunk);
+            _logEditorInstance.Document.EndUpdate();
+
+            // Handle Auto-Scroll *after* appending
+            if (IsAutoScrollEnabled)
+            {
+                RequestScrollToEnd?.Invoke(this, EventArgs.Empty);
+            }
         }
 
         // Core search logic - updates internal list and ruler markers
         private void UpdateSearchMatches()
         {
-             string currentSearchTerm = SearchText; // Use local copy
-             string textToSearch = LogText; // Use local copy
+            string currentSearchTerm = SearchText;
+            string textToSearch = GetCurrentDocumentText();
 
-             // Clear previous results
-             ResetSearchState();
+            ResetSearchState(); // Clears internal list, markers, index, selection
 
-             if (string.IsNullOrEmpty(currentSearchTerm) || string.IsNullOrEmpty(textToSearch))
-             {
-                 OnPropertyChanged(nameof(SearchStatusText)); // Update status
-                 return;
-             }
+            if (string.IsNullOrEmpty(currentSearchTerm) || string.IsNullOrEmpty(textToSearch))
+            {
+                OnPropertyChanged(nameof(SearchStatusText));
+                return;
+            }
 
-             int offset = 0;
-             var tempMarkers = new List<SearchResult>(); // Build temporary list for ruler
-             while (offset < textToSearch.Length)
-             {
-                 int foundIndex = textToSearch.IndexOf(
-                     currentSearchTerm,
-                     offset,
-                     IsCaseSensitiveSearch ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase);
-
-                 if (foundIndex == -1) break;
-
-                 var newMatch = new SearchResult(foundIndex, currentSearchTerm.Length);
+            int offset = 0;
+            var tempMarkers = new List<SearchResult>();
+            while (offset < textToSearch.Length)
+            {
+                int foundIndex = textToSearch.IndexOf(
+                    currentSearchTerm,
+                    offset,
+                    IsCaseSensitiveSearch ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase);
+                if (foundIndex == -1) break;
+                var newMatch = new SearchResult(foundIndex, currentSearchTerm.Length);
                  _searchMatches.Add(newMatch); // Add to internal list
                  tempMarkers.Add(newMatch);    // Add to temp list for ruler batch update
 
                  offset = foundIndex + 1; // Continue search after the start of the current match
-             }
+            }
 
              // Batch update the observable collection for the ruler for potentially better perf
              foreach (var marker in tempMarkers)
@@ -887,7 +962,6 @@ namespace Logonaut.UI.ViewModels
             LogDoc.Clear();              // Clear internal document storage
             FilteredLogLines.Clear();    // Clear UI collection
             OnPropertyChanged(nameof(FilteredLogLinesCount)); // Notify count changed
-            LogText = string.Empty;      // Clear editor text via binding
             _searchMatches.Clear();      // Clear search state
             SearchMarkers.Clear();
             _currentSearchIndex = -1;

@@ -108,6 +108,15 @@ namespace Logonaut.UI
                 EnableDarkTitleBar();
             }
 
+            // --- Pass editor instance to ViewModel AFTER it's loaded ---
+            _logOutputEditor.Loaded += (s, e) =>
+            {
+                _viewModel.SetLogEditorInstance(_logOutputEditor);
+                // Any other logic previously in LogOutputEditor_Loaded that depends
+                // on the ViewModel knowing about the editor can go here or be
+                // triggered by SetLogEditorInstance if needed.
+            };
+
             // Set up initial window state
             Loaded += MainWindow_Loaded;
 
@@ -348,6 +357,7 @@ namespace Logonaut.UI
             //       If we handled them here, they wouldn't work when e.g. the search box has focus.
         }
 
+        // Only for things not dependent on ViewModel knowing the editor
         private void LogOutputEditor_Loaded(object sender, RoutedEventArgs e)
         {
              // The template should be applied now, try to find the ruler

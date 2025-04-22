@@ -3,134 +3,112 @@ using System;
 using System.Reactive; // For Unit
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
+using System.Diagnostics; // For Debug
 using Logonaut.Core; // Where ILogTailerService is defined
+using Logonaut.Common;
 
-namespace Logonaut.LogTailing
+namespace Logonaut.LogTailing;
+public class LogTailerService : ILogTailerService
 {
-    public class LogTailerService : ILogTailerService
+    private LogTailer? _currentTailer;
+    private IDisposable? _tailerSubscription;
+    private readonly Subject<string> _logLinesSubject = new Subject<string>();
+    private readonly object _lock = new object(); // For thread safety around tailer creation/disposal
+
+    public IObservable<string> LogLines => _logLinesSubject.AsObservable();
+
+    public async Task<long> ChangeFileAsync(string filePath, LogDocument targetLogDocument)
     {
-        private LogTailer? _currentTailer;
-        private IDisposable? _tailerSubscription;
-        private readonly Subject<string> _logLinesSubject = new Subject<string>();
-        private readonly ReplaySubject<Unit> _initialReadCompleteRelay = new ReplaySubject<Unit>(1);
-        private IDisposable? _initialReadSubscription;
-        private readonly object _lock = new object(); // For thread safety
-
-        public IObservable<string> LogLines => _logLinesSubject.AsObservable();
-        public IObservable<Unit> InitialReadComplete => _initialReadCompleteRelay.AsObservable(); // <<< Expose relay
-
-        // Constructor (could be public if needed elsewhere, or internal if only used via DI)
-        public LogTailerService() { }
-
-        public async Task ChangeFileAsync(string filePath)
-        {
         if (string.IsNullOrWhiteSpace(filePath))
             throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+        if (targetLogDocument == null)
+            throw new ArgumentNullException(nameof(targetLogDocument));
 
-            // Temporary references for disposal after background task
-            LogTailer? oldTailer = null;
-            IDisposable? oldTailerSubscription = null;
-            IDisposable? oldInitialReadSubscription = null;
+        long initialLineCount = 0;
+        long fileLength = 0;
 
-            LogTailer newTailer; // Declare outside lambda
+        // --- Stop Previous Tailing ---
+        StopInternal(); // Dispose existing tailer and subscriptions
 
-            await Task.Run(() =>
+        try
+        {
+            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} ---> LogTailerService: Starting initial read for {filePath}");
+
+            // --- Perform Initial Read ---
+            targetLogDocument.Clear(); // Clear the target document BEFORE reading
+
+            using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+            using (var reader = new StreamReader(fs)) // Consider adding encoding options if needed
             {
-                // Inside lock for state mutation
-                lock (_lock)
+                string? line;
+                // Use ConfigureAwait(false) to avoid capturing context unless needed
+                while ((line = await reader.ReadLineAsync().ConfigureAwait(false)) != null)
                 {
-                    // Capture old instances for disposal outside lock if needed,
-                    // but better to dispose them here if possible.
-                    oldTailer = _currentTailer;
-                    oldTailerSubscription = _tailerSubscription;
-                    oldInitialReadSubscription = _initialReadSubscription; // Capture old read subscription
-
-                    _currentTailer = null; // Clear references before creating new
-                    _tailerSubscription = null;
-                    _initialReadSubscription = null;
-
-
-                    // --- Reset the Relay Subject ---
-                    // We create a new one or signal reset somehow. Simpler: let consumers re-subscribe?
-                    // Or, maybe better: Don't expose the internal subject directly.
-                    // Let's stick with the ReplaySubject(1) approach for now. The next OnNext will replace the old value.
-
-
-                    // --- Create and Start New Tailer ---
-                    newTailer = new LogTailer(filePath); // Assign to outer variable
-
-                    // Subscribe to the new tailer's lines
-                    _tailerSubscription = newTailer.LogLines.Subscribe(
-                        _logLinesSubject.OnNext,
-                        _logLinesSubject.OnError
-                    );
-
-                    // --- Subscribe to the NEW tailer's completion signal ---
-                    _initialReadSubscription = newTailer.InitialReadComplete.Subscribe(
-                        _ => _initialReadCompleteRelay.OnNext(Unit.Default), // Forward signal
-                        ex => _initialReadCompleteRelay.OnError(ex)         // Forward error
-                        // OnCompleted is handled by ReplaySubject
-                    );
-
-                    _currentTailer = newTailer; // Assign new tailer to main field
-
-                    newTailer.Start(); // Start monitoring AFTER subscriptions are set up
-                } // End lock
-
-                // Dispose old instances AFTER releasing lock and finishing background setup
-                oldInitialReadSubscription?.Dispose();
-                oldTailerSubscription?.Dispose();
-                oldTailer?.Dispose();
-
-            }).ConfigureAwait(false);
-        }
-
-        public void StopTailing()
-        {
-            lock (_lock)
-            {
-                StopInternal();
-                // Optionally signal completion if the subject is still active,
-                // though usually Dispose handles this.
-                // _logLinesSubject.OnCompleted();
+                    targetLogDocument.AppendLine(line);
+                    initialLineCount++;
+                }
+                fileLength = fs.Position; // Get the length AFTER reading
             }
+
+            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} ---> LogTailerService: Finished initial read. {initialLineCount} lines read. File length: {fileLength}.");
+
+            // --- Start Tailing for NEW Lines ---
+            lock (_lock) // Protect creation/subscription of new tailer
+            {
+                // Pass starting position
+                _currentTailer = new LogTailer(filePath, startPosition: fileLength);
+
+                _tailerSubscription = _currentTailer.LogLines.Subscribe(
+                    _logLinesSubject.OnNext,
+                    _logLinesSubject.OnError
+                );
+
+                // Start monitoring AFTER subscriptions are set up
+                _currentTailer.StartMonitoring();
+                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} ---> LogTailerService: Started monitoring for new lines.");
+            }
+
+            return initialLineCount; // Return the count read during initial phase
         }
-
-        private void StopInternal()
+        catch (Exception ex)
         {
-            // Called within lock
-            _initialReadSubscription?.Dispose(); // <<< Dispose read subscription
-            _initialReadSubscription = null;
+            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} !!! LogTailerService: Error during initial read or tailer start for {filePath}: {ex.Message}");
+            StopInternal(); // Ensure cleanup on error
+            // Re-throw for the caller (MainViewModel) to handle UI feedback
+            throw new IOException($"Failed to read or start tailing file '{filePath}'. Reason: {ex.Message}", ex);
+        }
+    }
 
+    public void StopTailing()
+    {
+        StopInternal();
+    }
+
+    private void StopInternal()
+    {
+        lock (_lock)
+        {
             _tailerSubscription?.Dispose();
             _tailerSubscription = null;
-
             _currentTailer?.Dispose();
             _currentTailer = null;
-
-            // Optionally reset the relay subject if needed when stopping explicitly
-            // _initialReadCompleteRelay.OnError(new OperationCanceledException("Tailing stopped."));
+            Debug.WriteLineIf(_currentTailer != null || _tailerSubscription != null, $"{DateTime.Now:HH:mm:ss.fff} ---> LogTailerService: Tailing stopped.");
         }
+    }
 
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
 
-        public void Dispose()
+    protected virtual void Dispose(bool disposing)
+    {
+        if (disposing)
         {
-            Dispose(true);
-            GC.SuppressFinalize(this);
-        }
-
-        protected virtual void Dispose(bool disposing)
-        {
-            if (!disposing)
-                return;
-            lock(_lock)
-            {
-                StopInternal(); // Calls dispose on subscriptions and tailer
-                _logLinesSubject?.OnCompleted();
-                _logLinesSubject?.Dispose();
-                _initialReadCompleteRelay?.OnCompleted(); // Complete relay
-                _initialReadCompleteRelay?.Dispose();
-            }
+            StopInternal();
+            _logLinesSubject?.OnCompleted(); // Complete the subject on dispose
+            _logLinesSubject?.Dispose();
         }
     }
 }

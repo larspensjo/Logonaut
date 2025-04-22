@@ -4,3 +4,6 @@
 * Advanced spinner: Custom FrameworkElement + DrawingContext + CompositionTarget.Rendering
 * Second time loading a new log file, the "Processing..." isn't shown.
 * When loading a big file, the application freezes.
+* Tool tips don't look good in dark mode.
+* Disable the tool tip for the main log window.
+* CTRL+O for quick open file.

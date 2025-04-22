@@ -282,7 +282,6 @@
                                         HorizontalScrollBarVisibility="Auto"
                                         Padding="3,0,0,0"
                                         Style="{StaticResource TextEditorWithOverviewRulerStyle}"
-                                        helpers:AvalonEditHelper.BindableText="{Binding LogText, Mode=OneWay}"
                                         helpers:AvalonEditHelper.FilterSubstrings="{Binding FilterSubstrings, Mode=OneWay}"
                                         helpers:AvalonEditHelper.HighlightTimestamps="{Binding HighlightTimestamps, Mode=OneWay}"
                                         ShowLineNumbers="False"

@@ -33,7 +33,7 @@ namespace Logonaut.LogTailing.Tests
                     });
 
                     // Act: Start tailing and then append a new line.
-                    tailer.Start();
+                    tailer.StartMonitoring();
                     await Task.Delay(100); // Allow tailer to initialize.
 
                     File.AppendAllText(tempFile, "New test line\n");

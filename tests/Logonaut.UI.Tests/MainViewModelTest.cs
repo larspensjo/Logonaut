@@ -2,11 +2,16 @@ using System.Windows; // For DispatcherPriority, Size, Rect
 using System.Windows.Controls; // For TreeView
 using System.Windows.Media; // For VisualTreeHelper
 using System.Windows.Threading; // For Dispatcher
+using System.Collections.Generic; // For List
 using Logonaut.Common;
 using Logonaut.Core;
 using Logonaut.Filters;
 using Logonaut.UI.ViewModels;
 using Logonaut.TestUtils;
+using Microsoft.VisualStudio.TestTools.UnitTesting; // Explicit using for Assert etc.
+using System.Threading; // For SynchronizationContext
+using System.Linq; // For LINQ methods
+using System; // For Environment, Exception
 
 namespace Logonaut.UI.Tests.ViewModels
 {
@@ -91,6 +96,8 @@ namespace Logonaut.UI.Tests.ViewModels
             }
         }
 
+        # region Helper Methods
+
         // --- Helper Function to Find Visual Child (Keep as is) ---
         private static T? FindVisualChild<T>(DependencyObject parent, string name = "") where T : FrameworkElement
         {
@@ -130,6 +137,21 @@ namespace Logonaut.UI.Tests.ViewModels
              }
              return foundChild;
         }
+
+        // Helper to calculate expected offset based on FilteredLogLines
+        private int CalculateExpectedOffset(int targetLineIndex, string searchTerm)
+        {
+            int offset = 0;
+            for (int i = 0; i < targetLineIndex; i++)
+            {
+                offset += _viewModel.FilteredLogLines[i].Text.Length + Environment.NewLine.Length;
+            }
+            // Find the term within the target line
+            int indexInLine = _viewModel.FilteredLogLines[targetLineIndex].Text.IndexOf(searchTerm, _viewModel.IsCaseSensitiveSearch ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase);
+            return offset + indexInLine;
+        }
+
+        #endregion // Test Methods
 
         #region Initialization and Persistence Tests
 
@@ -555,48 +577,69 @@ namespace Logonaut.UI.Tests.ViewModels
 
         #region Search Tests
 
-        [TestMethod]
-        public void SearchText_Set_UpdatesMatchesAndStatus()
+        [TestMethod] public void SearchText_Set_UpdatesMatchesAndStatus()
         {
+            // Arrange: Set up FilteredLogLines which GetCurrentDocumentText will use
+            _viewModel.FilteredLogLines.Clear();
             _viewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Line one with test"));
             _viewModel.FilteredLogLines.Add(new FilteredLogLine(2, "Line two NO MATCH"));
             _viewModel.FilteredLogLines.Add(new FilteredLogLine(3, "Line three with TEST"));
-            _viewModel.GetType().GetMethod("UpdateLogTextInternal", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.Invoke(_viewModel, null);
 
+            // Act & Assert: Case Insensitive
             _viewModel.IsCaseSensitiveSearch = false;
-            _viewModel.SearchText = "test";
+            _viewModel.SearchText = "test"; // Triggers UpdateSearchMatches internally
+            _testContext.Send(_ => { }, null); // Ensure any posted work runs
+
             Assert.AreEqual(2, _viewModel.SearchMarkers.Count);
             StringAssert.Contains(_viewModel.SearchStatusText, "2 matches found");
+            Assert.AreEqual(0, _viewModel.SearchMarkers[0].Offset); // Offset of "test" in "Line one with test"
+            Assert.AreEqual(("Line one with test" + Environment.NewLine + "Line two NO MATCH" + Environment.NewLine).Length, _viewModel.SearchMarkers[1].Offset); // Offset of "TEST" in third line
 
+            // Act & Assert: Case Sensitive
             _viewModel.IsCaseSensitiveSearch = true;
+            _viewModel.SearchText = "test"; // Re-trigger search
+            _testContext.Send(_ => { }, null);
+
             Assert.AreEqual(1, _viewModel.SearchMarkers.Count);
             StringAssert.Contains(_viewModel.SearchStatusText, "1 matches found");
+            Assert.AreEqual(0, _viewModel.SearchMarkers[0].Offset); // Offset of "test" in "Line one with test"
         }
 
         [TestMethod]
         public void NextSearchCommand_CyclesThroughMatches_UpdatesSelectionAndHighlight()
         {
+            // Arrange
+            _viewModel.FilteredLogLines.Clear();
             _viewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Test 1")); // Index 0
             _viewModel.FilteredLogLines.Add(new FilteredLogLine(2, "Test 2")); // Index 1
             _viewModel.FilteredLogLines.Add(new FilteredLogLine(3, "Other"));
-            _viewModel.FilteredLogLines.Add(new FilteredLogLine(4, "Test 3")); // Index 3
-            _viewModel.GetType().GetMethod("UpdateLogTextInternal", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.Invoke(_viewModel, null);
-            _viewModel.SearchText = "Test";
+            _viewModel.FilteredLogLines.Add(new FilteredLogLine(4, "Test 3")); // Index 3 (in collection)
+            _viewModel.SearchText = "Test"; // Triggers initial search
+            _testContext.Send(_ => { }, null); // Ensure search runs
+            Assert.AreEqual(3, _viewModel.SearchMarkers.Count);
 
+            int expectedOffset1 = CalculateExpectedOffset(0, "Test");
+            int expectedOffset2 = CalculateExpectedOffset(1, "Test");
+            int expectedOffset3 = CalculateExpectedOffset(3, "Test");
+
+            // Act & Assert Cycle
             _viewModel.NextSearchCommand.Execute(null);
-            Assert.AreEqual(0, _viewModel.CurrentMatchOffset);
+            Assert.AreEqual(expectedOffset1, _viewModel.CurrentMatchOffset);
             Assert.AreEqual(0, _viewModel.HighlightedFilteredLineIndex);
             StringAssert.Contains(_viewModel.SearchStatusText, "Match 1 of 3");
 
             _viewModel.NextSearchCommand.Execute(null);
+            Assert.AreEqual(expectedOffset2, _viewModel.CurrentMatchOffset);
             Assert.AreEqual(1, _viewModel.HighlightedFilteredLineIndex);
             StringAssert.Contains(_viewModel.SearchStatusText, "Match 2 of 3");
 
             _viewModel.NextSearchCommand.Execute(null);
-            Assert.AreEqual(3, _viewModel.HighlightedFilteredLineIndex);
+            Assert.AreEqual(expectedOffset3, _viewModel.CurrentMatchOffset);
+            Assert.AreEqual(3, _viewModel.HighlightedFilteredLineIndex); // Corresponds to the item at index 3 in FilteredLogLines
             StringAssert.Contains(_viewModel.SearchStatusText, "Match 3 of 3");
 
-            _viewModel.NextSearchCommand.Execute(null);
+            _viewModel.NextSearchCommand.Execute(null); // Wrap
+            Assert.AreEqual(expectedOffset1, _viewModel.CurrentMatchOffset);
             Assert.AreEqual(0, _viewModel.HighlightedFilteredLineIndex);
             StringAssert.Contains(_viewModel.SearchStatusText, "Match 1 of 3");
         }
@@ -604,132 +647,127 @@ namespace Logonaut.UI.Tests.ViewModels
         [TestMethod]
         public void PreviousSearchCommand_CyclesThroughMatches_UpdatesSelectionAndHighlight()
         {
+            // Arrange
+            _viewModel.FilteredLogLines.Clear();
             _viewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Test 1")); // Index 0
             _viewModel.FilteredLogLines.Add(new FilteredLogLine(2, "Test 2")); // Index 1
             _viewModel.FilteredLogLines.Add(new FilteredLogLine(3, "Other"));
             _viewModel.FilteredLogLines.Add(new FilteredLogLine(4, "Test 3")); // Index 3
-            _viewModel.GetType().GetMethod("UpdateLogTextInternal", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.Invoke(_viewModel, null);
             _viewModel.SearchText = "Test";
+            _testContext.Send(_ => { }, null);
+            Assert.AreEqual(3, _viewModel.SearchMarkers.Count);
 
-            _viewModel.PreviousSearchCommand.Execute(null);
+            int expectedOffset1 = CalculateExpectedOffset(0, "Test");
+            int expectedOffset2 = CalculateExpectedOffset(1, "Test");
+            int expectedOffset3 = CalculateExpectedOffset(3, "Test");
+
+            // Act & Assert Cycle
+            _viewModel.PreviousSearchCommand.Execute(null); // Wrap to last
+            Assert.AreEqual(expectedOffset3, _viewModel.CurrentMatchOffset);
             Assert.AreEqual(3, _viewModel.HighlightedFilteredLineIndex);
             StringAssert.Contains(_viewModel.SearchStatusText, "Match 3 of 3");
 
             _viewModel.PreviousSearchCommand.Execute(null);
-             Assert.AreEqual(1, _viewModel.HighlightedFilteredLineIndex);
-             StringAssert.Contains(_viewModel.SearchStatusText, "Match 2 of 3");
+            Assert.AreEqual(expectedOffset2, _viewModel.CurrentMatchOffset);
+            Assert.AreEqual(1, _viewModel.HighlightedFilteredLineIndex);
+            StringAssert.Contains(_viewModel.SearchStatusText, "Match 2 of 3");
 
             _viewModel.PreviousSearchCommand.Execute(null);
-             Assert.AreEqual(0, _viewModel.HighlightedFilteredLineIndex);
-             StringAssert.Contains(_viewModel.SearchStatusText, "Match 1 of 3");
+            Assert.AreEqual(expectedOffset1, _viewModel.CurrentMatchOffset);
+            Assert.AreEqual(0, _viewModel.HighlightedFilteredLineIndex);
+            StringAssert.Contains(_viewModel.SearchStatusText, "Match 1 of 3");
 
-             _viewModel.PreviousSearchCommand.Execute(null);
-             Assert.AreEqual(3, _viewModel.HighlightedFilteredLineIndex);
-             StringAssert.Contains(_viewModel.SearchStatusText, "Match 3 of 3");
+            _viewModel.PreviousSearchCommand.Execute(null); // Wrap to last
+            Assert.AreEqual(expectedOffset3, _viewModel.CurrentMatchOffset);
+            Assert.AreEqual(3, _viewModel.HighlightedFilteredLineIndex);
+            StringAssert.Contains(_viewModel.SearchStatusText, "Match 3 of 3");
         }
 
         #endregion
 
         #region Interaction with LogFilterProcessor Tests (NEW)
 
-        [TestMethod] public async Task OpenLogFileCommand_CallsProcessorReset_TailerChangeFileAsync_SetsLoadState()
+        [TestMethod] public void OpenLogFileCommand_CallsProcessorReset_AndTailerChangeFileAsync() // Renamed, uses AsyncRelayCommand now
         {
             // Arrange
             _mockFileDialog.FileToReturn = "C:\\good\\log.txt";
-            _mockProcessor.ResetCounters();
+            _mockProcessor.ResetCounters(); // Reset mock state
 
             // Act
-            await _viewModel.OpenLogFileCommand.ExecuteAsync(null);
+            // ExecuteAsync is needed if manually calling AsyncRelayCommand
+            var task = _viewModel.OpenLogFileCommand.ExecuteAsync(null);
+            task.Wait(); // Wait for the async command to complete in the test
 
             // Assert
-            Assert.AreEqual(1, _mockProcessor.ResetCallCount, "Processor Reset count mismatch.");
-            Assert.AreEqual("C:\\good\\log.txt", _mockTailer.ChangedFilePath, "Tailer ChangedFilePath mismatch.");
-            Assert.AreEqual("C:\\good\\log.txt", _viewModel.CurrentLogFilePath, "ViewModel CurrentLogFilePath mismatch.");
-            Assert.IsTrue(_viewModel.IsPerformingInitialLoad, "IsPerformingInitialLoad should be true after starting load.");
-            Assert.IsTrue(_viewModel.IsBusyFiltering, "IsBusyFiltering should be true after starting load.");
+            Assert.AreEqual(1, _mockProcessor.ResetCallCount);
+            Assert.AreEqual("C:\\good\\log.txt", _mockTailer.ChangedFilePath);
+            Assert.AreEqual("C:\\good\\log.txt", _viewModel.CurrentLogFilePath);
         }
 
-        [TestMethod]
-        public void ApplyFilteredUpdate_Replace_ClearsAndAddsLines_UpdatesLogText_ResetsSearch()
+        [TestMethod] public void ApplyFilteredUpdate_Replace_ClearsAndAddsLines_ResetsSearch()
         {
             // Arrange
             _viewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Old Line 1"));
-            _viewModel.SearchText = "Old";
-            // Force LogText update using reflection (safer than assuming direct call path)
-            _viewModel.GetType().GetMethod("UpdateLogTextInternal", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.Invoke(_viewModel, null);
-            Assert.AreEqual(1, _viewModel.SearchMarkers.Count); // Verify search state was set
+            _viewModel.SearchText = "Old"; // Trigger search on old lines
+            _testContext.Send(_ => { }, null); // Let search run
+            Assert.AreEqual(1, _viewModel.SearchMarkers.Count);
 
             var newLines = new List<FilteredLogLine> { new FilteredLogLine(10, "New") };
             var update = new FilteredUpdate(UpdateType.Replace, newLines);
 
             // Act
             _mockProcessor.SimulateFilteredUpdate(update);
-            // Force LogText update via reflection AFTER simulating update
-            _viewModel.GetType().GetMethod("UpdateLogTextInternal", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.Invoke(_viewModel, null);
-            _testContext.Send(_ => { }, null); // <<< FIX: Flush context queue >>>
-
+            // Simulate UI thread processing the scheduled update
+            _testContext.Send(_ => { }, null); // Flushes queue, runs ReplaceLogTextInternal & UpdateSearchMatches
 
             // Assert
             Assert.AreEqual(1, _viewModel.FilteredLogLines.Count);
             Assert.AreEqual("New", _viewModel.FilteredLogLines[0].Text);
-            Assert.AreEqual("New", _viewModel.LogText);
-            Assert.AreEqual(0, _viewModel.SearchMarkers.Count);
-            Assert.AreEqual(-1, _viewModel.CurrentMatchOffset);
-            Assert.IsFalse(_viewModel.IsBusyFiltering);
+            Assert.AreEqual(0, _viewModel.SearchMarkers.Count, "Search markers should be cleared on Replace.");
+            Assert.AreEqual(-1, _viewModel.CurrentMatchOffset, "Current match offset should be reset.");
+            Assert.IsFalse(_viewModel.IsBusyFiltering); // Check busy state if needed
         }
 
-        [TestMethod]
-        public void ApplyFilteredUpdate_Append_AddsLines_UpdatesLogText()
+        [TestMethod] public void ApplyFilteredUpdate_Append_AddsLines()
         {
             // Arrange
-            _viewModel.IsBusyFiltering = false; // Ensure starting state is false
             _viewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Existing 1"));
-            _viewModel.GetType().GetMethod("UpdateLogTextInternal", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.Invoke(_viewModel, null);
-
             var linesToAppend = new List<FilteredLogLine> { new FilteredLogLine(5, "Appended 5") };
             var update = new FilteredUpdate(UpdateType.Append, linesToAppend);
 
             // Act
             _mockProcessor.SimulateFilteredUpdate(update);
-            _viewModel.GetType().GetMethod("UpdateLogTextInternal", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.Invoke(_viewModel, null);
-            _testContext.Send(_ => { }, null); // Flush context
+            _testContext.Send(_ => { }, null); // Runs AppendLogTextInternal & UpdateSearchMatches
 
             // Assert
             Assert.AreEqual(2, _viewModel.FilteredLogLines.Count);
             Assert.AreEqual("Appended 5", _viewModel.FilteredLogLines[1].Text);
-            Assert.AreEqual("Existing 1" + Environment.NewLine + "Appended 5", _viewModel.LogText);
-            Assert.IsFalse(_viewModel.IsBusyFiltering, "Append should not set busy flag");
+            Assert.IsFalse(_viewModel.IsBusyFiltering);
         }
 
-        [TestMethod]
-        public void ApplyFilteredUpdate_Replace_RestoresHighlightBasedOnOriginalLineNumber()
+        [TestMethod] public void ApplyFilteredUpdate_Replace_RestoresHighlightBasedOnOriginalLineNumber()
         {
-            // Arrange
+            // Arrange (Keep as before)
             _viewModel.FilteredLogLines.Add(new FilteredLogLine(5, "Line Five"));
-            _viewModel.FilteredLogLines.Add(new FilteredLogLine(10, "Line Ten")); // Highlighted initially
+            _viewModel.FilteredLogLines.Add(new FilteredLogLine(10, "Line Ten"));
             _viewModel.FilteredLogLines.Add(new FilteredLogLine(15, "Line Fifteen"));
-            _viewModel.HighlightedFilteredLineIndex = 1; // Highlight original line 10
+            _viewModel.HighlightedFilteredLineIndex = 1;
             Assert.AreEqual(10, _viewModel.HighlightedOriginalLineNumber);
 
-            var newLines = new List<FilteredLogLine>
-            {
-                new FilteredLogLine(10, "Ten"), // Original line 10 now at index 0
-                new FilteredLogLine(20, "Twenty")
-            };
+            var newLines = new List<FilteredLogLine> { new(10, "Ten"), new(20, "Twenty") };
             var update = new FilteredUpdate(UpdateType.Replace, newLines);
 
             // Act
             _mockProcessor.SimulateFilteredUpdate(update);
-            _testContext.Send(_ => { }, null); // <<< FIX: Flush context queue >>>
+            _testContext.Send(_ => { }, null); // Runs ReplaceLogTextInternal, UpdateSearchMatches, and highlight restore Post
 
             // Assert
-            Assert.AreEqual(2, _viewModel.FilteredLogLines.Count); // Check lines updated first
-            Assert.AreEqual(0, _viewModel.HighlightedFilteredLineIndex);
+            Assert.AreEqual(2, _viewModel.FilteredLogLines.Count);
+            Assert.AreEqual(0, _viewModel.HighlightedFilteredLineIndex); // Restored highlight
             Assert.AreEqual(10, _viewModel.HighlightedOriginalLineNumber);
         }
 
-
-        #endregion
+        #endregion // Interaction with LogFilterProcessor Tests
 
         #region State Update Tests
         [TestMethod] public void StateFlags_ManagedCorrectly_DuringInitialLoad()
@@ -747,7 +785,6 @@ namespace Logonaut.UI.Tests.ViewModels
             Assert.IsTrue(_viewModel.IsBusyFiltering, "BusyFiltering should be true after OpenLogFile start.");
 
             // Act 2: Simulate the initial read completing (but processor hasn't finished filtering yet)
-            _mockTailer.SimulateInitialReadComplete();
             _testContext.Send(_ => { }, null); // Process context queue
 
             // Assert 2: State flags should *still* be true
@@ -1087,8 +1124,7 @@ namespace Logonaut.UI.Tests.ViewModels
 
         #region Auto-Scroll Event Triggering Tests
 
-        [TestMethod]
-        public void RequestScrollToEnd_Fires_When_AppendUpdate_And_AutoScrollEnabled()
+        [TestMethod] public void RequestScrollToEnd_Fires_When_AppendUpdate_And_AutoScrollEnabled()
         {
             // Arrange
             _viewModel.IsAutoScrollEnabled = true;
@@ -1098,47 +1134,40 @@ namespace Logonaut.UI.Tests.ViewModels
 
             // Act
             _mockProcessor.SimulateFilteredUpdate(appendUpdate);
-            // Simulate the Post callback running using the immediate context
-            _testContext.Send(_ => { }, null); // Ensure the Post callback from ScheduleLogTextUpdate executes
+            // Simulate UI thread processing the scheduled AppendLogTextInternal
+            _testContext.Send(_ => { }, null); // Runs AppendLogTextInternal which triggers event
 
             // Assert
             Assert.IsTrue(eventFired, "RequestScrollToEnd event should have fired.");
         }
 
-        [TestMethod]
-        public void RequestScrollToEnd_DoesNotFire_When_AppendUpdate_And_AutoScrollDisabled()
+        [TestMethod] public void RequestScrollToEnd_DoesNotFire_When_AppendUpdate_And_AutoScrollDisabled()
         {
             // Arrange
-            _viewModel.IsAutoScrollEnabled = false; // Disable auto-scroll
+            _viewModel.IsAutoScrollEnabled = false;
             bool eventFired = false;
             _viewModel.RequestScrollToEnd += (s, e) => eventFired = true;
             var appendUpdate = new FilteredUpdate(UpdateType.Append, new List<FilteredLogLine> { new FilteredLogLine(1, "Appended") });
 
             // Act
             _mockProcessor.SimulateFilteredUpdate(appendUpdate);
-            _testContext.Send(_ => { }, null); // Ensure the Post callback from ScheduleLogTextUpdate executes
+            _testContext.Send(_ => { }, null); // Runs AppendLogTextInternal
 
             // Assert
             Assert.IsFalse(eventFired, "RequestScrollToEnd event should NOT have fired.");
         }
 
-        [TestMethod]
-        public void RequestScrollToEnd_DoesNotFire_When_ReplaceUpdate_And_AutoScrollEnabled()
+        [TestMethod] public void RequestScrollToEnd_DoesNotFire_When_ReplaceUpdate_And_AutoScrollEnabled()
         {
             // Arrange
-            _viewModel.IsAutoScrollEnabled = true; // Auto-scroll is enabled
+            _viewModel.IsAutoScrollEnabled = true;
             bool eventFired = false;
-            _viewModel.RequestScrollToEnd += (s, e) =>
-            {
-                eventFired = true;
-            };
-            // Add some initial data to be replaced
-            _viewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Initial Line"));
+            _viewModel.RequestScrollToEnd += (s, e) => eventFired = true;
             var replaceUpdate = new FilteredUpdate(UpdateType.Replace, new List<FilteredLogLine> { new FilteredLogLine(10, "Replaced") });
 
             // Act
             _mockProcessor.SimulateFilteredUpdate(replaceUpdate);
-            _testContext.Send(_ => { }, null); // Ensure the Post callback from ScheduleLogTextUpdate executes
+            _testContext.Send(_ => { }, null); // Runs ReplaceLogTextInternal
 
             // Assert
             Assert.IsFalse(eventFired, "RequestScrollToEnd event should NOT fire on Replace updates.");

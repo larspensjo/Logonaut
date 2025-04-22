@@ -19,6 +19,7 @@ namespace Logonaut.LogTailing
         private readonly AsyncSubject<Unit> _initialReadCompleteSubject = new AsyncSubject<Unit>();
         private FileSystemWatcher? _watcher;
         private long _lastPosition;
+        private long _startPosition; // Position to start reading from
         private readonly CancellationTokenSource _cts = new CancellationTokenSource();
 
         /// <summary>
@@ -32,12 +33,13 @@ namespace Logonaut.LogTailing
         /// Initializes a new instance of the LogTailer class.
         /// </summary>
         /// <param name="filePath">The full path to the log file.</param>
-        public LogTailer(string filePath)
+        public LogTailer(string filePath, long startPosition = 0)
         {
             if (string.IsNullOrWhiteSpace(filePath))
                 throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
 
             _filePath = filePath;
+            _startPosition = startPosition; // Store the starting position
             if (!File.Exists(_filePath))
                 throw new FileNotFoundException("Log file not found", _filePath);
         }
@@ -45,10 +47,9 @@ namespace Logonaut.LogTailing
         /// <summary>
         /// Starts monitoring the log file.
         /// </summary>
-        public void Start()
+        public void StartMonitoring()
         {
-            // Initialize the last read position to the current file length.
-            _lastPosition = 0;
+            _lastPosition = _startPosition; // Start reading from the specified position
 
             // Configure the file system watcher.
             var directory = Path.GetDirectoryName(_filePath);
@@ -63,7 +64,8 @@ namespace Logonaut.LogTailing
             _watcher.Changed += OnFileChanged;
             _watcher.EnableRaisingEvents = true;
 
-            // Note: No 'await' here, Start() should return quickly.
+            // Initial check for any changes that occurred between initial read and watcher start
+            // Use Task.Run for the initial check AND subsequent watcher triggers
             Task.Run(() => ReadNewLinesAsync(_cts.Token), _cts.Token);
         }
 
@@ -80,48 +82,53 @@ namespace Logonaut.LogTailing
         /// </summary>
         private async Task ReadNewLinesAsync(CancellationToken token)
         {
-            bool initialReadSignalled = false; // Track if we've signalled completion
+            // Read lines *beyond* _lastPosition
             try
             {
-                // Open the file with shared read/write access to avoid locking issues.
                 using var stream = new FileStream(_filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                // Seek to the last known position.
-                stream.Seek(_lastPosition, SeekOrigin.Begin);
+                if (stream.Length < _lastPosition)
+                    _lastPosition = 0; // File was likely truncated, reset position
+                stream.Seek(_lastPosition, SeekOrigin.Begin); // Seek to last known position
 
                 using var reader = new StreamReader(stream);
                 string? line;
                 // Read lines until the end of the file.
                 while (!reader.EndOfStream && !token.IsCancellationRequested)
                 {
-                    line = await reader.ReadLineAsync().ConfigureAwait(false);
+                    line = await reader.ReadLineAsync(token).ConfigureAwait(false); // Pass token
                     if (line != null)
                     {
-                        _logLinesSubject.OnNext(line);
+                        _logLinesSubject.OnNext(line); // Emit NEW lines
                     }
                 }
-
-                if (!token.IsCancellationRequested) // Only signal if not cancelled
-                {
-                    Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} ---> LogTailer initial read pass finished. Read up to position {stream.Position}.");
-                    _initialReadCompleteSubject.OnNext(Unit.Default); // Signal completion value
-                    _initialReadCompleteSubject.OnCompleted(); // Complete the AsyncSubject
-                    initialReadSignalled = true;
-                }
-
-                // Update the last read position.
-                _lastPosition = stream.Position;
+                _lastPosition = stream.Position; // Update position
             }
             catch (OperationCanceledException)
             {
-                Debug.WriteLine("{DateTime.Now:HH:mm:ss.fff}---> LogTailer read task canceled.");
-                if (!initialReadSignalled) _initialReadCompleteSubject.OnError(new TaskCanceledException()); // Signal error if cancelled before completion
-                _logLinesSubject.OnCompleted();
+                // This is expected during Dispose, just log informative message
+                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogTailer read task canceled for {_filePath}.");
+                // DO NOT complete the subject here, Dispose handles that.
+                // DO NOT signal initial read completion here.
             }
-            catch (Exception ex)
+            catch (FileNotFoundException) // Handle case where file disappears between checks
             {
-                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}!!! LogTailer Error during read: {ex.Message}");
-                // Propagate exceptions through the observable stream.
-                _logLinesSubject.OnError(ex);
+                 Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}!!! LogTailer Error: File not found during read attempt: {_filePath}");
+                 _logLinesSubject.OnError(new FileNotFoundException($"Log file '{_filePath}' was not found or became inaccessible during tailing.", _filePath));
+                 // Consider disposing the tailer as it can't continue
+                 Dispose();
+            }
+             catch (IOException ioEx) // Handle other potential IO errors (e.g., network issues, locks)
+            {
+                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}!!! LogTailer IO Error during read for {_filePath}: {ioEx.Message}");
+                _logLinesSubject.OnError(ioEx);
+                // Decide if this is fatal or if retrying is possible (more complex)
+                // Dispose(); // Example: Treat IO errors as fatal for now
+            }
+            catch (Exception ex) // Catch-all for unexpected errors
+            {
+                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}!!! LogTailer Unexpected Error during read for {_filePath}: {ex.Message}");
+                _logLinesSubject.OnError(ex); // Propagate errors
+                // Dispose(); // Treat unexpected errors as fatal
             }
         }
 
