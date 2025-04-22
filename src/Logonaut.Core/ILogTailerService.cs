@@ -1,4 +1,5 @@
 using System;
+using System.Reactive;
 
 namespace Logonaut.Core // Or other appropriate namespace
 {
@@ -12,6 +13,7 @@ namespace Logonaut.Core // Or other appropriate namespace
         /// Consumers should subscribe to this to receive updates.
         /// </summary>
         IObservable<string> LogLines { get; }
+        IObservable<Unit> InitialReadComplete { get; }
 
         /// <summary>
         /// Starts tailing a new log file or changes the currently tailed file.
@@ -22,7 +24,7 @@ namespace Logonaut.Core // Or other appropriate namespace
         /// <exception cref="System.IO.FileNotFoundException">Thrown if the file does not exist.</exception>
         /// <exception cref="System.InvalidOperationException">Thrown if the directory path is invalid.</exception>
         /// <exception cref="System.Exception">Other exceptions related to file access or watcher setup.</exception>
-        void ChangeFile(string filePath);
+        Task ChangeFileAsync(string filePath);
 
         /// <summary>
         /// Stops tailing the current file and releases resources.

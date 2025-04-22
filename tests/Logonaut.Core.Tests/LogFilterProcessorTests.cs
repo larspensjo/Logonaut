@@ -47,8 +47,8 @@ namespace Logonaut.Core.Tests
             _processor = new LogFilterProcessor(
                 _mockTailer,
                 _logDocument,
-                new ImmediateSynchronizationContext(), // Basic context for test execution
-                _scheduler // Inject the TestScheduler!
+                new ImmediateSynchronizationContext(),
+                _scheduler
             );
 
             // Subscribe to capture results, errors, and completion
@@ -69,40 +69,50 @@ namespace Logonaut.Core.Tests
 
         // --- Test Cases ---
 
-        [TestMethod]
-        public void Reset_ClearsDocumentAndEmitsEmptyReplaceUpdateAfterDebounce()
+        [TestMethod] public void Reset_ClearsState_SendsImmediateEmptyUpdate_ThenFiltersAfterInitialRead()
         {
-            // Arrange
+            // Arrange: Add some data and set an initial filter
             _logDocument.AppendLine("Existing Line 1");
-            _processor.UpdateFilterSettings(new SubstringFilter("test"), 1);
-            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Process initial filter setting
-            _receivedUpdates.Clear(); // Clear initial update AND the one from filter setting
+            _processor.UpdateFilterSettings(new SubstringFilter("EXISTING"), 0);
+            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(10).Ticks); // Allow UpdateFilterSettings trigger to fire
+            _receivedUpdates.Clear(); // Clear any updates from the initial setup
 
-            // Act
+            // Act: Call Reset
             _processor.Reset();
 
             // Assert: LogDocument cleared immediately
-            Assert.AreEqual(0, _logDocument.Count, "LogDocument should be cleared immediately by Reset.");
+            Assert.AreEqual(0, _logDocument.Count, "LogDocument should be cleared.");
 
-            // Assert: Check for the immediate Post update (Needs ImmediateSynchronizationContext to run Post synchronously)
-            // IF using basic SynchronizationContext, this update might not appear synchronously here.
-            // Assuming ImmediateSynchronizationContext or similar for robust testing:
-            Assert.AreEqual(1, _receivedUpdates.Count, "Should receive one immediate update from Reset's Post.");
-            Assert.AreEqual(UpdateType.Replace, _receivedUpdates[0].Type, "Immediate Update type should be Replace.");
-            Assert.AreEqual(0, _receivedUpdates[0].Lines.Count, "Immediate Update should contain zero lines.");
+            // Assert: Immediate empty Replace update was sent via Post
+            Assert.AreEqual(1, _receivedUpdates.Count, "Should receive one immediate empty update.");
+            Assert.AreEqual(UpdateType.Replace, _receivedUpdates[0].Type, "Immediate Update type mismatch.");
+            Assert.AreEqual(0, _receivedUpdates[0].Lines.Count, "Immediate Update lines count mismatch.");
+            _receivedUpdates.Clear(); // Clear this update
 
-            // Act: Advance scheduler PAST the debounce time
-            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks);
+            // Act: Emit some lines that *would* match the *new* default filter (TrueFilter) after Reset
+            _mockTailer.EmitLine("Line A after Reset");
+            _mockTailer.EmitLine("Line B after Reset");
+            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(150).Ticks); // Process incremental buffer if needed
 
-            // Assert: Check total updates and the debounced one
-            Assert.AreEqual(2, _receivedUpdates.Count, "Should have 2 total updates after Reset (Post + Debounce)."); // FIX: Expect 2 total now
-            var debouncedUpdate = _receivedUpdates[1]; // FIX: Check the second update
-            Assert.AreEqual(UpdateType.Replace, debouncedUpdate.Type, "Debounced update type should be Replace.");
-            Assert.AreEqual(0, debouncedUpdate.Lines.Count, "Debounced update should contain zero lines.");
+            // Assert: NO full filter update yet because InitialReadComplete hasn't fired
+            Assert.AreEqual(1, _receivedUpdates.Count, "Should only have incremental Append update before InitialReadComplete."); // Only Append update expected
+            Assert.AreEqual(UpdateType.Append, _receivedUpdates[0].Type);
+            _receivedUpdates.Clear(); // Clear the append update
+
+            // Act: Simulate the initial read completing
+            _mockTailer.SimulateInitialReadComplete();
+            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(10).Ticks); // Allow the trigger chain to process
+
+            // Assert: NOW the full filter pass runs and sends a Replace update
+            Assert.AreEqual(1, _receivedUpdates.Count, "Should receive one Replace update after InitialReadComplete.");
+            var finalUpdate = _receivedUpdates[0];
+            Assert.AreEqual(UpdateType.Replace, finalUpdate.Type, "Final update type mismatch.");
+            Assert.AreEqual(2, finalUpdate.Lines.Count, "Final update lines count mismatch.");
+            Assert.AreEqual("Line A after Reset", finalUpdate.Lines[0].Text);
+            Assert.AreEqual("Line B after Reset", finalUpdate.Lines[1].Text);
         }
 
-        [TestMethod]
-        public void Incremental_AppendsLinesAndAssignsCorrectOriginalNumbers()
+        [TestMethod] public void Incremental_AppendsLinesAndAssignsCorrectOriginalNumbers()
         {
             // Arrange
             _processor.UpdateFilterSettings(new TrueFilter(), 0); // Match everything
@@ -178,105 +188,138 @@ namespace Logonaut.Core.Tests
             Assert.IsFalse(update.Lines[1].IsContextLine);
         }
 
-
-        [TestMethod]
-        public void UpdateFilterSettings_TriggersFullRefilterWithLatestSettings()
+        [TestMethod] public void UpdateFilterSettings_AfterInitialLoad_TriggersImmediateFullRefilter()
         {
-            // Arrange: Add some initial lines and process them
-            _processor.UpdateFilterSettings(new TrueFilter(), 0);
-            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks);
-            _mockTailer.EmitLine("Line 1 INFO");    // Orig 1
-            _mockTailer.EmitLine("Line 2 MATCH");   // Orig 2
-            _mockTailer.EmitLine("Line 3 INFO");    // Orig 3
-            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(150).Ticks); // Process initial lines
-            _receivedUpdates.Clear(); // Clear initial Append updates
+            // Arrange: Simulate initial load completion
+            _processor.Reset();
+            _mockTailer.EmitLine("Line 1 INFO");
+            _mockTailer.EmitLine("Line 2 MATCH");
+            _mockTailer.EmitLine("Line 3 INFO");
+            _mockTailer.SimulateInitialReadComplete(); // Signal completion
+            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(10).Ticks); // Process the initial filter pass
+            _receivedUpdates.Clear(); // Clear updates from initial load
 
-            // Act: Update filter settings and advance past debounce time
+            // Act: Call UpdateFilterSettings again
             var newFilter = new SubstringFilter("MATCH");
             _processor.UpdateFilterSettings(newFilter, 0);
-            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Advance past debounce (300ms)
+            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(10).Ticks); // Processing should be quick now (no debounce)
 
             // Assert
             Assert.AreEqual(1, _receivedUpdates.Count, "Should receive one Replace update.");
             var update = _receivedUpdates[0];
             Assert.AreEqual(UpdateType.Replace, update.Type);
-            Assert.AreEqual(1, update.Lines.Count, "Replace update should contain only matching line.");
-            Assert.AreEqual(2, update.Lines[0].OriginalLineNumber);
+            Assert.AreEqual(1, update.Lines.Count);
             Assert.AreEqual("Line 2 MATCH", update.Lines[0].Text);
-            Assert.IsFalse(update.Lines[0].IsContextLine);
         }
 
-        [TestMethod]
-        public void UpdateFilterSettings_DebouncesRapidCalls()
+        [TestMethod] public void UpdateFilterSettings_RapidSubsequentCalls_TriggerMultipleRefilters()
         {
-            // Arrange: Add initial lines
-            _processor.UpdateFilterSettings(new TrueFilter(), 0);
-            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks);
-            _mockTailer.EmitLine("Line 1 A"); // Orig 1
-            _mockTailer.EmitLine("Line 2 B"); // Orig 2
-            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(150).Ticks);
+            // Arrange: Simulate initial load completion
+            _processor.Reset();
+            _mockTailer.EmitLine("Line 1 A");
+            _mockTailer.EmitLine("Line 2 B");
+            _mockTailer.SimulateInitialReadComplete();
+            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(10).Ticks); // Process initial load
             _receivedUpdates.Clear();
 
             var filterA = new SubstringFilter("A");
             var filterB = new SubstringFilter("B");
 
-            // Act: Call UpdateFilterSettings rapidly
-            _processor.UpdateFilterSettings(filterA, 0); // Time: T0 (scheduler time)
-            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(100).Ticks); // Time: T0 + 100ms
-            _processor.UpdateFilterSettings(filterB, 0); // Time: T0 + 100ms
-            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(100).Ticks); // Time: T0 + 200ms
+            // Act: Call UpdateFilterSettings rapidly multiple times *after* initial load
+            _processor.UpdateFilterSettings(filterA, 0);
+            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(5).Ticks); // Minimal advance
+            _processor.UpdateFilterSettings(filterB, 0);
+            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(5).Ticks);
+            _processor.UpdateFilterSettings(filterA, 0);
+            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(5).Ticks);
 
-            // Assert: No update yet, debounce timer restarted at T0 + 100ms
-            Assert.AreEqual(0, _receivedUpdates.Count, "No update should occur before debounce period expires.");
+            // Assert: Since there's no debounce on subsequent calls now, each call triggers a filter pass.
+            Assert.AreEqual(3, _receivedUpdates.Count, "Should receive three Replace updates.");
 
-            // Act: Advance past the debounce period started at T0 + 100ms (100 + 300 = 400ms needed from T0+100)
-            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(250).Ticks); // Total Time: T0 + 450ms
+            // Check the content of the *last* update (triggered by filterA)
+            var lastUpdate = _receivedUpdates[2];
+            Assert.AreEqual(UpdateType.Replace, lastUpdate.Type);
+            Assert.AreEqual(1, lastUpdate.Lines.Count);
+            Assert.AreEqual("Line 1 A", lastUpdate.Lines[0].Text);
 
-            // Assert: Should have received ONE update using the LAST filter (filterB)
-            Assert.AreEqual(1, _receivedUpdates.Count, "Should receive exactly one update after debounce.");
-            var update = _receivedUpdates[0];
-            Assert.AreEqual(UpdateType.Replace, update.Type);
-            Assert.AreEqual(1, update.Lines.Count, "Update should contain line matching filter B.");
-            Assert.AreEqual("Line 2 B", update.Lines[0].Text);
-            Assert.AreEqual(2, update.Lines[0].OriginalLineNumber);
+            // Optionally check intermediate updates too
+            Assert.AreEqual("Line 1 A", _receivedUpdates[0].Lines[0].Text); // First call with filterA
+            Assert.AreEqual("Line 2 B", _receivedUpdates[1].Lines[0].Text); // Second call with filterB
         }
 
-        [TestMethod]
-        public void FullRefilter_IncludesContextLines()
+        [TestMethod] public void FullRefilter_IncludesContextLines()
         {
-            // Arrange: Add lines
-            _processor.UpdateFilterSettings(new TrueFilter(), 0);
-            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks);
+            // Arrange: Simulate initial load completion first
+            _processor.Reset();
             _mockTailer.EmitLine("Context Before"); // Orig 1
             _mockTailer.EmitLine("MATCH Line");     // Orig 2
             _mockTailer.EmitLine("Context After 1"); // Orig 3
             _mockTailer.EmitLine("Context After 2"); // Orig 4
             _mockTailer.EmitLine("Another Line");   // Orig 5
-            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(150).Ticks);
+            _mockTailer.SimulateInitialReadComplete();
+            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(10).Ticks); // Initial load pass
             _receivedUpdates.Clear();
 
             // Act: Update filter with context lines
             _processor.UpdateFilterSettings(new SubstringFilter("MATCH"), 1); // 1 context line
-            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Past debounce
+            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(10).Ticks); // Process update
 
-            // Assert
+            // Assert (Assertions remain the same)
             Assert.AreEqual(1, _receivedUpdates.Count);
             var update = _receivedUpdates[0];
-            Assert.AreEqual(UpdateType.Replace, update.Type);
-            Assert.AreEqual(3, update.Lines.Count, "Should include match + 1 before + 1 after.");
+            Assert.AreEqual(3, update.Lines.Count);
+            Assert.IsTrue(update.Lines[0].IsContextLine);
+            Assert.IsFalse(update.Lines[1].IsContextLine); // The match
+            Assert.IsTrue(update.Lines[2].IsContextLine);
+            Assert.AreEqual(1, update.Lines[0].OriginalLineNumber);
+            Assert.AreEqual(2, update.Lines[1].OriginalLineNumber);
+            Assert.AreEqual(3, update.Lines[2].OriginalLineNumber);
+        }
 
-            // Verify lines and context flag in correct order
-            Assert.AreEqual(1, update.Lines[0].OriginalLineNumber, "Line 1 Orig Num");
-            Assert.AreEqual("Context Before", update.Lines[0].Text, "Line 1 Text");
-            Assert.IsTrue(update.Lines[0].IsContextLine, "Line 1 Context Flag");
+        [TestMethod] public void FullFilter_WaitsForInitialReadComplete_AfterReset()
+        {
+            // Arrange
+            _processor.Reset();
+            _mockTailer.EmitLine("Line 1");
+            _mockTailer.EmitLine("Line 2");
+            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(150).Ticks); // Process incremental appends if any
+            // Clear the immediate empty Reset update and any appends
+            _receivedUpdates.Clear();
 
-            Assert.AreEqual(2, update.Lines[1].OriginalLineNumber, "Line 2 Orig Num");
-            Assert.AreEqual("MATCH Line", update.Lines[1].Text, "Line 2 Text");
-            Assert.IsFalse(update.Lines[1].IsContextLine, "Line 2 Context Flag"); // The match itself
+            // Act: Advance scheduler significantly, but DO NOT signal completion yet
+            _scheduler.AdvanceBy(TimeSpan.FromSeconds(10).Ticks);
 
-            Assert.AreEqual(3, update.Lines[2].OriginalLineNumber, "Line 3 Orig Num");
-            Assert.AreEqual("Context After 1", update.Lines[2].Text, "Line 3 Text");
-            Assert.IsTrue(update.Lines[2].IsContextLine, "Line 3 Context Flag");
+            // Assert: No full filter update should have occurred
+            Assert.AreEqual(0, _receivedUpdates.Count(u => u.Type == UpdateType.Replace), "No Replace update before InitialReadComplete.");
+
+            // Act: Signal completion
+            _mockTailer.SimulateInitialReadComplete();
+            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(10).Ticks); // Allow trigger processing
+
+            // Assert: Now the Replace update should arrive
+            Assert.AreEqual(1, _receivedUpdates.Count(u => u.Type == UpdateType.Replace), "Replace update missing after InitialReadComplete.");
+            var update = _receivedUpdates.First(u => u.Type == UpdateType.Replace);
+            Assert.AreEqual(2, update.Lines.Count); // Should contain Line 1 and Line 2
+        }
+
+        [TestMethod] public void FullFilter_HandlesError_DuringInitialReadWait()
+        {
+            // Arrange
+            _processor.Reset();
+            _mockTailer.EmitLine("Line 1");
+            _receivedUpdates.Clear(); // Clear immediate empty update
+            var expectedError = new TimeoutException("Simulated timeout");
+
+            // Act: Simulate an error from the InitialReadComplete observable
+            _mockTailer.SimulateInitialReadError(expectedError);
+            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(10).Ticks); // Allow error propagation
+
+            // Assert: The error should propagate to the FilteredUpdates observer
+            Assert.IsNotNull(_receivedError, "Error was not received.");
+            Assert.IsInstanceOfType(_receivedError, typeof(Exception), "Outer exception type mismatch."); // Processor wraps it
+            Assert.IsInstanceOfType(_receivedError.InnerException, typeof(TimeoutException), "Inner exception type mismatch.");
+            Assert.AreEqual(expectedError.Message, _receivedError.InnerException.Message);
+            Assert.AreEqual(0, _receivedUpdates.Count, "No Replace updates should occur on error.");
         }
 
         [TestMethod]

@@ -57,10 +57,8 @@ namespace Logonaut.UI.Tests.ViewModels
             _mockTailer = new MockLogTailerService();
             _mockFileDialog = new MockFileDialogService();
             _mockProcessor = new MockLogFilterProcessor();
-            // Use ImmediateSynchronizationContext for predictable Post behavior
             _testContext = new ImmediateSynchronizationContext();
 
-            // Use default settings initially unless a test overrides
             _mockSettings.SettingsToReturn = MockSettingsService.CreateDefaultTestSettings();
 
             _viewModel = new MainViewModel(
@@ -210,6 +208,21 @@ namespace Logonaut.UI.Tests.ViewModels
             Assert.IsNotNull(_mockProcessor.LastFilterSettings);
             Assert.IsInstanceOfType(_mockProcessor.LastFilterSettings?.Filter, typeof(TrueFilter));
             Assert.AreEqual(0, _mockProcessor.LastFilterSettings?.ContextLines);
+        }
+
+        [TestMethod] public void Constructor_CallsProcessorReset_SetsInitialLoadState()
+        {
+            // Assert (Processor interaction happens during construction via ActiveProfile set -> Reset)
+            // Initial ActiveFilterProfile set triggers TriggerFilterUpdate -> calls Processor.UpdateFilterSettings
+            // Reset is called implicitly by the processor's handling of the first update signal? Let's re-verify.
+            // No, Reset is called by OpenLogFile or explicitly. Constructor only triggers UpdateFilterSettings. Let's test that.
+            // Correction: The initial ActiveFilterProfile set *does* call TriggerFilterUpdate, which calls Processor.UpdateFilterSettings.
+            // Reset is NOT called by constructor.
+
+            Assert.AreEqual(1, _mockProcessor.UpdateFilterSettingsCallCount, "Processor.UpdateFilterSettings should be called once by constructor.");
+            Assert.AreEqual(0, _mockProcessor.ResetCallCount, "Processor.Reset should NOT be called by constructor."); // Reset is for file open
+            Assert.IsFalse(_viewModel.IsPerformingInitialLoad, "IsPerformingInitialLoad should be false initially.");
+            Assert.IsFalse(_viewModel.IsBusyFiltering, "IsBusyFiltering should be false initially.");
         }
 
         #endregion
@@ -619,14 +632,21 @@ namespace Logonaut.UI.Tests.ViewModels
 
         #region Interaction with LogFilterProcessor Tests (NEW)
 
-        [TestMethod]
-        public void OpenLogFileCommand_CallsProcessorReset_AndTailerChangeFile()
+        [TestMethod] public async Task OpenLogFileCommand_CallsProcessorReset_TailerChangeFileAsync_SetsLoadState()
         {
+            // Arrange
             _mockFileDialog.FileToReturn = "C:\\good\\log.txt";
-            _viewModel.OpenLogFileCommand.Execute(null);
-            Assert.AreEqual(1, _mockProcessor.ResetCallCount);
-            Assert.AreEqual("C:\\good\\log.txt", _mockTailer.ChangedFilePath);
-            Assert.AreEqual("C:\\good\\log.txt", _viewModel.CurrentLogFilePath);
+            _mockProcessor.ResetCounters();
+
+            // Act
+            await _viewModel.OpenLogFileCommand.ExecuteAsync(null);
+
+            // Assert
+            Assert.AreEqual(1, _mockProcessor.ResetCallCount, "Processor Reset count mismatch.");
+            Assert.AreEqual("C:\\good\\log.txt", _mockTailer.ChangedFilePath, "Tailer ChangedFilePath mismatch.");
+            Assert.AreEqual("C:\\good\\log.txt", _viewModel.CurrentLogFilePath, "ViewModel CurrentLogFilePath mismatch.");
+            Assert.IsTrue(_viewModel.IsPerformingInitialLoad, "IsPerformingInitialLoad should be true after starting load.");
+            Assert.IsTrue(_viewModel.IsBusyFiltering, "IsBusyFiltering should be true after starting load.");
         }
 
         [TestMethod]
@@ -711,7 +731,54 @@ namespace Logonaut.UI.Tests.ViewModels
 
         #endregion
 
-        #region State Update Tests (NEW)
+        #region State Update Tests
+        [TestMethod] public void StateFlags_ManagedCorrectly_DuringInitialLoad()
+        {
+            // Arrange
+            _mockFileDialog.FileToReturn = "C:\\good\\log.txt";
+            List<FilteredLogLine> initialLines = new() { new(1, "Line 1") };
+            FilteredUpdate initialReplaceUpdate = new (UpdateType.Replace, initialLines);
+
+            // Act 1: Start the file open process
+            var openTask = _viewModel.OpenLogFileCommand.ExecuteAsync(null); // Don't await yet
+
+            // Assert 1: State flags should be true immediately after command start
+            Assert.IsTrue(_viewModel.IsPerformingInitialLoad, "InitialLoad should be true after OpenLogFile start.");
+            Assert.IsTrue(_viewModel.IsBusyFiltering, "BusyFiltering should be true after OpenLogFile start.");
+
+            // Act 2: Simulate the initial read completing (but processor hasn't finished filtering yet)
+            _mockTailer.SimulateInitialReadComplete();
+            _testContext.Send(_ => { }, null); // Process context queue
+
+            // Assert 2: State flags should *still* be true
+            Assert.IsTrue(_viewModel.IsPerformingInitialLoad, "InitialLoad should still be true after tailer read complete.");
+            Assert.IsTrue(_viewModel.IsBusyFiltering, "BusyFiltering should still be true after tailer read complete.");
+
+            // Act 3: Simulate the FilterProcessor sending the *first* Replace update
+            _mockProcessor.SimulateFilteredUpdate(initialReplaceUpdate);
+            _testContext.Send(_ => { }, null); // Process context queue (ApplyFilteredUpdate runs)
+
+            // Assert 3: State flags should now be false
+            Assert.IsFalse(_viewModel.IsPerformingInitialLoad, "InitialLoad should be false after first Replace update.");
+            Assert.IsFalse(_viewModel.IsBusyFiltering, "BusyFiltering should be false after first Replace update.");
+            Assert.AreEqual(1, _viewModel.FilteredLogLines.Count); // Verify update was applied
+        }
+
+        [TestMethod] public void ApplyFilteredUpdate_Replace_AfterManualFilterChange_ResetsBusyFlag()
+        {
+            // Arrange: Simulate NOT being in initial load
+            _viewModel.IsPerformingInitialLoad = false;
+            _viewModel.IsBusyFiltering = true; // Simulate busy state from triggering filter change
+            var update = new FilteredUpdate(UpdateType.Replace, new List<FilteredLogLine> { new(1, "New") });
+
+            // Act
+            _mockProcessor.SimulateFilteredUpdate(update);
+            _testContext.Send(_ => { }, null);
+
+            // Assert
+            Assert.IsFalse(_viewModel.IsBusyFiltering, "Busy flag should be reset after Replace update.");
+            Assert.IsFalse(_viewModel.IsPerformingInitialLoad, "Initial load flag should remain false.");
+        }
 
         [TestMethod]
         public void ContextLines_Set_TriggersProcessorUpdate_SavesSettings()

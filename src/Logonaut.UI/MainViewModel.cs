@@ -491,11 +491,11 @@ namespace Logonaut.UI.ViewModels
         // === Other Commands (File, Search, Context Lines) ===
         // Ensure they interact correctly with the Active Profile concept if needed
 
-        [RelayCommand] private void OpenLogFile()
+        [RelayCommand] private async Task OpenLogFileAsync()
         {
             string? selectedFile = _fileDialogService.OpenFile("Select a log file", "Log Files|*.log;*.txt|All Files|*.*");
             if (string.IsNullOrEmpty(selectedFile)) return;
-            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} OpenLogFile: '{selectedFile}'");
+            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} OpenLogFileAsync: '{selectedFile}'");
 
             IsBusyFiltering = true;
             IsPerformingInitialLoad = true;
@@ -508,7 +508,7 @@ namespace Logonaut.UI.ViewModels
                 ScheduleLogTextUpdate(UpdateType.Replace); // Clear editor text
                 CurrentLogFilePath = selectedFile;
 
-                _logTailerService.ChangeFile(selectedFile); // Starts tailer
+                await _logTailerService.ChangeFileAsync(selectedFile).ConfigureAwait(true);
             }
             catch (Exception ex)
             {
