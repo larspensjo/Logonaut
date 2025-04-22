@@ -925,7 +925,6 @@ namespace Logonaut.UI.ViewModels
         {
             string currentSearchTerm = SearchText;
             string textToSearch = GetCurrentDocumentText();
-            System.Diagnostics.Debug.WriteLine($"---> UpdateSearchMatches: Searching text (Length={textToSearch.Length}): \"{textToSearch.Replace("\r", "\\r").Replace("\n", "\\n")}\""); // Log text with escaped newlines
 
             ResetSearchState(); // Clears internal list, markers, index, selection
 
@@ -943,7 +942,6 @@ namespace Logonaut.UI.ViewModels
                     currentSearchTerm,
                     offset,
                     IsCaseSensitiveSearch ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase);
-                System.Diagnostics.Debug.WriteLine($"---> UpdateSearchMatches: IndexOf('{currentSearchTerm}', {offset}) returned {foundIndex}");
                 if (foundIndex == -1) break;
                 var newMatch = new SearchResult(foundIndex, currentSearchTerm.Length);
                  _searchMatches.Add(newMatch); // Add to internal list
