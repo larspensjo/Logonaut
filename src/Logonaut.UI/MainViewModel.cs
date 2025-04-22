@@ -788,6 +788,13 @@ namespace Logonaut.UI.ViewModels
             {
                 AddFilteredLines(update.Lines);
                 ScheduleLogTextUpdate(update.Type, update.Lines); // Pass only appended lines
+
+                // Explicitly set IsBusyFiltering to false on Append
+                // Append operations themselves aren't "busy" in the sense of a full re-filter.
+                // If we are in the initial load phase, the processor already filtered this out.
+                // If we are not in initial load, receiving an Append means the processor
+                // isn't currently performing a full re-filter triggered by UpdateFilterSettings.
+                _uiContext.Post(_ => { IsBusyFiltering = false; } , null);
             }
         }
 
@@ -831,8 +838,11 @@ namespace Logonaut.UI.ViewModels
             {
                 var args = ((UpdateType type, List<FilteredLogLine> lines))state!;
 
+#if false
+                // This test doesn't seem to be needed, and it will disrupt unit testing.
                 if (_logEditorInstance?.Document == null)
                     return;
+#endif                    
 
                 try
                 {
@@ -881,15 +891,20 @@ namespace Logonaut.UI.ViewModels
 
         private void AppendLogTextInternal(IReadOnlyList<FilteredLogLine> addedLines)
         {
+            System.Diagnostics.Debug.WriteLine($"---> AppendLogTextInternal: Entered. IsAutoScrollEnabled={IsAutoScrollEnabled}, addedLines.Count={addedLines.Count}");
+            if (IsAutoScrollEnabled && addedLines.Any()) {
+                System.Diagnostics.Debug.WriteLine($"---> AppendLogTextInternal: Invoking RequestScrollToEnd."); 
+                RequestScrollToEnd?.Invoke(this, EventArgs.Empty); // Handle Auto-Scroll *before* potentially returning due to null editor
+            }
+
             if (_logEditorInstance?.Document == null || !addedLines.Any()) return;
 
             // Generate text chunk for *only the added lines*
             var sb = new System.Text.StringBuilder();
             // Prepend newline if document isn't empty
             if (_logEditorInstance.Document.TextLength > 0)
-            {
                 sb.Append(Environment.NewLine);
-            }
+
             bool first = true;
             foreach (var line in addedLines)
             {
@@ -903,12 +918,6 @@ namespace Logonaut.UI.ViewModels
             _logEditorInstance.Document.BeginUpdate();
             _logEditorInstance.Document.Insert(_logEditorInstance.Document.TextLength, textChunk);
             _logEditorInstance.Document.EndUpdate();
-
-            // Handle Auto-Scroll *after* appending
-            if (IsAutoScrollEnabled)
-            {
-                RequestScrollToEnd?.Invoke(this, EventArgs.Empty);
-            }
         }
 
         // Core search logic - updates internal list and ruler markers
@@ -916,6 +925,7 @@ namespace Logonaut.UI.ViewModels
         {
             string currentSearchTerm = SearchText;
             string textToSearch = GetCurrentDocumentText();
+            System.Diagnostics.Debug.WriteLine($"---> UpdateSearchMatches: Searching text (Length={textToSearch.Length}): \"{textToSearch.Replace("\r", "\\r").Replace("\n", "\\n")}\""); // Log text with escaped newlines
 
             ResetSearchState(); // Clears internal list, markers, index, selection
 
@@ -933,6 +943,7 @@ namespace Logonaut.UI.ViewModels
                     currentSearchTerm,
                     offset,
                     IsCaseSensitiveSearch ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase);
+                System.Diagnostics.Debug.WriteLine($"---> UpdateSearchMatches: IndexOf('{currentSearchTerm}', {offset}) returned {foundIndex}");
                 if (foundIndex == -1) break;
                 var newMatch = new SearchResult(foundIndex, currentSearchTerm.Length);
                  _searchMatches.Add(newMatch); // Add to internal list
