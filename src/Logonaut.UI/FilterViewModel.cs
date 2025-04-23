@@ -3,125 +3,124 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Logonaut.Filters;
 
-namespace Logonaut.UI.ViewModels
+namespace Logonaut.UI.ViewModels;
+
+public partial class FilterViewModel : ObservableObject
 {
-    public partial class FilterViewModel : ObservableObject
+    public IFilter Filter { get; }
+    public FilterViewModel? Parent { get; }
+    public ObservableCollection<FilterViewModel> Children { get; } = new();
+
+    [ObservableProperty] private bool _isSelected;
+    [ObservableProperty] private bool _isEditing = false;
+    [ObservableProperty] private bool _isNotEditing = true;
+
+    [ObservableProperty] private bool _isExpanded; // Relevant for CompositeFilters
+
+    public bool IsEditable => Filter.IsEditable;
+
+    // Callback to notify owner (MainViewModel) that filter config requires re-evaluation
+    private readonly Action? _filterConfigurationChangedCallback; // TODO: RENAME? More like "TriggerRefilterCallback"
+
+    public FilterViewModel(IFilter filter, Action? filterConfigurationChangedCallback = null, FilterViewModel? parent = null)
     {
-        public IFilter Filter { get; }
-        public FilterViewModel? Parent { get; }
-        public ObservableCollection<FilterViewModel> Children { get; } = new();
+        Filter = filter;
+        Parent = parent;
+        _filterConfigurationChangedCallback = filterConfigurationChangedCallback;
 
-        [ObservableProperty] private bool _isSelected;
-        [ObservableProperty] private bool _isEditing = false;
-        [ObservableProperty] private bool _isNotEditing = true;
-
-        [ObservableProperty] private bool _isExpanded; // Relevant for CompositeFilters
-
-        public bool IsEditable => Filter.IsEditable;
-
-        // Callback to notify owner (MainViewModel) that filter config requires re-evaluation
-        private readonly Action? _filterConfigurationChangedCallback; // TODO: RENAME? More like "TriggerRefilterCallback"
-
-        public FilterViewModel(IFilter filter, Action? filterConfigurationChangedCallback = null, FilterViewModel? parent = null)
+        if (filter is CompositeFilter composite)
         {
-            Filter = filter;
-            Parent = parent;
-            _filterConfigurationChangedCallback = filterConfigurationChangedCallback;
-
-            if (filter is CompositeFilter composite)
+            foreach (var child in composite.SubFilters)
             {
-                foreach (var child in composite.SubFilters)
-                {
-                    Children.Add(new FilterViewModel(child, filterConfigurationChangedCallback, this));
-                }
+                Children.Add(new FilterViewModel(child, filterConfigurationChangedCallback, this));
             }
         }
+    }
 
-        [RelayCommand]
-        public void AddChildFilter(IFilter childFilter)
+    [RelayCommand]
+    public void AddChildFilter(IFilter childFilter)
+    {
+        if (Filter is CompositeFilter composite)
         {
-            if (Filter is CompositeFilter composite)
+            composite.Add(childFilter);
+            // Ensure the callback is passed down
+            var childVM = new FilterViewModel(childFilter, _filterConfigurationChangedCallback, this);
+            Children.Add(childVM);
+            NotifyFilterConfigurationChanged(); // Notify after structural change
+        }
+    }
+
+    public void RemoveChild(FilterViewModel child)
+    {
+        if (Filter is CompositeFilter composite)
+        {
+            if (composite.Remove(child.Filter))
             {
-                composite.Add(childFilter);
-                // Ensure the callback is passed down
-                var childVM = new FilterViewModel(childFilter, _filterConfigurationChangedCallback, this);
-                Children.Add(childVM);
+                Children.Remove(child);
                 NotifyFilterConfigurationChanged(); // Notify after structural change
             }
         }
+    }
 
-        public void RemoveChild(FilterViewModel child)
+    public bool Enabled
+    {
+        get => Filter.Enabled;
+        set
         {
-            if (Filter is CompositeFilter composite)
+            if (Filter.Enabled != value)
             {
-                if (composite.Remove(child.Filter))
-                {
-                    Children.Remove(child);
-                    NotifyFilterConfigurationChanged(); // Notify after structural change
-                }
+                Filter.Enabled = value;
+                OnPropertyChanged();
+                NotifyFilterConfigurationChanged(); // <<< Notify on Enabled change
             }
         }
+    }
 
-        public bool Enabled
+    public string DisplayText => Filter.DisplayText;
+    public string FilterType => Filter.TypeText;
+
+    public string FilterText
+    {
+        get => Filter.Value;
+        set
         {
-            get => Filter.Enabled;
-            set
+            if (!Filter.IsEditable)
+                throw new InvalidOperationException("Filter is not editable.");
+            if (Filter.Value != value)
             {
-                if (Filter.Enabled != value)
-                {
-                    Filter.Enabled = value;
-                    OnPropertyChanged();
-                    NotifyFilterConfigurationChanged(); // <<< Notify on Enabled change
-                }
+                Filter.Value = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(DisplayText)); // DisplayText depends on Value for some types
+                // DO NOT notify on every keystroke. Notification happens on EndEdit or Enabled change.
             }
         }
+    }
 
-        public string DisplayText => Filter.DisplayText;
-        public string FilterType => Filter.TypeText;
+    // Method to invoke the callback
+    private void NotifyFilterConfigurationChanged()
+    {
+        _filterConfigurationChangedCallback?.Invoke();
+    }
 
-        public string FilterText
+    [RelayCommand]
+    public void BeginEdit()
+    {
+        if (IsEditable)
         {
-            get => Filter.Value;
-            set
-            {
-                if (!Filter.IsEditable)
-                    throw new InvalidOperationException("Filter is not editable.");
-                if (Filter.Value != value)
-                {
-                    Filter.Value = value;
-                    OnPropertyChanged();
-                    OnPropertyChanged(nameof(DisplayText)); // DisplayText depends on Value for some types
-                    // DO NOT notify on every keystroke. Notification happens on EndEdit or Enabled change.
-                }
-            }
+            IsEditing = true;
+            IsNotEditing = false;
         }
+    }
 
-        // Method to invoke the callback
-        private void NotifyFilterConfigurationChanged()
+    [RelayCommand]
+    public void EndEdit()
+    {
+        if (IsEditing) // Only trigger if we were actually editing
         {
-            _filterConfigurationChangedCallback?.Invoke();
-        }
-
-        [RelayCommand]
-        public void BeginEdit()
-        {
-            if (IsEditable)
-            {
-                IsEditing = true;
-                IsNotEditing = false;
-            }
-        }
-
-        [RelayCommand]
-        public void EndEdit()
-        {
-            if (IsEditing) // Only trigger if we were actually editing
-            {
-                IsEditing = false;
-                IsNotEditing = true;
-                // Notify AFTER editing is finished and state is updated
-                NotifyFilterConfigurationChanged(); // <<< Notify on finishing edit
-            }
+            IsEditing = false;
+            IsNotEditing = true;
+            // Notify AFTER editing is finished and state is updated
+            NotifyFilterConfigurationChanged(); // <<< Notify on finishing edit
         }
     }
 }
