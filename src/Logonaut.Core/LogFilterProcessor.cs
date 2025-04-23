@@ -31,6 +31,8 @@ public class LogFilterProcessor : ILogFilterProcessor
     private bool _isInitialLoadInProgress = false; // Flag remains useful
     private readonly object _stateLock = new object();
 
+    private readonly Action<string> _addLineToDocumentCallback;
+
     // Config Constants
     private const int LineBufferSize = 50;
     private readonly TimeSpan _lineBufferTimeSpan = TimeSpan.FromMilliseconds(100);
@@ -41,14 +43,16 @@ public class LogFilterProcessor : ILogFilterProcessor
 
     public LogFilterProcessor(
         ILogTailerService logTailerService,
-        LogDocument logDocument, // Expect LogDocument from caller
+        LogDocument logDocument,
         SynchronizationContext uiContext,
+        Action<string> addLineToDocumentCallback,
         IScheduler? backgroundScheduler = null)
     {
         _logTailerService = logTailerService;
-        _logDocument = logDocument; // Store reference
+        _logDocument = logDocument;
         _uiContext = uiContext;
         _backgroundScheduler = backgroundScheduler ?? TaskPoolScheduler.Default;
+        _addLineToDocumentCallback = addLineToDocumentCallback;
 
         InitializePipelines();
 
@@ -60,42 +64,52 @@ public class LogFilterProcessor : ILogFilterProcessor
     {
         _logSubscription?.Dispose(); // Clean up previous if any
 
-            // Pipeline for NEW lines from the tailer
+        // Pipeline for new lines from the tailer. Responsibility:
+        // 1. Receive a new line.
+        // 2. Tell MainViewModel (via callback) to add it to the canonical LogDoc.
+        // 3. Trigger the other pipeline (the full refilter pipeline) to re-evaluate everything.
         _logSubscription = _logTailerService.LogLines
             .Select(line => {
+                // 1. Assign index (still useful for total count)
                 var newIndex = Interlocked.Increment(ref _currentLineIndex);
-                // Assign original index relative to start *after* initial load
-                // The line itself is NOT added to _logDocument here
-                _totalLinesSubject.OnNext(_totalLinesSubject.Value + 1); // Increment total count seen
-                return new { LineText = line, OriginalIndex = newIndex };
+                _totalLinesSubject.OnNext(_totalLinesSubject.Value + 1);
+
+                // 2. Invoke the CALLBACK to add the line to the MainViewModel's LogDoc
+                _addLineToDocumentCallback?.Invoke(line); // <<< USE CALLBACK
+
+                // Return value doesn't matter much, maybe just the line for debugging
+                return line; // Or Unit.Default
             })
-            .Buffer(_lineBufferTimeSpan, LineBufferSize, _backgroundScheduler)
-            .Where(buffer => buffer.Count > 0)
-            .Select(buffer => ApplyIncrementalFilter(buffer.Select(item => (item.LineText, item.OriginalIndex)).ToList(), _currentFilter))
-            .Where(filteredLines => filteredLines.Count > 0)
-            .Where(_ => { lock (_stateLock) return !_isInitialLoadInProgress; }) // Prevent Append during initial filter run
-            .ObserveOn(_uiContext)
+            .ObserveOn(_backgroundScheduler) // Ensure trigger happens on background
+            .Where(_ => { lock (_stateLock) return !_isInitialLoadInProgress; }) // Prevent triggers during initial load
             .Subscribe(
-                matchedLines => {
-                    // This will now only receive Append updates *after* initial load completes
-                    Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Sending Append Update to UI. Lines={matchedLines.Count}");
-                    _filteredUpdatesSubject.OnNext(new FilteredUpdate(UpdateType.Append, matchedLines));
+                lineText => { // Parameter is now just the line text (or Unit)
+                    // 3. Trigger the full refilter pipeline
+                    Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: New line '{lineText.Substring(0, Math.Min(lineText.Length, 20))}...' detected. Triggering full refilter check via callback.");
+                    _filterChangeTriggerSubject?.OnNext((_currentFilter, _currentContextLines));
                 },
-                ex => HandlePipelineError("Incremental Filtering Error", ex)
+                ex => HandlePipelineError("New Line Processing Error", ex)
             );
         _disposables.Add(_logSubscription); // Add to disposables
 
-        // Pipeline ONLY for explicit filter setting changes
         var filterChangeTrigger = new Subject<(IFilter filter, int contextLines)>();
         _disposables.Add(filterChangeTrigger);
         _filterChangeTriggerSubject = filterChangeTrigger;
 
+        /* Responsibilities of this pipeline:
+            1. Triggered by explicit filter changes or new log lines (via _filterChangeTriggerSubject).
+            2. Executes filtering logic on a background thread to keep the UI responsive.
+            3. Throttles rapid triggers to avoid excessive recalculations, processing only the last request after a pause.
+            4. Applies the latest filter/context settings to the entire, up-to-date LogDocument.
+            5. Marshals the complete list of FilteredLogLine results safely back to the UI thread.
+            6. Delivers results as a Replace update via _filteredUpdatesSubject for the ViewModel to consume.
+        */
         var fullRefilterSubscription = filterChangeTrigger
             .ObserveOn(_backgroundScheduler)
-                // Add debounce for manual changes
             .Throttle(_filterDebounceTime, _backgroundScheduler)
             .Select(settingsTuple => {
-                    Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Starting ApplyFullFilter triggered by Setting Change.");
+                    Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Starting ApplyFullFilter triggered by Setting Change OR New Line.");
+                    // ApplyFullFilter reads the LogDocument updated via callback
                     var result = ApplyFullFilter(settingsTuple.Item1, settingsTuple.Item2);
                     Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Finished ApplyFullFilter. Got {result.Count} lines.");
 
@@ -112,7 +126,7 @@ public class LogFilterProcessor : ILogFilterProcessor
 
                     return result;
                 })
-            .ObserveOn(_uiContext) // Marshal result to UI thread
+            .ObserveOn(_uiContext)
             .Subscribe(
                 newFilteredLines => {
                     Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Sending Replace Update to UI. Lines={newFilteredLines.Count}. _isInitialLoadInProgress(BeforeSend) = { _isInitialLoadInProgress}");
@@ -136,19 +150,6 @@ public class LogFilterProcessor : ILogFilterProcessor
         _disposables.Add(fullRefilterSubscription);
     }
 
-    // Filter logic remains the same
-    private List<FilteredLogLine> ApplyIncrementalFilter(IList<(string LineText, long OriginalIndex)> buffer, IFilter filter)
-    {
-        return buffer
-            .Select(item => new { Item = item, IsMatch = filter.IsMatch(item.LineText) })
-            .Where(result => result.IsMatch)
-            // Adjust OriginalLineNumber assignment based on TotalLines *before* this buffer
-            // This requires careful handling of the TotalLinesSubject value or passing base index.
-            // Simpler: Use the index passed in. It represents lines *since reset*.
-            .Select(result => new FilteredLogLine((int)result.Item.OriginalIndex, result.Item.LineText))
-            .ToList();
-    }
-
     private IReadOnlyList<FilteredLogLine> ApplyFullFilter(IFilter filter, int contextLines)
     {
         Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} LogFitlerProcessor.ApplyFullFilter() before ApplyFilters");
@@ -160,7 +161,6 @@ public class LogFilterProcessor : ILogFilterProcessor
     // Called by ViewModel after Reset() and ChangeFileAsync() complete
     public void UpdateFilterSettings(IFilter newFilter, int contextLines)
     {
-        // Store settings immediately for ApplyIncrementalFilter
         _currentFilter = newFilter ?? new TrueFilter();
         _currentContextLines = Math.Max(0, contextLines);
 

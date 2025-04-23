@@ -68,22 +68,19 @@ namespace Logonaut.TestUtils
 
         public IObservable<string> LogLines => _logLinesSubject.AsObservable();
 
-        public Task<long> ChangeFileAsync(string filePath, LogDocument targetLogDocument)
+        public Task<long> ChangeFileAsync(string filePath, Action<string> addLineToDocumentCallback)
         {
             if (IsDisposed) throw new ObjectDisposedException(nameof(MockLogTailerService));
-            if (targetLogDocument == null) throw new ArgumentNullException(nameof(targetLogDocument));
-            if (filePath == "C:\\throw\\error.log") throw new System.IO.FileNotFoundException("Mock file not found");
+            if (filePath == "C:\\throw\\error.log") throw new FileNotFoundException("Mock file not found");
 
             ChangedFilePath = filePath;
-            LastTargetLogDocument = targetLogDocument;
             IsStopped = false;
 
             // --- Simulate Initial Read ---
-            targetLogDocument.Clear();
             long count = 0;
             foreach (var line in LinesForInitialRead)
             {
-                targetLogDocument.AppendLine(line);
+                addLineToDocumentCallback.Invoke(line); // <<< USE CALLBACK
                 count++;
             }
             System.Diagnostics.Debug.WriteLine($"---> MockLogTailerService: Simulated initial read for '{filePath}'. Added {count} lines to LogDocument.");

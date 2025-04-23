@@ -77,8 +77,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
         // Initialize and own the processor
         _logFilterProcessor = logFilterProcessor ?? new LogFilterProcessor(
             _logTailerService,
-            LogDoc, // Pass the LogDocument instance - LogDoc owned by VM (UI State)
-            _uiContext);
+            LogDoc,
+            _uiContext,
+            AddLineToLogDocument);
 
         // Subscribe to results from the processor
         var filterSubscription = _logFilterProcessor.FilteredUpdates
@@ -524,13 +525,14 @@ public partial class MainViewModel : ObservableObject, IDisposable
             CurrentLogFilePath = selectedFile; // Update displayed path
 
             // 3. Perform Initial Read & Start Tailing (populates LogDoc)
-            long initialLines = await _logTailerService.ChangeFileAsync(selectedFile, this.LogDoc).ConfigureAwait(true);
+            LogDoc.Clear(); // Clear the document before reading
+            long initialLines = await _logTailerService.ChangeFileAsync(selectedFile, AddLineToLogDocument).ConfigureAwait(true);
 
             // 4. Update Total Lines Display immediately after initial read
                 _uiContext.Post(_ => TotalLogLines = initialLines, null); // Use UI context
 
             // 5. Trigger the First Filter Explicitly
-                IFilter? firstFilter = ActiveFilterProfile?.Model?.RootFilter ?? new TrueFilter();
+            IFilter? firstFilter = ActiveFilterProfile?.Model?.RootFilter ?? new TrueFilter();
             _logFilterProcessor.UpdateFilterSettings(firstFilter, ContextLines);
             // Update highlighting rules based on the active filter
             UpdateFilterSubstrings();
@@ -549,10 +551,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
             // Reset processor again to be safe? Maybe not needed if Reset only sets flag.
             // Clear UI collections again
             _uiContext.Post(_ => {
-                FilteredLogLines.Clear();
-                OnPropertyChanged(nameof(FilteredLogLinesCount));
+                    FilteredLogLines.Clear();
+                    OnPropertyChanged(nameof(FilteredLogLinesCount));
                 TotalLogLines = 0; // Reset total lines display
-            }, null);
+                }, null);
         }
     }
 
@@ -671,6 +673,15 @@ public partial class MainViewModel : ObservableObject, IDisposable
     #endregion // --- Command Handling ---
 
     #region // --- Orchestration & Updates ---
+
+    private void AddLineToLogDocument(string line)
+    {
+        // This method will be called by the processor, potentially on a background thread.
+        // LogDocument handles its own locking.
+        LogDoc.AppendLine(line);
+        // Optional: Could add tracing here if needed
+        // System.Diagnostics.Debug.WriteLine($"---> MainViewModel: Added line to LogDoc via callback: {line.Substring(0, Math.Min(line.Length, 20))}");
+    }
 
     /// <summary>
     /// Updates the ActiveTreeRootNodes collection based on the new active profile.

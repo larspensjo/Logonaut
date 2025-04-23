@@ -17,12 +17,10 @@ public class LogTailerService : ILogTailerService
 
     public IObservable<string> LogLines => _logLinesSubject.AsObservable();
 
-    public async Task<long> ChangeFileAsync(string filePath, LogDocument targetLogDocument)
+    public async Task<long> ChangeFileAsync(string filePath, Action<string> addLineToDocumentCallback)
     {
         if (string.IsNullOrWhiteSpace(filePath))
             throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
-        if (targetLogDocument == null)
-            throw new ArgumentNullException(nameof(targetLogDocument));
 
         long initialLineCount = 0;
         long fileLength = 0;
@@ -34,9 +32,6 @@ public class LogTailerService : ILogTailerService
         {
             Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} ---> LogTailerService: Starting initial read for {filePath}");
 
-            // --- Perform Initial Read ---
-            targetLogDocument.Clear(); // Clear the target document BEFORE reading
-
             using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
             using (var reader = new StreamReader(fs)) // Consider adding encoding options if needed
             {
@@ -44,7 +39,7 @@ public class LogTailerService : ILogTailerService
                 // Use ConfigureAwait(false) to avoid capturing context unless needed
                 while ((line = await reader.ReadLineAsync().ConfigureAwait(false)) != null)
                 {
-                    targetLogDocument.AppendLine(line);
+                    addLineToDocumentCallback.Invoke(line); // <<< USE CALLBACK
                     initialLineCount++;
                 }
                 fileLength = fs.Position; // Get the length AFTER reading

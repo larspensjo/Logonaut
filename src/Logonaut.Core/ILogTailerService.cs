@@ -18,7 +18,7 @@ namespace Logonaut.Core // Or other appropriate namespace
         /// <summary>
         /// Starts tailing a new log file or changes the currently tailed file.
         /// Disposes any previous tailer.
-        Task<long> ChangeFileAsync(string filePath, LogDocument targetLogDocument);
+        Task<long> ChangeFileAsync(string filePath, Action<string> addLineToDocumentCallback);
 
         /// <summary>
         /// Stops tailing the current file and releases resources.

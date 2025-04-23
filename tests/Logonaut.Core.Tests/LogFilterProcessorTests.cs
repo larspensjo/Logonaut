@@ -42,6 +42,7 @@ public class LogFilterProcessorTests
             _mockTailer,
             _logDocument,
             new ImmediateSynchronizationContext(),
+            AddLineToLogDocument,
             _scheduler
         );
 
@@ -59,19 +60,27 @@ public class LogFilterProcessorTests
         _processor?.Dispose();
         _mockTailer?.Dispose();
     }
+    private void AddLineToLogDocument(string line)
+    {
+        // This method will be called by the processor, potentially on a background thread.
+        // LogDocument handles its own locking.
+        _logDocument.AppendLine(line);
+        // Optional: Could add tracing here if needed
+        // System.Diagnostics.Debug.WriteLine($"---> MainViewModel: Added line to LogDoc via callback: {line.Substring(0, Math.Min(line.Length, 20))}");
+    }
 
     private void SetupInitialFileLoad(List<string> initialLines, IFilter? initialFilter = null, int context = 0)
     {
         _processor.Reset();
         _mockTailer.LinesForInitialRead = initialLines;
-        var task = _mockTailer.ChangeFileAsync("C:\\test.log", _logDocument); task.Wait();
+        _logDocument.Clear(); // Clear before setup
+        var task = _mockTailer.ChangeFileAsync("C:\\test.log", AddLineToLogDocument); task.Wait();
         Assert.AreEqual(initialLines.Count, _logDocument.Count, "LogDocument not populated correctly by mock ChangeFileAsync.");
         _processor.UpdateFilterSettings(initialFilter ?? new TrueFilter(), context);
         _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Advance past throttle
         Assert.IsTrue(_receivedUpdates.Any(u => u.Type == UpdateType.Replace), "Initial Replace update missing after setup.");
         _receivedUpdates.Clear(); // Clear initial update for subsequent assertions
     }
-
 
     // --- Corrected Tests ---
 
@@ -116,98 +125,124 @@ public class LogFilterProcessorTests
             Assert.AreEqual("New Line A", _logDocument[0]);
     }
 
-
-    [TestMethod] public void Incremental_AppendsLinesReceivedAFTERInitialLoad()
+    [TestMethod] public void NewLines_TriggerSingleThrottledReplaceUpdate_WithAllLines()
     {
-        // Arrange: Use setup helper
-        SetupInitialFileLoad(new List<string> { "Initial A", "Initial B" });
+        // Arrange: Setup initial load with TrueFilter
+        var initialLines = new List<string> { "Initial A", "Initial B" };
+        SetupInitialFileLoad(initialLines, new TrueFilter(), 0); // Clears _receivedUpdates
 
         // Act: Emit lines *after* initial load setup
-        _mockTailer.EmitLine("Line C"); // Processor index 1 (since reset)
-        _mockTailer.EmitLine("Line D"); // Processor index 2
-        _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(150).Ticks); // Process buffer
+        _mockTailer.EmitLine("Line C");
+        _mockTailer.EmitLine("Line D");
 
-        // Assert Document Content (Stays as initial)
-        Assert.AreEqual(2, _logDocument.Count, "LogDocument count should match initial lines.");
+        // Assert: No updates yet because of throttle
+        Assert.AreEqual(0, _receivedUpdates.Count);
+
+        // Act: Advance scheduler *past* throttle time
+        _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks);
+
+        // Assert: LogDocument contains all lines
+        Assert.AreEqual(4, _logDocument.Count, "LogDocument should contain initial and emitted lines.");
         Assert.AreEqual("Initial A", _logDocument[0]);
         Assert.AreEqual("Initial B", _logDocument[1]);
+        Assert.AreEqual("Line C", _logDocument[2]);
+        Assert.AreEqual("Line D", _logDocument[3]);
 
-        // Assert Received Updates (Append update expected)
-        Assert.AreEqual(1, _receivedUpdates.Count, "Should have received one Append update.");
+        // Assert: ONE Replace update received containing ALL lines
+        Assert.AreEqual(1, _receivedUpdates.Count, "Should have received one Replace update.");
         var update = _receivedUpdates[0];
-        Assert.AreEqual(UpdateType.Append, update.Type);
-        Assert.AreEqual(2, update.Lines.Count);
-        Assert.AreEqual(1, update.Lines[0].OriginalLineNumber, "Append line 1 original number mismatch.");
-        Assert.AreEqual("Line C", update.Lines[0].Text);
-        Assert.AreEqual(2, update.Lines[1].OriginalLineNumber, "Append line 2 original number mismatch.");
-        Assert.AreEqual("Line D", update.Lines[1].Text);
+        Assert.AreEqual(UpdateType.Replace, update.Type);
+        Assert.AreEqual(4, update.Lines.Count, "Replace update should contain all lines.");
+
+        // Verify content and OriginalLineNumbers (based on final LogDocument state)
+        CollectionAssert.AreEqual(new List<string> { "Initial A", "Initial B", "Line C", "Line D" }, GetLinesText(update));
+        Assert.AreEqual(1, update.Lines[0].OriginalLineNumber);
+        Assert.AreEqual(2, update.Lines[1].OriginalLineNumber);
+        Assert.AreEqual(3, update.Lines[2].OriginalLineNumber);
+        Assert.AreEqual(4, update.Lines[3].OriginalLineNumber);
     }
 
-    [TestMethod] public void Incremental_FiltersAppendedLinesCorrectly()
+    [TestMethod] public void NewLines_TriggerFilteredReplaceUpdate_OnEntireDocument() 
     {
         // Arrange: Setup initial load
-        var initialLines = new List<string> { "Initial Keep" };
-        SetupInitialFileLoad(initialLines); // Uses TrueFilter initially
+        var initialLines = new List<string> { "Initial INFO" };
+        SetupInitialFileLoad(initialLines); // Uses TrueFilter initially, clears updates
 
         // Arrange: Set specific filter *after* initial load
-        _processor.UpdateFilterSettings(new SubstringFilter("MATCH"), 0);
-        _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Allow Throttle
+        var filter = new SubstringFilter("MATCH");
+        _processor.UpdateFilterSettings(filter, 0);
+        _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Allow Throttle for filter change
+        // This update should contain 0 lines as "MATCH" isn't in "Initial INFO"
+        Assert.AreEqual(1, _receivedUpdates.Count, "Setting MATCH filter should trigger Replace update.");
+        Assert.AreEqual(0, _receivedUpdates.Last().Lines.Count, "Filter change update should be empty.");
         _receivedUpdates.Clear(); // Clear the filter update
 
-        // Act: Emit lines
-        _mockTailer.EmitLine("IGNORE 1");
-        _mockTailer.EmitLine("MATCH 2");
-        _mockTailer.EmitLine("IGNORE 3");
-        _mockTailer.EmitLine("MATCH 4");
-        _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(150).Ticks); // Process buffer
+        // Act: Emit new lines
+        _mockTailer.EmitLine("IGNORE 1");          // LogDoc index 1, Orig 2
+        _mockTailer.EmitLine("MATCH 2");           // LogDoc index 2, Orig 3
+        _mockTailer.EmitLine("IGNORE 3");          // LogDoc index 3, Orig 4
+        _mockTailer.EmitLine("MATCH 4");           // LogDoc index 4, Orig 5
 
-        // Assert Document Content
-        Assert.AreEqual(initialLines.Count, _logDocument.Count, "LogDocument count should match initial lines.");
-        Assert.AreEqual("Initial Keep", _logDocument[0]);
+        // Advance scheduler *past* throttle time for the trigger caused by new lines
+        _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks);
 
-        // Assert Received Updates
-        Assert.AreEqual(1, _receivedUpdates.Count, "Should receive one Append update.");
+        // Assert: LogDocument contains all lines
+        Assert.AreEqual(5, _logDocument.Count);
+        Assert.AreEqual("Initial INFO", _logDocument[0]);
+        Assert.AreEqual("IGNORE 1", _logDocument[1]);
+        Assert.AreEqual("MATCH 2", _logDocument[2]);
+        Assert.AreEqual("IGNORE 3", _logDocument[3]);
+        Assert.AreEqual("MATCH 4", _logDocument[4]);
+
+        // Assert: Received ONE Replace update filtered on the *entire* LogDocument
+        Assert.AreEqual(1, _receivedUpdates.Count, "Should receive one Replace update.");
         var update = _receivedUpdates[0];
-        Assert.AreEqual(UpdateType.Append, update.Type);
-        Assert.AreEqual(2, update.Lines.Count); // Only matching lines
-        Assert.AreEqual(2, update.Lines[0].OriginalLineNumber); // Processor index 2
+        Assert.AreEqual(UpdateType.Replace, update.Type);
+        Assert.AreEqual(2, update.Lines.Count, "Filtered update should contain only matching lines.");
+
+        // Verify content and OriginalLineNumbers based on final LogDocument state
         Assert.AreEqual("MATCH 2", update.Lines[0].Text);
-        Assert.AreEqual(4, update.Lines[1].OriginalLineNumber); // Processor index 4
+        Assert.AreEqual(3, update.Lines[0].OriginalLineNumber); // It's the 3rd line overall
+
         Assert.AreEqual("MATCH 4", update.Lines[1].Text);
+        Assert.AreEqual(5, update.Lines[1].OriginalLineNumber); // It's the 5th line overall
     }
 
-    [TestMethod] public void Incremental_OriginalLineNumbersAreRelativeToReset()
+    [TestMethod] public void NewLines_TriggerReplaceUpdate_UsesCorrectOriginalLineNumbers()
     {
-        // Arrange: Perform initial load
-        SetupInitialFileLoad(new List<string> { "Line 1", "Line 2", "Line 3" });
+        // Arrange: Setup initial load with TrueFilter
+        var initialLines = new List<string> { "Line 1", "Line 2", "Line 3" };
+        SetupInitialFileLoad(initialLines, new TrueFilter(), 0); // Clears updates
 
-        // Act: Emit new lines
-        _mockTailer.EmitLine("Line A"); // Should get OriginalLineNumber 1 (relative to reset)
-        _mockTailer.EmitLine("Line B"); // Should get OriginalLineNumber 2
-        _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(150).Ticks);
+        // Act: Emit new lines, some before throttle, some after (but only one trigger matters)
+        _mockTailer.EmitLine("Line A"); // Triggers full refilter process...
+        _mockTailer.EmitLine("Line B");
+        _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(100).Ticks); // Not enough for throttle
+        _mockTailer.EmitLine("Line C"); // Triggers again...
+        _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Advance PAST throttle window (relative to first emit)
 
-        _mockTailer.EmitLine("Line C"); // Should get OriginalLineNumber 3
-        _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(150).Ticks);
+        // Assert: LogDocument contains all lines
+        Assert.AreEqual(6, _logDocument.Count);
+        Assert.AreEqual("Line 1", _logDocument[0]);
+        Assert.AreEqual("Line 2", _logDocument[1]);
+        Assert.AreEqual("Line 3", _logDocument[2]);
+        Assert.AreEqual("Line A", _logDocument[3]);
+        Assert.AreEqual("Line B", _logDocument[4]);
+        Assert.AreEqual("Line C", _logDocument[5]);
 
+        // Assert: Received ONE Replace update with ALL lines and correct OriginalLineNumbers
+        Assert.AreEqual(1, _receivedUpdates.Count, "Should have received only one throttled Replace update.");
+        var update = _receivedUpdates[0];
+        Assert.AreEqual(UpdateType.Replace, update.Type);
+        Assert.AreEqual(6, update.Lines.Count);
 
-        // Assert: Check the Append updates
-        Assert.AreEqual(2, _receivedUpdates.Count, "Should have received two Append updates.");
-
-        // First Append (A, B)
-        var update1 = _receivedUpdates[0];
-        Assert.AreEqual(UpdateType.Append, update1.Type);
-        Assert.AreEqual(2, update1.Lines.Count);
-        Assert.AreEqual(1, update1.Lines[0].OriginalLineNumber); // Relative index 1
-        Assert.AreEqual("Line A", update1.Lines[0].Text);
-        Assert.AreEqual(2, update1.Lines[1].OriginalLineNumber); // Relative index 2
-        Assert.AreEqual("Line B", update1.Lines[1].Text);
-
-        // Second Append (C)
-        var update2 = _receivedUpdates[1];
-        Assert.AreEqual(UpdateType.Append, update2.Type);
-        Assert.AreEqual(1, update2.Lines.Count);
-        Assert.AreEqual(3, update2.Lines[0].OriginalLineNumber); // Relative index 3
-        Assert.AreEqual("Line C", update2.Lines[0].Text);
+        CollectionAssert.AreEqual(new List<string> { "Line 1", "Line 2", "Line 3", "Line A", "Line B", "Line C" }, GetLinesText(update));
+        Assert.AreEqual(1, update.Lines[0].OriginalLineNumber);
+        Assert.AreEqual(2, update.Lines[1].OriginalLineNumber);
+        Assert.AreEqual(3, update.Lines[2].OriginalLineNumber);
+        Assert.AreEqual(4, update.Lines[3].OriginalLineNumber);
+        Assert.AreEqual(5, update.Lines[4].OriginalLineNumber);
+        Assert.AreEqual(6, update.Lines[5].OriginalLineNumber);
     }
 
     [TestMethod] public void UpdateFilterSettings_TriggersFullRefilter_OnInitialDocumentContent()
@@ -332,7 +367,7 @@ public class LogFilterProcessorTests
             // Arrange: Setup initial load and process an append
             SetupInitialFileLoad(new List<string> { "Initial" });
             _mockTailer.EmitLine("Append 1");
-            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(150).Ticks);
+            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks);
             Assert.AreEqual(1, _receivedUpdates.Count); // Ensure Append was processed
             _receivedUpdates.Clear();
 
