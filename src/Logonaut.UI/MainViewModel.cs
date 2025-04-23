@@ -224,6 +224,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     public ThemeViewModel Theme { get; }
 
     // Central store for all original log lines, passed to processor but owned here.
+    // The content is managed by current class.
     public LogDocument LogDoc { get; } = new();
 
     // Collection of filtered lines currently displayed in the UI.
