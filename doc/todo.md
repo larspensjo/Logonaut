@@ -7,3 +7,5 @@
 * Tool tips don't look good in dark mode.
 * Disable the tool tip for the main log window.
 * CTRL+O for quick open file.
+* BUG: Monitoring a log file that grows will add filtered lines, but not taking context lines into account.
+* BUG: Monitor a growing log file. Toggle filters on/off. Nothing will be shown.
