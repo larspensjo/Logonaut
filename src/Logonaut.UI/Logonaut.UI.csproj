@@ -6,6 +6,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <ApplicationIcon>Assets/Logonaut.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -23,9 +24,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!--None Update="Resources/TimestampHighlighting.xshd">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None-->
+    <Resource Include="Assets/Logonaut.ico" />
   </ItemGroup>
 
 </Project>
