@@ -78,7 +78,6 @@ public class LogFilterProcessorTests
         Assert.AreEqual(initialLines.Count, _logDocument.Count, "LogDocument not populated correctly by mock ChangeFileAsync.");
         _processor.UpdateFilterSettings(initialFilter ?? new TrueFilter(), context);
         _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Advance past throttle
-        Assert.IsTrue(_receivedUpdates.Any(u => u.Type == UpdateType.Replace), "Initial Replace update missing after setup.");
         _receivedUpdates.Clear(); // Clear initial update for subsequent assertions
     }
 
@@ -151,7 +150,6 @@ public class LogFilterProcessorTests
         // Assert: ONE Replace update received containing ALL lines
         Assert.AreEqual(1, _receivedUpdates.Count, "Should have received one Replace update.");
         var update = _receivedUpdates[0];
-        Assert.AreEqual(UpdateType.Replace, update.Type);
         Assert.AreEqual(4, update.Lines.Count, "Replace update should contain all lines.");
 
         // Verify content and OriginalLineNumbers (based on final LogDocument state)
@@ -197,7 +195,6 @@ public class LogFilterProcessorTests
         // Assert: Received ONE Replace update filtered on the *entire* LogDocument
         Assert.AreEqual(1, _receivedUpdates.Count, "Should receive one Replace update.");
         var update = _receivedUpdates[0];
-        Assert.AreEqual(UpdateType.Replace, update.Type);
         Assert.AreEqual(2, update.Lines.Count, "Filtered update should contain only matching lines.");
 
         // Verify content and OriginalLineNumbers based on final LogDocument state
@@ -233,7 +230,6 @@ public class LogFilterProcessorTests
         // Assert: Received ONE Replace update with ALL lines and correct OriginalLineNumbers
         Assert.AreEqual(1, _receivedUpdates.Count, "Should have received only one throttled Replace update.");
         var update = _receivedUpdates[0];
-        Assert.AreEqual(UpdateType.Replace, update.Type);
         Assert.AreEqual(6, update.Lines.Count);
 
         CollectionAssert.AreEqual(new List<string> { "Line 1", "Line 2", "Line 3", "Line A", "Line B", "Line C" }, GetLinesText(update));
@@ -259,7 +255,6 @@ public class LogFilterProcessorTests
         // Assert: Should receive one *new* Replace update
         Assert.AreEqual(1, _receivedUpdates.Count, "Should receive one Replace update from filter change.");
         var update = _receivedUpdates[0];
-        Assert.AreEqual(UpdateType.Replace, update.Type);
         Assert.AreEqual(1, update.Lines.Count);
         Assert.AreEqual("Line 2 MATCH", update.Lines[0].Text);
         // OriginalLineNumber comes from FilterEngine based on LogDocument state
@@ -292,7 +287,6 @@ public class LogFilterProcessorTests
         // Assert: Only ONE update received, using the LAST filter settings
         Assert.AreEqual(1, _receivedUpdates.Count, "Should receive only one throttled Replace update.");
         var update = _receivedUpdates[0];
-        Assert.AreEqual(UpdateType.Replace, update.Type);
         Assert.AreEqual(1, update.Lines.Count); // Filter B matches "Line 2 B"
         Assert.AreEqual("Line 2 B", update.Lines[0].Text);
         Assert.AreEqual(2, update.Lines[0].OriginalLineNumber); // Original index 2
@@ -318,7 +312,6 @@ public class LogFilterProcessorTests
         // Assert
         Assert.AreEqual(1, _receivedUpdates.Count);
         var update = _receivedUpdates[0];
-        Assert.AreEqual(UpdateType.Replace, update.Type);
         Assert.AreEqual(3, update.Lines.Count);
         Assert.AreEqual("Context Before", update.Lines[0].Text);
         Assert.IsTrue(update.Lines[0].IsContextLine);
@@ -403,7 +396,6 @@ public class LogFilterProcessorTests
         _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Allow Throttle for this settings change
         // The Replace update from this filter change will be empty as "MATCH" isn't in initialLines
         Assert.AreEqual(1, _receivedUpdates.Count, "Setting the MATCH filter should trigger one empty Replace update.");
-        Assert.AreEqual(UpdateType.Replace, _receivedUpdates[0].Type);
         Assert.AreEqual(0, _receivedUpdates[0].Lines.Count);
         _receivedUpdates.Clear(); // Clear this update
 
@@ -417,7 +409,6 @@ public class LogFilterProcessorTests
         // Assert: Expect a REPLACE update triggered by the incremental match detection
         Assert.AreEqual(1, _receivedUpdates.Count, "Should receive one Replace update triggered by incremental match.");
         var update = _receivedUpdates[0];
-        Assert.AreEqual(UpdateType.Replace, update.Type);
 
         // Assert: Content should include the new match and context from LogDocument
         // The full filter runs on ["Context Line 1", "Some other info", "Another context line"]

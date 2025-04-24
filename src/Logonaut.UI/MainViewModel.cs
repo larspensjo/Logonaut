@@ -240,7 +240,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         // Optional: Trigger an initial full text update if needed when editor is first set
         if (FilteredLogLines.Any())
         {
-            ScheduleLogTextUpdate(UpdateType.Replace, FilteredLogLines);
+            ScheduleLogTextUpdate(FilteredLogLines);
         }
     }
 
@@ -521,7 +521,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             // 2. Clear ViewModel/UI State
             FilteredLogLines.Clear();
             OnPropertyChanged(nameof(FilteredLogLinesCount));
-            ScheduleLogTextUpdate(UpdateType.Replace, FilteredLogLines); // Clear editor
+            ScheduleLogTextUpdate(FilteredLogLines); // Clear editor
             CurrentLogFilePath = selectedFile; // Update displayed path
 
             // 3. Perform Initial Read & Start Tailing (populates LogDoc)
@@ -764,54 +764,39 @@ public partial class MainViewModel : ObservableObject, IDisposable
     */
     private void ApplyFilteredUpdate(FilteredUpdate update)
     {
-        Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> ApplyFilteredUpdate received {update.Type}. Lines={update.Lines.Count}");
+        Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> ApplyFilteredUpdate received. Lines={update.Lines.Count}");
 
         int originalLineToRestore = HighlightedOriginalLineNumber;
 
-        if (update.Type == UpdateType.Replace)
+        ReplaceFilteredLines(update.Lines);
+        ScheduleLogTextUpdate(FilteredLogLines); // Pass full list
+
+        // --- Restore Highlight ---
+        // Attempt to re-select the line the user had highlighted before the Replace,
+        // preserving their focus point across filter changes.
+        if (originalLineToRestore > 0)
         {
-            ReplaceFilteredLines(update.Lines);
-            ScheduleLogTextUpdate(update.Type, FilteredLogLines); // Pass full list
+            // Find the new index (if any) of the previously highlighted line.
+            int newIndex = FilteredLogLines
+                .Select((line, index) => new { line.OriginalLineNumber, Index = index })
+                .FirstOrDefault(item => item.OriginalLineNumber == originalLineToRestore)?.Index ?? -1;
 
-            // --- Restore Highlight ---
-            // Attempt to re-select the line the user had highlighted before the Replace,
-            // preserving their focus point across filter changes.
-            if (originalLineToRestore > 0)
-            {
-                // Find the new index (if any) of the previously highlighted line.
-                int newIndex = FilteredLogLines
-                    .Select((line, index) => new { line.OriginalLineNumber, Index = index })
-                    .FirstOrDefault(item => item.OriginalLineNumber == originalLineToRestore)?.Index ?? -1;
-
-                // Queue the highlight update on the UI thread to ensure it happens after layout updates.
-                _uiContext.Post(_ => { HighlightedFilteredLineIndex = newIndex; }, null);
-            } else {
-                // Ensure any previous highlight is cleared if nothing was selected before.
-                _uiContext.Post(_ => { HighlightedFilteredLineIndex = -1; }, null);
-            }
-
-            // --- Manage Busy Indicators ---
-            // The processor handles its internal state; the VM just reacts.
-            // Reset both flags after receiving the *definitive* Replace update.
-            _uiContext.Post(_ =>
-            {
-                IsPerformingInitialLoad = false;
-                IsBusyFiltering = false;
-                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} ---> ApplyFilteredUpdate: UI Update Complete. IsPerformingInitialLoad=false, IsBusyFiltering=false");
-            }, null);
+            // Queue the highlight update on the UI thread to ensure it happens after layout updates.
+            _uiContext.Post(_ => { HighlightedFilteredLineIndex = newIndex; }, null);
+        } else {
+            // Ensure any previous highlight is cleared if nothing was selected before.
+            _uiContext.Post(_ => { HighlightedFilteredLineIndex = -1; }, null);
         }
-        else
+
+        // --- Manage Busy Indicators ---
+        // The processor handles its internal state; the VM just reacts.
+        // Reset both flags after receiving the *definitive* Replace update.
+        _uiContext.Post(_ =>
         {
-            AddFilteredLines(update.Lines);
-            ScheduleLogTextUpdate(update.Type, update.Lines); // Pass only appended lines
-
-            // Explicitly set IsBusyFiltering to false on Append
-            // Append operations themselves aren't "busy" in the sense of a full re-filter.
-            // If we are in the initial load phase, the processor already filtered this out.
-            // If we are not in initial load, receiving an Append means the processor
-            // isn't currently performing a full re-filter triggered by UpdateFilterSettings.
-            _uiContext.Post(_ => { IsBusyFiltering = false; } , null);
-        }
+            IsPerformingInitialLoad = false;
+            IsBusyFiltering = false;
+            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} ---> ApplyFilteredUpdate: UI Update Complete. IsPerformingInitialLoad=false, IsBusyFiltering=false");
+        }, null);
     }
 
     // Helper methods called by ApplyFilteredUpdate to modify UI collections.
@@ -844,7 +829,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     }
 
     // Schedules the LogText update to run after current UI operations.
-    private void ScheduleLogTextUpdate(UpdateType updateType, IReadOnlyList<FilteredLogLine> relevantLines)
+    private void ScheduleLogTextUpdate(IReadOnlyList<FilteredLogLine> relevantLines)
     {
         // Clone relevantLines if it might be modified elsewhere before Post executes?
         // ObservableCollection snapshot for Replace is safe. List passed for Append is safe.
@@ -852,35 +837,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
         _uiContext.Post(state =>
         {
-            var args = ((UpdateType type, List<FilteredLogLine> lines))state!;
+            var lines = (List<FilteredLogLine>)state!;
 
-#if false
-            // This test doesn't seem to be needed, and it will disrupt unit testing.
-            if (_logEditorInstance?.Document == null)
-                return;
-#endif                    
+            ReplaceLogTextInternal(lines);
+            UpdateSearchMatches();
 
-            try
-            {
-                // Call the appropriate internal method
-                if (args.type == UpdateType.Replace)
-                {
-                    ReplaceLogTextInternal(args.lines);
-                }
-                else // Append
-                {
-                    AppendLogTextInternal(args.lines);
-                }
-                // Update search AFTER text changes
-                UpdateSearchMatches(); // Now reads from document directly
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error during editor text update ({args.type}): {ex}");
-                // Potentially show error to user or log more formally
-            }
-
-        }, (updateType, linesSnapshot)); // Pass type and lines as state tuple
+        }, linesSnapshot); // Pass only lines as state
     }
 
     private void ReplaceLogTextInternal(IReadOnlyList<FilteredLogLine> allLines)
@@ -903,37 +865,6 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _logEditorInstance.Document.Text = fullText;
 
         // No auto-scroll on replace typically
-    }
-
-    private void AppendLogTextInternal(IReadOnlyList<FilteredLogLine> addedLines)
-    {
-        System.Diagnostics.Debug.WriteLine($"---> AppendLogTextInternal: Entered. IsAutoScrollEnabled={IsAutoScrollEnabled}, addedLines.Count={addedLines.Count}");
-        if (IsAutoScrollEnabled && addedLines.Any()) {
-            System.Diagnostics.Debug.WriteLine($"---> AppendLogTextInternal: Invoking RequestScrollToEnd."); 
-            RequestScrollToEnd?.Invoke(this, EventArgs.Empty); // Handle Auto-Scroll *before* potentially returning due to null editor
-        }
-
-        if (_logEditorInstance?.Document == null || !addedLines.Any()) return;
-
-        // Generate text chunk for *only the added lines*
-        var sb = new System.Text.StringBuilder();
-        // Prepend newline if document isn't empty
-        if (_logEditorInstance.Document.TextLength > 0)
-            sb.Append(Environment.NewLine);
-
-        bool first = true;
-        foreach (var line in addedLines)
-        {
-            if (!first) { sb.Append(Environment.NewLine); }
-            sb.Append(line.Text);
-            first = false;
-        }
-        string textChunk = sb.ToString();
-
-        // Append text (must be on UI thread)
-        _logEditorInstance.Document.BeginUpdate();
-        _logEditorInstance.Document.Insert(_logEditorInstance.Document.TextLength, textChunk);
-        _logEditorInstance.Document.EndUpdate();
     }
 
     // Core search logic - updates internal list and ruler markers

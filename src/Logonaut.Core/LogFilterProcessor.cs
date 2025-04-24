@@ -18,7 +18,7 @@ public class LogFilterProcessor : ILogFilterProcessor
     private readonly SynchronizationContext _uiContext;
     private readonly IScheduler _backgroundScheduler;
 
-    private readonly BehaviorSubject<FilteredUpdate> _filteredUpdatesSubject = new(new FilteredUpdate(UpdateType.Replace, Array.Empty<FilteredLogLine>()));
+    private readonly BehaviorSubject<FilteredUpdate> _filteredUpdatesSubject = new(new FilteredUpdate(Array.Empty<FilteredLogLine>()));
     private readonly BehaviorSubject<long> _totalLinesSubject = new BehaviorSubject<long>(0);
     private readonly CompositeDisposable _disposables = new();
 
@@ -133,7 +133,7 @@ public class LogFilterProcessor : ILogFilterProcessor
                     bool wasInitialLoad = false;
                     lock(_stateLock) { wasInitialLoad = _isInitialLoadInProgress; }
 
-                    _filteredUpdatesSubject.OnNext(new FilteredUpdate(UpdateType.Replace, newFilteredLines));
+                    _filteredUpdatesSubject.OnNext(new FilteredUpdate(newFilteredLines));
 
                     if (wasInitialLoad)
                     {

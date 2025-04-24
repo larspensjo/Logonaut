@@ -707,7 +707,7 @@ namespace Logonaut.UI.Tests.ViewModels
             Assert.AreEqual(1, _viewModel.SearchMarkers.Count);
 
             var newLines = new List<FilteredLogLine> { new FilteredLogLine(10, "New") };
-            var update = new FilteredUpdate(UpdateType.Replace, newLines);
+            var update = new FilteredUpdate(newLines);
 
             // Act
             _mockProcessor.SimulateFilteredUpdate(update);
@@ -722,23 +722,6 @@ namespace Logonaut.UI.Tests.ViewModels
             Assert.IsFalse(_viewModel.IsBusyFiltering); // Check busy state if needed
         }
 
-        [TestMethod] public void ApplyFilteredUpdate_Append_AddsLines()
-        {
-            // Arrange
-            _viewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Existing 1"));
-            var linesToAppend = new List<FilteredLogLine> { new FilteredLogLine(5, "Appended 5") };
-            var update = new FilteredUpdate(UpdateType.Append, linesToAppend);
-
-            // Act
-            _mockProcessor.SimulateFilteredUpdate(update);
-            _testContext.Send(_ => { }, null); // Runs AppendLogTextInternal & UpdateSearchMatches
-
-            // Assert
-            Assert.AreEqual(2, _viewModel.FilteredLogLines.Count);
-            Assert.AreEqual("Appended 5", _viewModel.FilteredLogLines[1].Text);
-            Assert.IsFalse(_viewModel.IsBusyFiltering);
-        }
-
         [TestMethod] public void ApplyFilteredUpdate_Replace_RestoresHighlightBasedOnOriginalLineNumber()
         {
             // Arrange (Keep as before)
@@ -749,7 +732,7 @@ namespace Logonaut.UI.Tests.ViewModels
             Assert.AreEqual(10, _viewModel.HighlightedOriginalLineNumber);
 
             var newLines = new List<FilteredLogLine> { new(10, "Ten"), new(20, "Twenty") };
-            var update = new FilteredUpdate(UpdateType.Replace, newLines);
+            var update = new FilteredUpdate(newLines);
 
             // Act
             _mockProcessor.SimulateFilteredUpdate(update);
@@ -769,7 +752,7 @@ namespace Logonaut.UI.Tests.ViewModels
             // Arrange
             _mockFileDialog.FileToReturn = "C:\\good\\log.txt";
             List<FilteredLogLine> initialLines = new() { new(1, "Line 1") };
-            FilteredUpdate initialReplaceUpdate = new (UpdateType.Replace, initialLines);
+            FilteredUpdate initialReplaceUpdate = new (initialLines);
 
             // Act 1: Start the file open process
             var openTask = _viewModel.OpenLogFileCommand.ExecuteAsync(null); // Don't await yet
@@ -800,7 +783,7 @@ namespace Logonaut.UI.Tests.ViewModels
             // Arrange: Simulate NOT being in initial load
             _viewModel.IsPerformingInitialLoad = false;
             _viewModel.IsBusyFiltering = true; // Simulate busy state from triggering filter change
-            var update = new FilteredUpdate(UpdateType.Replace, new List<FilteredLogLine> { new(1, "New") });
+            var update = new FilteredUpdate(new List<FilteredLogLine> { new(1, "New") });
 
             // Act
             _mockProcessor.SimulateFilteredUpdate(update);
@@ -1118,48 +1101,13 @@ namespace Logonaut.UI.Tests.ViewModels
 
         #region Auto-Scroll Event Triggering Tests
 
-        [TestMethod] public void RequestScrollToEnd_Fires_When_AppendUpdate_And_AutoScrollEnabled()
-        {
-            // Arrange
-            _viewModel.IsAutoScrollEnabled = true;
-            bool eventFired = false;
-            _viewModel.RequestScrollToEnd += (s, e) =>
-            {
-                System.Diagnostics.Debug.WriteLine($"---> TEST HANDLER: RequestScrollToEnd Invoked!"); // Keep debug
-                eventFired = true;
-            };
-            var appendUpdate = new FilteredUpdate(UpdateType.Append, new List<FilteredLogLine> { new FilteredLogLine(1, "Appended") });
-
-            // Act
-            _mockProcessor.SimulateFilteredUpdate(appendUpdate);
-
-            // Assert
-            Assert.IsTrue(eventFired, "RequestScrollToEnd event should have fired.");
-        }
-
-        [TestMethod] public void RequestScrollToEnd_DoesNotFire_When_AppendUpdate_And_AutoScrollDisabled()
-        {
-            // Arrange
-            _viewModel.IsAutoScrollEnabled = false;
-            bool eventFired = false;
-            _viewModel.RequestScrollToEnd += (s, e) => eventFired = true;
-            var appendUpdate = new FilteredUpdate(UpdateType.Append, new List<FilteredLogLine> { new FilteredLogLine(1, "Appended") });
-
-            // Act
-            _mockProcessor.SimulateFilteredUpdate(appendUpdate);
-            _testContext.Send(_ => { }, null); // Runs AppendLogTextInternal
-
-            // Assert
-            Assert.IsFalse(eventFired, "RequestScrollToEnd event should NOT have fired.");
-        }
-
         [TestMethod] public void RequestScrollToEnd_DoesNotFire_When_ReplaceUpdate_And_AutoScrollEnabled()
         {
             // Arrange
             _viewModel.IsAutoScrollEnabled = true;
             bool eventFired = false;
             _viewModel.RequestScrollToEnd += (s, e) => eventFired = true;
-            var replaceUpdate = new FilteredUpdate(UpdateType.Replace, new List<FilteredLogLine> { new FilteredLogLine(10, "Replaced") });
+            var replaceUpdate = new FilteredUpdate(new List<FilteredLogLine> { new FilteredLogLine(10, "Replaced") });
 
             // Act
             _mockProcessor.SimulateFilteredUpdate(replaceUpdate);

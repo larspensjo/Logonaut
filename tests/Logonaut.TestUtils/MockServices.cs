@@ -151,7 +151,7 @@ namespace Logonaut.TestUtils
             ResetCallCount++;
             _totalLinesSubject.OnNext(0); // Reset total lines count
             // Optionally simulate the empty Replace update if tests rely on it
-            // SimulateFilteredUpdate(new FilteredUpdate(UpdateType.Replace, Array.Empty<FilteredLogLine>()));
+            // SimulateFilteredUpdate(new FilteredUpdate(Array.Empty<FilteredLogLine>()));
         }
 
         public void ResetCounters()
