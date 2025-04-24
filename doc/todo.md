@@ -1,7 +1,7 @@
 # TODO
+* Refactor AnimatedSpinner into a flexible BusyIndicator (see [BusyIndicatorPlan.md](BusyIndicatorPlan.md)).
 * Use MainViewModel.JumpStatusMessage for error messsages instead of MessageBox.
 * Support multiple log windows, as tabs.
-* Advanced spinner: Custom FrameworkElement + DrawingContext + CompositionTarget.Rendering
 * Second time loading a new log file, the "Processing..." isn't shown.
 * When loading a big file, the application freezes.
 * Tool tips don't look good in dark mode.
