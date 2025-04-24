@@ -30,6 +30,7 @@ namespace Logonaut.UI.Tests.ViewModels
         // --- WPF Control Testing Helper Fields ---
         private static Dispatcher? _dispatcher; // For STA thread tests
         private static AutoResetEvent _initEvent = new AutoResetEvent(false); // Synchronization for STA thread
+        private bool _requestScrollToEndEventFired = false;
 
         // --- STA Thread Setup/Teardown for WPF Control Tests ---
         // This runs once before any tests in this class that need STA
@@ -73,6 +74,9 @@ namespace Logonaut.UI.Tests.ViewModels
                 _mockProcessor,
                 _testContext
             );
+
+            _requestScrollToEndEventFired = false;
+            _viewModel.RequestScrollToEnd += (s, e) => _requestScrollToEndEventFired = true;
         }
 
         [TestCleanup]
@@ -707,10 +711,9 @@ namespace Logonaut.UI.Tests.ViewModels
             Assert.AreEqual(1, _viewModel.SearchMarkers.Count);
 
             var newLines = new List<FilteredLogLine> { new FilteredLogLine(10, "New") };
-            var update = new FilteredUpdate(newLines);
 
             // Act
-            _mockProcessor.SimulateFilteredUpdate(update);
+            _mockProcessor.SimulateFilteredUpdate(newLines);
             // Simulate UI thread processing the scheduled update
             _testContext.Send(_ => { }, null); // Flushes queue, runs ReplaceLogTextInternal & UpdateSearchMatches
 
@@ -732,10 +735,9 @@ namespace Logonaut.UI.Tests.ViewModels
             Assert.AreEqual(10, _viewModel.HighlightedOriginalLineNumber);
 
             var newLines = new List<FilteredLogLine> { new(10, "Ten"), new(20, "Twenty") };
-            var update = new FilteredUpdate(newLines);
 
             // Act
-            _mockProcessor.SimulateFilteredUpdate(update);
+            _mockProcessor.SimulateFilteredUpdate(newLines);
             _testContext.Send(_ => { }, null); // Runs ReplaceLogTextInternal, UpdateSearchMatches, and highlight restore Post
 
             // Assert
@@ -752,7 +754,6 @@ namespace Logonaut.UI.Tests.ViewModels
             // Arrange
             _mockFileDialog.FileToReturn = "C:\\good\\log.txt";
             List<FilteredLogLine> initialLines = new() { new(1, "Line 1") };
-            FilteredUpdate initialReplaceUpdate = new (initialLines);
 
             // Act 1: Start the file open process
             var openTask = _viewModel.OpenLogFileCommand.ExecuteAsync(null); // Don't await yet
@@ -769,7 +770,7 @@ namespace Logonaut.UI.Tests.ViewModels
             Assert.IsTrue(_viewModel.IsBusyFiltering, "BusyFiltering should still be true after tailer read complete.");
 
             // Act 3: Simulate the FilterProcessor sending the *first* Replace update
-            _mockProcessor.SimulateFilteredUpdate(initialReplaceUpdate);
+            _mockProcessor.SimulateFilteredUpdate(initialLines);
             _testContext.Send(_ => { }, null); // Process context queue (ApplyFilteredUpdate runs)
 
             // Assert 3: State flags should now be false
@@ -783,10 +784,9 @@ namespace Logonaut.UI.Tests.ViewModels
             // Arrange: Simulate NOT being in initial load
             _viewModel.IsPerformingInitialLoad = false;
             _viewModel.IsBusyFiltering = true; // Simulate busy state from triggering filter change
-            var update = new FilteredUpdate(new List<FilteredLogLine> { new(1, "New") });
 
             // Act
-            _mockProcessor.SimulateFilteredUpdate(update);
+            _mockProcessor.SimulateFilteredUpdate(new List<FilteredLogLine> { new(1, "New") });
             _testContext.Send(_ => { }, null);
 
             // Assert
@@ -1101,20 +1101,119 @@ namespace Logonaut.UI.Tests.ViewModels
 
         #region Auto-Scroll Event Triggering Tests
 
-        [TestMethod] public void RequestScrollToEnd_DoesNotFire_When_ReplaceUpdate_And_AutoScrollEnabled()
+        [TestMethod] public void RequestScrollToEnd_should_Fire_When_UpdateAppendsLines_And_AutoScrollEnabled()
         {
             // Arrange
-            _viewModel.IsAutoScrollEnabled = true;
-            bool eventFired = false;
-            _viewModel.RequestScrollToEnd += (s, e) => eventFired = true;
-            var replaceUpdate = new FilteredUpdate(new List<FilteredLogLine> { new FilteredLogLine(10, "Replaced") });
+            _viewModel.IsAutoScrollEnabled = true; // Auto-scroll IS enabled
+            _requestScrollToEndEventFired = false; // Reset flag
+
+            // Setup initial state
+            var initialLines = new List<FilteredLogLine> { new FilteredLogLine(1, "Line 1") };
+            _viewModel.FilteredLogLines.Add(initialLines[0]); // Manually set initial state
+
+            // Define the new list representing an append scenario
+            var newFullList = new List<FilteredLogLine> {
+                new FilteredLogLine(1, "Line 1"),
+                new FilteredLogLine(2, "Line 2 Appended")
+            };
 
             // Act
-            _mockProcessor.SimulateFilteredUpdate(replaceUpdate);
-            _testContext.Send(_ => { }, null); // Runs ReplaceLogTextInternal
+            // Simulate the processor sending the updated full list
+            _mockProcessor.SimulateFilteredUpdate(newFullList);
+            _testContext.Send(_ => { }, null); // Process ApplyFilteredUpdate
 
             // Assert
-            Assert.IsFalse(eventFired, "RequestScrollToEnd event should NOT fire on Replace updates.");
+            Assert.IsTrue(_requestScrollToEndEventFired,
+                "TEST FAILURE EXPECTED until ApplyFilteredUpdate is fixed: Event should fire for append-like update when enabled.");
+
+            // Assert viewmodel state updated correctly
+            Assert.AreEqual(2, _viewModel.FilteredLogLines.Count);
+            Assert.AreEqual("Line 2 Appended", _viewModel.FilteredLogLines[1].Text);
+        }
+
+        // This test currently PASSES because ApplyFilteredUpdate lacks the logic
+        // to check IsAutoScrollEnabled even if it detected an append.
+        [TestMethod] public void RequestScrollToEnd_ShouldNotFire_When_UpdateAppendsLines_And_AutoScrollDisabled()
+        {
+            // Arrange
+            _viewModel.IsAutoScrollEnabled = false; // Auto-scroll IS disabled
+            _requestScrollToEndEventFired = false; // Reset flag
+
+            // Setup initial state
+            var initialLines = new List<FilteredLogLine> { new FilteredLogLine(1, "Line 1") };
+            _viewModel.FilteredLogLines.Add(initialLines[0]);
+
+            // Define the new list representing an append scenario
+            var newFullList = new List<FilteredLogLine> {
+                new FilteredLogLine(1, "Line 1"),
+                new FilteredLogLine(2, "Line 2 Appended")
+            };
+
+            // Act
+            _mockProcessor.SimulateFilteredUpdate(newFullList);
+            _testContext.Send(_ => { }, null); // Process ApplyFilteredUpdate
+
+            // Assert
+            Assert.IsFalse(_requestScrollToEndEventFired,
+                "Event should NOT fire when auto-scroll is disabled, regardless of update content.");
+
+            // Assert viewmodel state updated correctly
+            Assert.AreEqual(2, _viewModel.FilteredLogLines.Count);
+        }
+
+        // This test currently PASSES because ApplyFilteredUpdate lacks the logic
+        // to differentiate update types; it never fires the event.
+        [TestMethod] public void RequestScrollToEnd_ShouldNotFire_When_UpdateIsReplace_And_AutoScrollEnabled()
+        {
+            // Arrange
+            _viewModel.IsAutoScrollEnabled = true; // Auto-scroll IS enabled
+            _requestScrollToEndEventFired = false; // Reset flag
+
+            // Setup initial state
+            var initialLines = new List<FilteredLogLine> { new FilteredLogLine(1, "Line 1") };
+            _viewModel.FilteredLogLines.Add(initialLines[0]);
+
+            // Define a new list representing a non-append replace
+            var replacingList = new List<FilteredLogLine> { new FilteredLogLine(5, "Filtered Line A") };
+
+            // Act
+            _mockProcessor.SimulateFilteredUpdate(replacingList);
+            _testContext.Send(_ => { }, null); // Process ApplyFilteredUpdate
+
+            // Assert
+            Assert.IsFalse(_requestScrollToEndEventFired,
+                "Event should NOT fire for replace-like updates, even when auto-scroll is enabled.");
+
+            // Assert viewmodel state updated correctly
+            Assert.AreEqual(1, _viewModel.FilteredLogLines.Count);
+            Assert.AreEqual("Filtered Line A", _viewModel.FilteredLogLines[0].Text);
+        }
+
+        // This test currently PASSES for the right reason (auto-scroll disabled) and
+        // also because ApplyFilteredUpdate never fires the event anyway.
+        [TestMethod] public void RequestScrollToEnd_ShouldNotFire_When_UpdateIsReplace_And_AutoScrollDisabled()
+        {
+            // Arrange
+            _viewModel.IsAutoScrollEnabled = false; // Auto-scroll IS disabled
+            _requestScrollToEndEventFired = false; // Reset flag
+
+            // Setup initial state
+            var initialLines = new List<FilteredLogLine> { new FilteredLogLine(1, "Line 1") };
+            _viewModel.FilteredLogLines.Add(initialLines[0]);
+
+            // Define a new list representing a non-append replace
+            var replacingList = new List<FilteredLogLine> { new FilteredLogLine(5, "Filtered Line A") };
+
+            // Act
+            _mockProcessor.SimulateFilteredUpdate(replacingList);
+            _testContext.Send(_ => { }, null); // Process ApplyFilteredUpdate
+
+            // Assert
+            Assert.IsFalse(_requestScrollToEndEventFired,
+                "Event should NOT fire for replace-like updates when auto-scroll is disabled.");
+
+            // Assert viewmodel state updated correctly
+            Assert.AreEqual(1, _viewModel.FilteredLogLines.Count);
         }
 
         #endregion // Auto-Scroll Event Triggering Tests

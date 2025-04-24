@@ -766,37 +766,148 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> ApplyFilteredUpdate received. Lines={update.Lines.Count}");
 
-        int originalLineToRestore = HighlightedOriginalLineNumber;
+        // Check if this update represents an append operation relative to the current state
+        bool isAppend = CheckIfAppend(update.Lines);
 
-        ReplaceFilteredLines(update.Lines);
-        ScheduleLogTextUpdate(FilteredLogLines); // Pass full list
-
-        // --- Restore Highlight ---
-        // Attempt to re-select the line the user had highlighted before the Replace,
-        // preserving their focus point across filter changes.
-        if (originalLineToRestore > 0)
+        if (isAppend)
         {
-            // Find the new index (if any) of the previously highlighted line.
-            int newIndex = FilteredLogLines
-                .Select((line, index) => new { line.OriginalLineNumber, Index = index })
-                .FirstOrDefault(item => item.OriginalLineNumber == originalLineToRestore)?.Index ?? -1;
+            // --- Handle Append ---
+            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> ApplyFilteredUpdate: Detected Append.");
 
-            // Queue the highlight update on the UI thread to ensure it happens after layout updates.
-            _uiContext.Post(_ => { HighlightedFilteredLineIndex = newIndex; }, null);
-        } else {
-            // Ensure any previous highlight is cleared if nothing was selected before.
-            _uiContext.Post(_ => { HighlightedFilteredLineIndex = -1; }, null);
+            // 1. Calculate the newly added lines
+            var appendedLines = update.Lines.Skip(FilteredLogLines.Count).ToList();
+
+            // 2. Add only the new lines to the ObservableCollection
+            AddFilteredLines(appendedLines); // This notifies controls bound to the collection
+
+            // 3. Schedule the text append operation for AvalonEdit
+            ScheduleLogTextAppend(appendedLines);
+
+            // 4. Trigger Auto-Scroll if enabled
+            if (IsAutoScrollEnabled)
+            {
+                RequestScrollToEnd?.Invoke(this, EventArgs.Empty);
+                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} ---> ApplyFilteredUpdate (Append): AutoScroll Triggered.");
+            }
+
+            // 5. Reset BusyFiltering (Append means this batch is done)
+            //    Do NOT reset IsPerformingInitialLoad on Append.
+            _uiContext.Post(_ => {
+                IsBusyFiltering = false;
+                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} ---> ApplyFilteredUpdate (Append): UI Update Complete. BusyFiltering=false.");
+            }, null);
         }
-
-        // --- Manage Busy Indicators ---
-        // The processor handles its internal state; the VM just reacts.
-        // Reset both flags after receiving the *definitive* Replace update.
-        _uiContext.Post(_ =>
+        else
         {
-            IsPerformingInitialLoad = false;
-            IsBusyFiltering = false;
-            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} ---> ApplyFilteredUpdate: UI Update Complete. IsPerformingInitialLoad=false, IsBusyFiltering=false");
-        }, null);
+            // --- Handle Replace
+            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> ApplyFilteredUpdate: Detected Replace.");
+            int originalLineToRestore = HighlightedOriginalLineNumber;
+
+            // 1. Replace the entire ObservableCollection
+            ReplaceFilteredLines(update.Lines); // Clears and adds new lines
+
+            // 2. Schedule the full text replace for AvalonEdit
+            ScheduleLogTextUpdate(FilteredLogLines); // Passes the complete new list
+
+            // 3. Restore Highlight (only makes sense after a replace)
+            if (originalLineToRestore > 0)
+            {
+                int newIndex = FilteredLogLines
+                    .Select((line, index) => new { line.OriginalLineNumber, Index = index })
+                    .FirstOrDefault(item => item.OriginalLineNumber == originalLineToRestore)?.Index ?? -1;
+                // Ensure highlight update runs after potential layout passes
+                _uiContext.Post(_ => { HighlightedFilteredLineIndex = newIndex; }, null);
+            } else {
+                // Clear highlight if nothing was selected before
+                _uiContext.Post(_ => { HighlightedFilteredLineIndex = -1; }, null);
+            }
+
+            // 4. Reset Busy Indicators for Replace
+            _uiContext.Post(_ =>
+            {
+                IsPerformingInitialLoad = false; // Reset InitialLoad on Replace
+                IsBusyFiltering = false;         // Reset BusyFiltering on Replace
+                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} ---> ApplyFilteredUpdate (Replace): UI Update Complete. Flags Reset.");
+            }, null);
+        }
+    }
+
+    private bool CheckIfAppend(IReadOnlyList<FilteredLogLine> newLines)
+    {
+        int currentCount = FilteredLogLines.Count;
+
+        // If the new list isn't longer, it can't be an append.
+        if (newLines.Count <= currentCount)
+            return false;
+
+        // If the current list is empty, any new lines are technically an append (or initial load)
+        // but ApplyFilteredUpdate's 'else' branch handles initial load correctly (Replace).
+        // So, only treat it as a UI append if the current list *wasn't* empty.
+        if (currentCount == 0)
+            return false; // Let the Replace logic handle the initial population.
+
+        // Compare the original line numbers of the existing lines with the start of the new list.
+        // This is more robust than comparing text content.
+        return newLines.Take(currentCount)
+                    .Select(l => l.OriginalLineNumber)
+                    .SequenceEqual(FilteredLogLines.Select(l => l.OriginalLineNumber));
+    }
+
+    private void ScheduleLogTextAppend(IReadOnlyList<FilteredLogLine> linesToAppend)
+    {
+        // Ensure we work with a copy in case the original list changes
+        var linesSnapshot = linesToAppend.ToList();
+
+        _uiContext.Post(state =>
+        {
+            var lines = (List<FilteredLogLine>)state!;
+            AppendLogTextInternal(lines);
+            // Update search matches *after* appending text
+            UpdateSearchMatches();
+        }, linesSnapshot);
+    }
+
+    private void AppendLogTextInternal(IReadOnlyList<FilteredLogLine> linesToAppend)
+    {
+        // Ensure editor and document exist and there's something to append
+        if (_logEditorInstance?.Document == null || !linesToAppend.Any()) return;
+
+        try
+        {
+            var sb = new System.Text.StringBuilder();
+
+            // Prepend a newline ONLY if the editor has text AND doesn't already end with a newline
+            if (_logEditorInstance.Document.TextLength > 0)
+            {
+                string lastChars = _logEditorInstance.Document.GetText(
+                    _logEditorInstance.Document.TextLength - Environment.NewLine.Length,
+                    Environment.NewLine.Length);
+                if (lastChars != Environment.NewLine)
+                {
+                    sb.Append(Environment.NewLine);
+                }
+            }
+
+            // Append the new lines, separated by newlines
+            for (int i = 0; i < linesToAppend.Count; i++)
+            {
+                if (i > 0) // Add newline before second, third, etc. lines
+                {
+                    sb.Append(Environment.NewLine);
+                }
+                sb.Append(linesToAppend[i].Text);
+            }
+
+            string textToAppend = sb.ToString();
+
+            _logEditorInstance.Document.Insert(_logEditorInstance.Document.TextLength, textToAppend);
+        }
+        catch (Exception ex)
+        {
+            // Log or handle potential errors during text manipulation
+            Debug.WriteLine($"Error appending text to AvalonEdit: {ex.Message}");
+            // Optionally, fall back to a full replace if append fails?
+        }
     }
 
     // Helper methods called by ApplyFilteredUpdate to modify UI collections.

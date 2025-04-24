@@ -170,8 +170,9 @@ namespace Logonaut.TestUtils
         }
 
         // --- Simulation Methods for Tests ---
-        public void SimulateFilteredUpdate(FilteredUpdate update)
+        public void SimulateFilteredUpdate(List<FilteredLogLine> lines)
         {
+            var update = new FilteredUpdate(lines);
             if (!_isDisposed) _filteredUpdatesSubject.OnNext(update);
         }
 
