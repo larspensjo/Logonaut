@@ -11,7 +11,8 @@ Logonaut is organized into several independent modules:
     *   `OriginalLineNumberMargin`: Custom margin displaying original log line numbers.
     *   `OverviewRulerMargin`: Custom scrollbar replacement showing document overview and markers.
     *   `ChunkSeparatorRenderer`: Draws visual lines between non-contiguous log chunks.
-    *   `SelectedIndexHighlightTransformer`: `DocumentColorizingTransformer` for highlighting a specific selected line. // <<<< UPDATED/ADDED
+    *   `SelectedIndexHighlightTransformer`: `DocumentColorizingTransformer` for highlighting a specific selected line.
+    *   `BusyIndicator`: Custom control displaying animations for various busy states (replaces `AnimatedSpinner`).
 *   **Logonaut.Core:** Provides core business logic, including the `FilterEngine` for applying filter rules and the reactive `LogFilterProcessor` for orchestrating log processing and filtering. Also includes settings management.
 *   **Logonaut.Filters:** Implements the filtering system, defining various filter types (`SubstringFilter`, `RegexFilter`, `AndFilter`, `OrFilter`, `NorFilter`, `TrueFilter`) and serialization logic for filter trees.
 *   **Logonaut.LogTailing:** Handles asynchronous log file reading and tailing using `LogTailer` and `LogTailerManager`, exposing new log lines as an `IObservable<string>` via Reactive Extensions (Rx.NET).
@@ -19,13 +20,32 @@ Logonaut is organized into several independent modules:
 *   **Logonaut.Common:** Contains common data structures (`LogDocument`, `FilteredLogLine`, `LogonautSettings`, `FilterProfile`) shared across modules.
 *   **Tests:** Unit tests for each module using MSTest.
 
+## Graphical Identity
+
+### Application Icon Concept: Flowing Neon Lines
+
+*   **Core Idea:** The primary application icon (.ico file) will feature a stylized representation of log lines rendered in the application's primary neon accent color (e.g., cyan/blue).
+*   **Visual:** These lines should appear dynamic, perhaps slightly curved, wavy, or like a data stream, suggesting live tailing and analysis.
+*   **Context:** This could be integrated with a simple, modern document shape or a terminal prompt symbol (>_) to provide context.
+*   **Implementation:** A multi-resolution `.ico` file containing standard sizes (16x16, 32x32, 48x48, 256x256) will be created to ensure clarity across different Windows UI contexts (Taskbar, Explorer, Title Bar, etc.).
+
+### Extended Graphical Identity
+
+The "Flowing Neon Lines" motif and the core neon accent color will be consistently applied in other areas to reinforce the application's visual identity:
+
+*   **Splash Screen:** If implemented, it will feature the main logo prominently against a theme-appropriate background (dark or light).
+*   **About Dialog:** The dialog will display the application icon alongside version and copyright information.
+*   **Busy Indicator:** The custom `BusyIndicator` control will incorporate the "Flowing Neon Lines" concept. Different busy states (e.g., file loading vs. filtering) can be represented by variations in the flow (color, speed, direction, shape of the flowing elements) or by layering different flowing patterns. See [BusyIndicatorPlan.md](BusyIndicatorPlan.md) for evolution details.
+*   **Installer:** Visual assets used in the installer will use the application logo and neon branding.
+*   **(Future) File Associations:** Icons for associated file types could incorporate the flowing lines motif with a document symbol.
+
 ## Key Design Decisions
 
 ### Filtering System
 
 *   **Named Filter Profiles:** Users can create, save, name, and switch between multiple distinct filter configurations (profiles). This allows tailoring filters for different log types or analysis tasks.
 *   **Profile Management UI:** A `ComboBox` located in the filter panel is used for selecting the active profile. Associated buttons allow creating, renaming, and deleting profiles. (This follows Alternative A from the design discussion).
-*   **Reactive Processing:** Filtering is handled reactively using `System.Reactive` within the `LogFilterProcessor`. This service manages background processing, incremental updates for new lines, debounced full re-filters on configuration changes, and safe marshalling of results to the UI thread. See `ReactiveIncrementalFiltering.md` for details.
+*   **Reactive Processing:** Filtering is handled reactively using `System.Reactive` within the `LogFilterProcessor`. This service manages background processing, full re-filters on configuration changes or new data arrival, debounced triggers, and safe marshalling of results to the UI thread. See [ReactiveIncrementalFiltering.md](ReactiveIncrementalFiltering.md) for details.
 *   **Filter Engine:** The `FilterEngine` provides the core synchronous logic for applying a given filter tree and context lines to a snapshot of the log document.
 
 ### Highlighting System
@@ -39,8 +59,8 @@ Logonaut is organized into several independent modules:
 
 *   **AvalonEdit:** The powerful AvalonEdit control is used for displaying log content, providing features like virtualization and syntax highlighting support.
 *   **Custom Margins:**
-    *   `OriginalLineNumberMargin`: Displays the original line number from the source file, driven by `FilteredLogLine` data. See `LineNumberManagement.md`.
-    *   `OverviewRulerMargin`: Replaces the standard vertical scrollbar, providing a visual map of the filtered document with markers for search results (and potentially other points of interest). It controls scrolling via events. See `OverviewRulerFlow.md`.
+    *   `OriginalLineNumberMargin`: Displays the original line number from the source file, driven by `FilteredLogLine` data. See [LineNumberManagement.md](LineNumberManagement.md).
+    *   `OverviewRulerMargin`: Replaces the standard vertical scrollbar, providing a visual map of the filtered document with markers for search results (and potentially other points of interest). It controls scrolling via events. See [OverviewRulerFlow.md](OverviewRulerFlow.md).
     *   `ChunkSeparatorRenderer`: Draws visual lines between non-contiguous log chunks resulting from filtering with context.
 
 ### Persistence
@@ -49,4 +69,4 @@ Logonaut is organized into several independent modules:
 
 ### Data Flow
 
-*   Detailed data flow for log processing and filtering is described in `LogFileProcessingFlow.md`.
+*   Detailed data flow for log processing and filtering is described in [LogFileProcessingFlow.md](LogFileProcessingFlow.md).
