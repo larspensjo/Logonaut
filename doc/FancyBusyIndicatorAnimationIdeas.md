@@ -2,6 +2,8 @@
 
 This document explores creative and visually interesting animation ideas for the `BusyIndicator` control, moving beyond a simple spinning arc, **and** includes ideas for a dedicated loading overlay. These leverage WPF's 2D drawing capabilities, particularly `PathGeometry` and transforms, to provide unique feedback for different application states.
 
+In general, the indicators shall take into consideration the light and dark themes, and adapt to the user's preferences.
+
 ## I. Persistent Indicators (for External `BusyIndicator`)
 
 These animations loop or show continuous progress until the associated task completes (e.g., Filtering, Indexing). **Loading state is handled separately by the overlay.**
