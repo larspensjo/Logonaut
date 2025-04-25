@@ -9,6 +9,7 @@
 * CTRL+O for quick open file.
 * BUG: Monitoring a log file that grows will add filtered lines, but not taking context lines into account.
 * BUG: Monitor a growing log file. Toggle filters on/off. Nothing will be shown.
+* Any filter change or context chage while Auto Scroll is enabled shall automatically scroll to the new end.
 * Animations for UI changes:
     * When Auto Scroll is automatically disabled, use an animation on top of the checkbox.
     * When the user initiates a search using CTR+F, focus is automatically changed to the search box. Use an animation on top of the search box to help the user notice the transition.

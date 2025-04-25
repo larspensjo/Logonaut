@@ -14,5 +14,6 @@
 *   The filter system shall allow the user to define, save, load, and select between multiple named filter configurations (filter trees).
 *   Using MSTest for unit tests
 *   For error management, I prefer:
-    *   Never use exceptions for user errors, only when unepxected things happens.
+    *   Use exceptions for unepxected programming errors, but not for user errors.
     *   Avoid using a pop-up dialog with error messages when the user is doing something wrong. Instead, use techniques to disable controls that shouldn't be used, depending on state.
+* Please use the new format where you define the namespace as "namespace xxxx;", and then the rest of the file belongs to that namespace (rather than the old where the content of the namespace was inside a block).
