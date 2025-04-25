@@ -27,7 +27,7 @@ This step should now be complete.
 
 This step should now be complete.
 
-*   **Goal:** Add a separate, semi-transparent overlay animation directly on top of the `TextEditor` (`LogOutputEditor`) that is visible *only* when the `LoadingToken` is present in `MainViewModel.CurrentBusyStates`. Use the "Soft Vertical Scanlines" animation.
+*   **Goal:** *   **Goal:** Add a separate, semi-transparent overlay animation directly on top of the `TextEditor` (`LogOutputEditor`) that is visible *only* when the `LoadingToken` is present in `MainViewModel.CurrentBusyStates`. Use a "Soft **Horizontal** Scanlines" animation **moving upwards**.
 *   **Why:** Provide contextual visual feedback during potentially long initial file loads, directly over the content area being populated.
 *   **Tasks:**
     *   **XAML Layout (`MainWindow.xaml`):**
@@ -46,13 +46,13 @@ This step should now be complete.
         *   Place this custom control *inside* the `LoadingOverlay` Border/Canvas.
         *   Inside `LoadingScanlineOverlay`:
             *   Use `CompositionTarget.Rendering` for animation updates.
-            *   Subscribe/unsubscribe in response to its own `IsVisibleChanged` event (which is controlled by the `LoadingOverlay`'s visibility binding).
-            *   Implement `OnRender` to draw faint, wide, semi-transparent vertical bands.
-            *   Animate the horizontal position of these bands over time to create a slow sweeping effect.
+            *   Subscribe/unsubscribe in response to its own `IsVisibleChanged` event (controlled by the `LoadingOverlay`'s visibility binding).
+            *   Implement `OnRender` to draw faint, thin, semi-transparent **horizontal** bands.
+            *   Animate the **vertical position offset** of these bands over time to create a slow **upwards sweeping** effect.
             *   Use theme-aware colors (e.g., derived from background/foreground) with very high transparency (e.g., Opacity 0.1-0.2).
             *   Ensure soft edges (e.g., using linear gradients for the bands' brushes).
     *   **Design:** Finalize the visual appearance (color, width, speed, transparency) of the scanlines to be subtle yet noticeable.
-*   **Result:** When `MainViewModel` adds `LoadingToken` to `CurrentBusyStates`, the scanline animation appears semi-transparently over the `TextEditor`. When the token is removed, the overlay disappears. The external `BusyIndicator` still spins based on *any* token present (including `LoadingToken` at this stage).
+*   **Result:** When `MainViewModel` adds `LoadingToken` to `CurrentBusyStates`, the **horizontal scanline animation moving upwards** appears semi-transparently over the `TextEditor`. When the token is removed, the overlay disappears. The external `BusyIndicator` still spins based on *any* token present (including `LoadingToken` at this stage).
 
 ## Step 3: State-Specific Visuals for *BusyIndicator* (Ignoring Loading)
 

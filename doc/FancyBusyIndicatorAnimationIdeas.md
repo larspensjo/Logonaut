@@ -37,11 +37,11 @@ These animations loop or show continuous progress until the associated task comp
 
 This animation is shown semi-transparently *over* the text editor area *only* during the initial file loading phase (`LoadingToken` active). Subtlety is key to avoid obscuring content.
 
-1.  **Soft Vertical Scanlines:**
-    *   **Visual:** Very faint, wide, semi-transparent vertical bands of color (or slightly lighter/darker than the overlay background).
-    *   **Motion:** Bands slowly sweep horizontally across the overlay area. They might originate from one side and fade before reaching the other, or appear across the whole width and scroll horizontally, wrapping around.
+1.  **Soft Horizontal Scanlines (Upwards):**
+    *   **Visual:** Very faint, thin, semi-transparent **horizontal** bands of color (or slightly lighter/darker than the overlay background).
+    *   **Motion:** Bands slowly sweep **vertically upwards** across the overlay area, originating from the bottom and wrapping around or fading out near the top.
     *   **Styling:** Use colors very close to the theme's editor background, differing subtly in brightness or hue (e.g., a slightly lighter grey on a dark theme). Soft gradient edges enhance subtlety.
-    *   **Subtlety:** Very high transparency (e.g., Opacity 0.1-0.2). Slow, smooth, continuous horizontal motion. Soft edges via gradients. Aims for minimal distraction while indicating background activity.
+    *   **Subtlety:** Very high transparency (e.g., Opacity 0.1-0.2). Slow, smooth, continuous **vertical** motion. Soft edges via gradients. Aims for minimal distraction while indicating background activity.
 
 2.  *(Alternative Loading Idea)* **Fading Dashes/Particles (Top Down):**
     *   **Visual:** Thin, short horizontal dashes or small particles appear near the top edge.
