@@ -259,11 +259,10 @@
                         <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,2"/>
 
                         <!-- Busy Indicator -->
-                        <!-- SpinnerBrush and SpinnerThickness are set by the theme style -->
-                        <controls:AnimatedSpinner Width="16" Height="16"
+                        <controls:BusyIndicator Width="16" Height="16"
                             VerticalAlignment="Center"
                             Margin="10,0,5,0"
-                            IsSpinning="{Binding IsProcessingIndicatorVisible}"
+                            ActiveStates="{Binding CurrentBusyStates}"
                             ToolTip="Applying filters or loading data..."/>
 
                         <TextBlock Text="{Binding SearchStatusText}" VerticalAlignment="Center" Margin="10,0,5,0" FontStyle="Italic" Foreground="{DynamicResource SecondaryTextBrush}"/>

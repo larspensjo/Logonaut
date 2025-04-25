@@ -25,12 +25,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
     #region // --- Fields ---
 
     // --- UI Services & Context ---
+    public static readonly object LoadingToken = new();
+    public static readonly object FilteringToken = new();
     private readonly IFileDialogService _fileDialogService;
     private readonly ISettingsService _settingsService;
     private readonly ILogTailerService _logTailerService;
     private readonly SynchronizationContext _uiContext;
-
-    // --- Core Processing Service ---
     private readonly ILogFilterProcessor _logFilterProcessor;
 
     // --- Lifecycle Management ---
@@ -298,15 +298,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
     // Note: This state is derived by traversing the *active* FilterProfile.
     [ObservableProperty] private ObservableCollection<string> _filterSubstrings = new();
 
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsProcessingIndicatorVisible))] // Notify combined property
-    private bool _isBusyFiltering = false;         // The MainViewModel object is in a busy state.
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsProcessingIndicatorVisible))] // Notify combined property
-    private bool _isPerformingInitialLoad = false; // Flag to track initial file load state
-
-    public bool IsProcessingIndicatorVisible => IsBusyFiltering || IsPerformingInitialLoad;
+    // Observable collection holding tokens representing active background tasks.
+    // Bound to the UI's BusyIndicator; the indicator spins if this collection is not empty.
+    // Add/remove specific tokens (e.g., LoadingToken) to control the busy state.
+    public ObservableCollection<object> CurrentBusyStates { get; } = new();
 
     private IDisposable? _totalLinesSubscription;
 
@@ -510,8 +505,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
         if (string.IsNullOrEmpty(selectedFile)) return;
         Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} OpenLogFileAsync: '{selectedFile}'");
 
-        IsBusyFiltering = true;
-        IsPerformingInitialLoad = true; // Set flags before async work
+        // Add loading state token
+        _uiContext.Post(_ => CurrentBusyStates.Add(LoadingToken), null);
 
         try
         {
@@ -529,32 +524,32 @@ public partial class MainViewModel : ObservableObject, IDisposable
             long initialLines = await _logTailerService.ChangeFileAsync(selectedFile, AddLineToLogDocument).ConfigureAwait(true);
 
             // 4. Update Total Lines Display immediately after initial read
-                _uiContext.Post(_ => TotalLogLines = initialLines, null); // Use UI context
+            _uiContext.Post(_ => TotalLogLines = initialLines, null); // Use UI context
 
             // 5. Trigger the First Filter Explicitly
+            // Add filtering state token *before* triggering
+             _uiContext.Post(_ => CurrentBusyStates.Add(FilteringToken), null);
             IFilter? firstFilter = ActiveFilterProfile?.Model?.RootFilter ?? new TrueFilter();
             _logFilterProcessor.UpdateFilterSettings(firstFilter, ContextLines);
             // Update highlighting rules based on the active filter
             UpdateFilterSubstrings();
 
             Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} OpenLogFileAsync: ChangeFileAsync completed ({initialLines} lines). First filter triggered.");
-            // Busy flags (IsBusyFiltering, IsPerformingInitialLoad) will be reset
-            // by ApplyFilteredUpdate when it receives the Replace update from the processor.
+            // LoadingToken removed by ApplyFilteredUpdate handling the *first* Replace.
+            // FilteringToken removed by ApplyFilteredUpdate.
         }
         catch (Exception ex)
         {
             // Reset flags on error
-            IsBusyFiltering = false;
-            IsPerformingInitialLoad = false;
-            MessageBox.Show($"Error opening or reading log file '{selectedFile}':\n{ex.Message}", "File Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            CurrentLogFilePath = null; // Clear path
-            // Reset processor again to be safe? Maybe not needed if Reset only sets flag.
-            // Clear UI collections again
             _uiContext.Post(_ => {
-                    FilteredLogLines.Clear();
-                    OnPropertyChanged(nameof(FilteredLogLinesCount));
+                CurrentBusyStates.Remove(LoadingToken);
+                CurrentBusyStates.Remove(FilteringToken);
+                MessageBox.Show($"Error opening or reading log file '{selectedFile}':\n{ex.Message}", "File Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                CurrentLogFilePath = null; // Clear path
+                FilteredLogLines.Clear();
+                OnPropertyChanged(nameof(FilteredLogLinesCount));
                 TotalLogLines = 0; // Reset total lines display
-                }, null);
+            }, null);
         }
     }
 
@@ -697,28 +692,24 @@ public partial class MainViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(ActiveTreeRootNodes));
     }
 
-    // Central method to signal the processor that filters or context may have changed.
-    // Called by:
-    // - OnActiveFilterProfileChanged
-    // - OnContextLinesChanged
-    // - Callbacks passed to FilterViewModel instances (triggered by Enable toggle, EndEdit)
-    // - Callbacks from FilterProfileViewModel (e.g., SetModelRootFilter)
-    // TODO: Whenever the filter settings are changed, we should ensure the line currently selected in the editor is still visible. Preferably at the same window position.
     private void TriggerFilterUpdate()
     {
-        IsBusyFiltering = true; // Set IsBusyFiltering = true; before starting to work.
-        IsPerformingInitialLoad = false; // Explicit filter changes are not initial loads
+        // Add Filtering state token
+        _uiContext.Post(_ => {
+             // Ensure token isn't added multiple times if trigger fires rapidly
+             if (!CurrentBusyStates.Contains(FilteringToken))
+             {
+                 CurrentBusyStates.Add(FilteringToken);
+             }
+         }, null);
+
         _uiContext.Post(_ =>
         {
-            // Get the filter model from the *currently selected* profile VM
             IFilter? filterToApply = ActiveFilterProfile?.Model?.RootFilter ?? new TrueFilter();
-
-            // Send the filter and context lines to the background processor
             _logFilterProcessor.UpdateFilterSettings(filterToApply, ContextLines);
-
-            // Update highlighting rules based on the *active* filter tree
             UpdateFilterSubstrings();
         }, null);
+        // FilteringToken is removed by ApplyFilteredUpdate
     }
 
     private string GetCurrentDocumentText()
@@ -766,12 +757,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> ApplyFilteredUpdate received. Lines={update.Lines.Count}");
 
-        // Check if this update represents an append operation relative to the current state
+        bool wasInitialLoad = CurrentBusyStates.Contains(LoadingToken); // Check BEFORE modifying collection
         bool isAppend = CheckIfAppend(update.Lines);
 
         if (isAppend)
         {
-            // --- Handle Append ---
             Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> ApplyFilteredUpdate: Detected Append.");
 
             // 1. Calculate the newly added lines
@@ -791,15 +781,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
             }
 
             // 5. Reset BusyFiltering (Append means this batch is done)
-            //    Do NOT reset IsPerformingInitialLoad on Append.
             _uiContext.Post(_ => {
-                IsBusyFiltering = false;
-                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} ---> ApplyFilteredUpdate (Append): UI Update Complete. BusyFiltering=false.");
+                CurrentBusyStates.Remove(FilteringToken); // Remove filtering token
+                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} ---> ApplyFilteredUpdate (Append): UI Update Complete. FilteringToken removed.");
             }, null);
         }
-        else
+        else // Handle Replace
         {
-            // --- Handle Replace
             Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> ApplyFilteredUpdate: Detected Replace.");
             int originalLineToRestore = HighlightedOriginalLineNumber;
 
@@ -815,19 +803,20 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 int newIndex = FilteredLogLines
                     .Select((line, index) => new { line.OriginalLineNumber, Index = index })
                     .FirstOrDefault(item => item.OriginalLineNumber == originalLineToRestore)?.Index ?? -1;
-                // Ensure highlight update runs after potential layout passes
                 _uiContext.Post(_ => { HighlightedFilteredLineIndex = newIndex; }, null);
             } else {
-                // Clear highlight if nothing was selected before
                 _uiContext.Post(_ => { HighlightedFilteredLineIndex = -1; }, null);
             }
 
-            // 4. Reset Busy Indicators for Replace
+            // 4. Replace means filtering is done AND if it was the initial load, loading is also done.
             _uiContext.Post(_ =>
             {
-                IsPerformingInitialLoad = false; // Reset InitialLoad on Replace
-                IsBusyFiltering = false;         // Reset BusyFiltering on Replace
-                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} ---> ApplyFilteredUpdate (Replace): UI Update Complete. Flags Reset.");
+                CurrentBusyStates.Remove(FilteringToken); // Remove filtering token
+                if(wasInitialLoad)
+                {
+                    CurrentBusyStates.Remove(LoadingToken); // Remove loading token ONLY if it was the initial load
+                }
+                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} ---> ApplyFilteredUpdate (Replace): UI Update Complete. Tokens removed (Loading removed: {wasInitialLoad}).");
             }, null);
         }
     }
@@ -1064,7 +1053,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
         Debug.WriteLine($"{contextMessage}: {ex}");
         _uiContext.Post(_ =>
         {
-            IsBusyFiltering = false; // Ensure busy indicator is off
+            // Ensure all busy indicators are off on error
+            CurrentBusyStates.Clear();
             MessageBox.Show($"Error processing logs: {ex.Message}", "Processing Error", MessageBoxButton.OK, MessageBoxImage.Warning);
         }, null);
     }
@@ -1148,10 +1138,17 @@ public partial class MainViewModel : ObservableObject, IDisposable
     // Called explicitly from the Window's Closing event.
     public void Cleanup()
     {
-        IsBusyFiltering = false; // Ensure busy indicator is hidden on exit
-        SaveCurrentSettings();   // Save state before disposing
+        // 1. Clear the busy state collection (good practice)
+        _uiContext.Post(_ => CurrentBusyStates.Clear(), null);
+
+        // 2. Save settings before stopping services/disposing
+        SaveCurrentSettings();
+
+        // 3. Stop background services
         _logTailerService?.StopTailing();
-        Dispose();               // Dispose resources
+
+        // 4. Dispose resources managed by this ViewModel
+        Dispose();
     }
     #endregion // --- Lifecycle Management ---
 }

@@ -209,11 +209,11 @@ namespace Logonaut.UI.Tests.ViewModels
             Assert.IsTrue(_mockSettings.SavedSettings?.AutoScrollToTail, "Saved setting should be true.");
         }
 
-        [TestMethod]
-        public void Constructor_LoadsSettingsAndInitializesDefaultProfile()
+        [TestMethod] public void Constructor_LoadsSettingsAndInitializesDefaultProfile()
         {
             // Act (ViewModel created in Initialize)
-            // Assert
+
+            // Assert: Basic ViewModel state
             Assert.IsNotNull(_viewModel.AvailableProfiles);
             Assert.AreEqual(1, _viewModel.AvailableProfiles.Count);
             Assert.IsNotNull(_viewModel.ActiveFilterProfile);
@@ -224,26 +224,32 @@ namespace Logonaut.UI.Tests.ViewModels
             Assert.IsTrue(_viewModel.ShowLineNumbers);
             Assert.IsTrue(_viewModel.HighlightTimestamps);
             Assert.IsFalse(_viewModel.IsCaseSensitiveSearch);
+            Assert.AreEqual(1, _viewModel.CurrentBusyStates.Count, "Busy states should contain FilteringToken after constructor trigger.");
+            CollectionAssert.Contains(_viewModel.CurrentBusyStates, MainViewModel.FilteringToken, "FilteringToken should be present after constructor trigger.");
         }
 
-        [TestMethod]
-        public void Constructor_TriggersInitialFilterUpdateViaActiveProfileChange()
+        [TestMethod] public void Constructor_TriggersInitialFilterUpdateViaActiveProfileChange()
         {
             // Assert (Processor interaction happens during construction via ActiveProfile set)
             Assert.AreEqual(1, _mockProcessor.UpdateFilterSettingsCallCount);
             Assert.IsNotNull(_mockProcessor.LastFilterSettings);
             Assert.IsInstanceOfType(_mockProcessor.LastFilterSettings?.Filter, typeof(TrueFilter));
             Assert.AreEqual(0, _mockProcessor.LastFilterSettings?.ContextLines);
+            // Assert initial busy state *after* constructor finishes and triggers update
+            Assert.AreEqual(1, _viewModel.CurrentBusyStates.Count, "Busy states should contain one item after constructor trigger.");
+            CollectionAssert.Contains(_viewModel.CurrentBusyStates, MainViewModel.FilteringToken, "FilteringToken should be present after constructor trigger.");
         }
 
-        [TestMethod] public void Constructor_SetsInitialState_AndTriggersFirstFilter()
+        [TestMethod] public void Constructor_SetsInitialBusyState_ViaFirstFilterTrigger()
         {
-            // Assert (Processor interaction happens during construction via ActiveProfile set)
-            Assert.AreEqual(1, _mockProcessor.UpdateFilterSettingsCallCount, "Processor.UpdateFilterSettings should be called once by constructor.");
-            Assert.AreEqual(0, _mockProcessor.ResetCallCount, "Processor.Reset should NOT be called by constructor.");
-            Assert.IsFalse(_viewModel.IsPerformingInitialLoad, "IsPerformingInitialLoad should be false initially.");
-            // Assert.IsFalse(_viewModel.IsBusyFiltering, "IsBusyFiltering should be false initially."); // <<< OLD INCORRECT ASSERTION
-            Assert.IsTrue(_viewModel.IsBusyFiltering, "IsBusyFiltering should be TRUE immediately after constructor triggers first filter."); // <<< CORRECTED ASSERTION
+            // Assert (ViewModel created in TestInitialize automatically triggers first filter)
+            Assert.AreEqual(1, _mockProcessor.UpdateFilterSettingsCallCount, "Processor.UpdateFilterSettings should be called once by constructor logic.");
+            Assert.AreEqual(0, _mockProcessor.ResetCallCount, "Processor.Reset should NOT be called by constructor logic.");
+
+            // Assert NEW busy state: FilteringToken should be present
+            Assert.AreEqual(1, _viewModel.CurrentBusyStates.Count, "CurrentBusyStates count should be 1.");
+            CollectionAssert.Contains(_viewModel.CurrentBusyStates, MainViewModel.FilteringToken, "FilteringToken should be present.");
+            CollectionAssert.DoesNotContain(_viewModel.CurrentBusyStates, MainViewModel.LoadingToken, "LoadingToken should NOT be present.");
         }
 
         #endregion
@@ -702,27 +708,33 @@ namespace Logonaut.UI.Tests.ViewModels
             Assert.AreEqual("C:\\good\\log.txt", _viewModel.CurrentLogFilePath);
         }
 
-        [TestMethod] public void ApplyFilteredUpdate_Replace_ClearsAndAddsLines_ResetsSearch()
+        [TestMethod] public void ApplyFilteredUpdate_Replace_ClearsAndAddsLines_ResetsSearch_ClearsFilteringToken()
         {
-            // Arrange
+            // Arrange: Setup initial FilteredLogLines and search state
             _viewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Old Line 1"));
-            _viewModel.SearchText = "Old"; // Trigger search on old lines
+            _viewModel.SearchText = "Old";
             _testContext.Send(_ => { }, null); // Let search run
             Assert.AreEqual(1, _viewModel.SearchMarkers.Count);
 
+            // Arrange: Explicitly set the busy state for *this test scenario*
+            _viewModel.CurrentBusyStates.Clear();
+            _viewModel.CurrentBusyStates.Add(MainViewModel.FilteringToken);
+            Assert.AreEqual(1, _viewModel.CurrentBusyStates.Count, "Arrange phase: Expected 1 busy state token."); // Verify setup
+
             var newLines = new List<FilteredLogLine> { new FilteredLogLine(10, "New") };
 
-            // Act
+            // Act: Simulate the processor sending the update
             _mockProcessor.SimulateFilteredUpdate(newLines);
-            // Simulate UI thread processing the scheduled update
-            _testContext.Send(_ => { }, null); // Flushes queue, runs ReplaceLogTextInternal & UpdateSearchMatches
+            _testContext.Send(_ => { }, null); // Flushes queue, runs ReplaceLogTextInternal & UpdateSearchMatches & ApplyFilteredUpdate logic
 
-            // Assert
+            // Assert: ViewModel state updated
             Assert.AreEqual(1, _viewModel.FilteredLogLines.Count);
             Assert.AreEqual("New", _viewModel.FilteredLogLines[0].Text);
             Assert.AreEqual(0, _viewModel.SearchMarkers.Count, "Search markers should be cleared on Replace.");
             Assert.AreEqual(-1, _viewModel.CurrentMatchOffset, "Current match offset should be reset.");
-            Assert.IsFalse(_viewModel.IsBusyFiltering); // Check busy state if needed
+
+            // Assert: Busy state cleared (FilteringToken removed)
+            Assert.AreEqual(0, _viewModel.CurrentBusyStates.Count, "Busy states should be empty after Replace.");
         }
 
         [TestMethod] public void ApplyFilteredUpdate_Replace_RestoresHighlightBasedOnOriginalLineNumber()
@@ -749,49 +761,57 @@ namespace Logonaut.UI.Tests.ViewModels
         #endregion // Interaction with LogFilterProcessor Tests
 
         #region State Update Tests
-        [TestMethod] public void StateFlags_ManagedCorrectly_DuringInitialLoad()
+        [TestMethod] public void BusyStates_ManagedCorrectly_DuringInitialLoad()
         {
             // Arrange
             _mockFileDialog.FileToReturn = "C:\\good\\log.txt";
             List<FilteredLogLine> initialLines = new() { new(1, "Line 1") };
+            _viewModel.CurrentBusyStates.Clear(); // Ensure start empty for test clarity
 
             // Act 1: Start the file open process
             var openTask = _viewModel.OpenLogFileCommand.ExecuteAsync(null); // Don't await yet
 
-            // Assert 1: State flags should be true immediately after command start
-            Assert.IsTrue(_viewModel.IsPerformingInitialLoad, "InitialLoad should be true after OpenLogFile start.");
-            Assert.IsTrue(_viewModel.IsBusyFiltering, "BusyFiltering should be true after OpenLogFile start.");
+            // Assert 1: State flags should be set immediately after command start
+            // OpenLogFileAsync adds LoadingToken, then triggers filter which adds FilteringToken
+            _testContext.Send(_ => { }, null); // Flush context queue to let Posts finish
+            Assert.AreEqual(2, _viewModel.CurrentBusyStates.Count, "Busy state count after OpenLogFile start incorrect.");
+            CollectionAssert.Contains(_viewModel.CurrentBusyStates, MainViewModel.LoadingToken, "LoadingToken should be present after OpenLogFile start.");
+            CollectionAssert.Contains(_viewModel.CurrentBusyStates, MainViewModel.FilteringToken, "FilteringToken should be present after OpenLogFile start triggers filter.");
 
             // Act 2: Simulate the initial read completing (but processor hasn't finished filtering yet)
-            _testContext.Send(_ => { }, null); // Process context queue
+            // No specific action needed here that changes state directly in this test
 
-            // Assert 2: State flags should *still* be true
-            Assert.IsTrue(_viewModel.IsPerformingInitialLoad, "InitialLoad should still be true after tailer read complete.");
-            Assert.IsTrue(_viewModel.IsBusyFiltering, "BusyFiltering should still be true after tailer read complete.");
+            // Assert 2: State flags should *still* be the same (waiting for processor)
+            Assert.AreEqual(2, _viewModel.CurrentBusyStates.Count, "Busy state count after tailer read complete incorrect.");
+            CollectionAssert.Contains(_viewModel.CurrentBusyStates, MainViewModel.LoadingToken, "LoadingToken should still be present after tailer read complete.");
+            CollectionAssert.Contains(_viewModel.CurrentBusyStates, MainViewModel.FilteringToken, "FilteringToken should still be present after tailer read complete.");
 
             // Act 3: Simulate the FilterProcessor sending the *first* Replace update
             _mockProcessor.SimulateFilteredUpdate(initialLines);
             _testContext.Send(_ => { }, null); // Process context queue (ApplyFilteredUpdate runs)
 
-            // Assert 3: State flags should now be false
-            Assert.IsFalse(_viewModel.IsPerformingInitialLoad, "InitialLoad should be false after first Replace update.");
-            Assert.IsFalse(_viewModel.IsBusyFiltering, "BusyFiltering should be false after first Replace update.");
+            // Assert 3: State flags should now be cleared
+            Assert.AreEqual(0, _viewModel.CurrentBusyStates.Count, "Busy state count should be 0 after first Replace update.");
+            CollectionAssert.DoesNotContain(_viewModel.CurrentBusyStates, MainViewModel.LoadingToken, "LoadingToken should be removed after first Replace update.");
+            CollectionAssert.DoesNotContain(_viewModel.CurrentBusyStates, MainViewModel.FilteringToken, "FilteringToken should be removed after first Replace update.");
             Assert.AreEqual(1, _viewModel.FilteredLogLines.Count); // Verify update was applied
         }
 
-        [TestMethod] public void ApplyFilteredUpdate_Replace_AfterManualFilterChange_ResetsBusyFlag()
+        [TestMethod] public void ApplyFilteredUpdate_Replace_AfterManualFilterChange_ClearsFilteringToken()
         {
-            // Arrange: Simulate NOT being in initial load
-            _viewModel.IsPerformingInitialLoad = false;
-            _viewModel.IsBusyFiltering = true; // Simulate busy state from triggering filter change
+            // Arrange: Simulate being busy filtering AFTER initial load is done
+            _viewModel.CurrentBusyStates.Clear();
+            _viewModel.CurrentBusyStates.Add(MainViewModel.FilteringToken); // Only filtering is active
+            Assert.AreEqual(1, _viewModel.CurrentBusyStates.Count);
 
             // Act
             _mockProcessor.SimulateFilteredUpdate(new List<FilteredLogLine> { new(1, "New") });
             _testContext.Send(_ => { }, null);
 
             // Assert
-            Assert.IsFalse(_viewModel.IsBusyFiltering, "Busy flag should be reset after Replace update.");
-            Assert.IsFalse(_viewModel.IsPerformingInitialLoad, "Initial load flag should remain false.");
+            Assert.AreEqual(0, _viewModel.CurrentBusyStates.Count, "Busy states should be empty after Replace update.");
+            CollectionAssert.DoesNotContain(_viewModel.CurrentBusyStates, MainViewModel.FilteringToken, "FilteringToken should be removed.");
+            CollectionAssert.DoesNotContain(_viewModel.CurrentBusyStates, MainViewModel.LoadingToken, "LoadingToken should not have been present.");
         }
 
         [TestMethod]
@@ -901,20 +921,26 @@ namespace Logonaut.UI.Tests.ViewModels
 
         #endregion
 
-        #region Cleanup Tests (NEW)
-
-        [TestMethod]
-        public void Dispose_SavesSettings_StopsTailer_DisposesProcessor()
+        #region Cleanup Tests
+        [TestMethod] public void Cleanup_ClearsBusyStates_SavesSettings_StopsTailer_DisposesProcessor()
         {
             // Arrange
             _mockSettings.ResetSettings();
             var processor = _mockProcessor; // Capture instance
 
+            // Arrange: Explicitly set the busy state for *this test scenario*
+            _viewModel.CurrentBusyStates.Clear(); // Clear state from TestInitialize
+            _viewModel.CurrentBusyStates.Add(MainViewModel.LoadingToken);
+            _viewModel.CurrentBusyStates.Add(MainViewModel.FilteringToken);
+            Assert.AreEqual(2, _viewModel.CurrentBusyStates.Count, "Arrange phase: Expected 2 busy state tokens."); // Verify setup
+
             // Act
             _viewModel.Cleanup();
+            _testContext.Send(_ => { }, null); // Flush context queue to ensure Clear() runs
 
             // Assert
-            Assert.IsNotNull(_mockSettings.SavedSettings); // << Should pass now
+            Assert.AreEqual(0, _viewModel.CurrentBusyStates.Count, "Busy states should be cleared by Cleanup.");
+            Assert.IsNotNull(_mockSettings.SavedSettings);
             Assert.IsTrue(_mockTailer.IsStopped);
 
             // Verify Processor Disposal Behavior
