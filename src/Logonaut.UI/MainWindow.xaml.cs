@@ -275,7 +275,8 @@ public partial class MainWindow : Window, IDisposable
         if (_overviewRuler is null)
             throw new InvalidOperationException("OverviewRulerMargin not found in TextEditor template.");
         _overviewRuler.RequestScrollOffset += OverviewRuler_RequestScrollOffset;
-        // No need for the extra Unloaded lambda here, LogOutputEditor_Unloaded handles it.
+        // Handle user clicking the ruler
+        _overviewRuler.PreviewMouseLeftButtonDown += OverviewRuler_PreviewMouseLeftButtonDown;
 
         // Get TextView *once*
         TextView textView = _logOutputEditor.TextArea.TextView;
@@ -310,16 +311,29 @@ public partial class MainWindow : Window, IDisposable
 
         // --- Final Cleanup Subscription ---
         _logOutputEditor.Unloaded += LogOutputEditor_Unloaded; // Subscribe the main unload handler ONCE
+
+        // --- Subscribe to User Input Events for Scrolling ---
+        _logOutputEditor.TextArea.PreviewMouseWheel += TextArea_PreviewMouseWheel;
+        _logOutputEditor.TextArea.PreviewKeyDown += TextArea_PreviewKeyDown;
     }
 
     private void LogOutputEditor_Unloaded(object? sender, RoutedEventArgs? e)
     {
         // Clean up Overview Ruler binding
-        if (_overviewRuler != null)
+        if (_overviewRuler != null) {
             _overviewRuler.RequestScrollOffset -= OverviewRuler_RequestScrollOffset;
+            _overviewRuler.PreviewMouseLeftButtonDown -= OverviewRuler_PreviewMouseLeftButtonDown;
+        }
         _overviewRuler = null; // Release reference
 
-        TextView textView = _logOutputEditor.TextArea.TextView;
+        // --- Unsubscribe from User Input Events ---
+        if (_logOutputEditor?.TextArea != null)
+        {
+                _logOutputEditor.TextArea.PreviewMouseWheel -= TextArea_PreviewMouseWheel;
+                _logOutputEditor.TextArea.PreviewKeyDown -= TextArea_PreviewKeyDown;
+        }
+
+        TextView? textView = _logOutputEditor?.TextArea?.TextView;
         if (textView is null)
             throw new InvalidOperationException("TextView not found within LogOutputEditor.");
 
@@ -349,6 +363,47 @@ public partial class MainWindow : Window, IDisposable
             _chunkSeparator.Dispose();
         }
         _chunkSeparator = null; // Release reference
+    }
+
+    private void TextArea_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        // Disable auto-scroll if scrolling UP (positive delta)
+        if (_viewModel.IsAutoScrollEnabled && e.Delta > 0)
+        {
+            _viewModel.IsAutoScrollEnabled = false;
+            // System.Diagnostics.Debug.WriteLine("AutoScroll disabled due to MouseWheel Up.");
+        }
+    }
+
+    private void OverviewRuler_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        // Disable auto-scroll when user clicks the ruler to start scrolling
+        if (_viewModel.IsAutoScrollEnabled)
+        {
+            _viewModel.IsAutoScrollEnabled = false;
+            // System.Diagnostics.Debug.WriteLine("AutoScroll disabled due to Ruler Click.");
+        }
+        // Allow the base class or other handlers to continue processing the click for actual scrolling
+    }
+
+    private void TextArea_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (!_viewModel.IsAutoScrollEnabled) return; // Only act if enabled
+
+        switch (e.Key)
+        {
+            case Key.PageUp:
+            case Key.PageDown:
+            case Key.Up: // Arrow keys might not always scroll, but disabling is safe
+            case Key.Down:
+            case Key.Home: // Home/End usually scroll vertically
+            case Key.End:
+                _viewModel.IsAutoScrollEnabled = false;
+                // System.Diagnostics.Debug.WriteLine($"AutoScroll disabled due to KeyDown: {e.Key}");
+                // Note: We don't set e.Handled = true here unless we want to
+                // completely prevent the default scroll action for some reason.
+                break;
+        }
     }
 
     private void ProfileNameTextBox_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
