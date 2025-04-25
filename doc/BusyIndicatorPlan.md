@@ -25,6 +25,8 @@ This step should now be complete.
 
 ## Step 2: Implement AvalonEdit Loading Overlay
 
+This step should now be complete.
+
 *   **Goal:** Add a separate, semi-transparent overlay animation directly on top of the `TextEditor` (`LogOutputEditor`) that is visible *only* when the `LoadingToken` is present in `MainViewModel.CurrentBusyStates`. Use the "Soft Vertical Scanlines" animation.
 *   **Why:** Provide contextual visual feedback during potentially long initial file loads, directly over the content area being populated.
 *   **Tasks:**

@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.Diagnostics;
 using System.Reactive.Disposables;
 using System.Text.RegularExpressions;
@@ -80,6 +81,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
             LogDoc,
             _uiContext,
             AddLineToLogDocument);
+        
+        // --- Subscribe to CollectionChanged ---
+        CurrentBusyStates.CollectionChanged += CurrentBusyStates_CollectionChanged;
+        // Add the unsubscription logic to our main disposable container
+        _disposables.Add(Disposable.Create(() => {
+            CurrentBusyStates.CollectionChanged -= CurrentBusyStates_CollectionChanged;
+        }));
 
         // Subscribe to results from the processor
         var filterSubscription = _logFilterProcessor.FilteredUpdates
@@ -108,6 +116,14 @@ public partial class MainViewModel : ObservableObject, IDisposable
         LoadPersistedSettings(); // Load profiles and settings
 
         // Initial filter trigger is handled by setting ActiveFilterProfile in LoadPersistedSettings
+    }
+
+    private void CurrentBusyStates_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        // Whenever the collection changes (add, remove, reset),
+        // notify the UI that the IsLoading property *might* have changed.
+        // The binding system will then re-query the IsLoading getter.
+        OnPropertyChanged(nameof(IsLoading));
     }
 
     #endregion // --- Constructor ---
@@ -302,6 +318,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     // Bound to the UI's BusyIndicator; the indicator spins if this collection is not empty.
     // Add/remove specific tokens (e.g., LoadingToken) to control the busy state.
     public ObservableCollection<object> CurrentBusyStates { get; } = new();
+    public bool IsLoading => CurrentBusyStates.Contains(LoadingToken);
 
     private IDisposable? _totalLinesSubscription;
 
@@ -506,7 +523,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
         Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} OpenLogFileAsync: '{selectedFile}'");
 
         // Add loading state token
-        _uiContext.Post(_ => CurrentBusyStates.Add(LoadingToken), null);
+        _uiContext.Post(_ => {
+            CurrentBusyStates.Add(LoadingToken);
+        }, null);
 
         try
         {

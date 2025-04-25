@@ -210,7 +210,6 @@
                 </DockPanel>
             </Border>
 
-            <!-- TODO: We want live redraw of the window -->
             <GridSplitter Grid.Column="1"
                           Width="5"
                           HorizontalAlignment="Center"
@@ -269,26 +268,38 @@
                     </WrapPanel>
                 </Border>
 
-                <!-- Log Display -->
-                <Border Grid.Row="1" Style="{DynamicResource CardPanelStyle}" Padding="5">
-                     <avalonEdit:TextEditor x:Name="LogOutputEditor"
-                                        xmlns:avalonEdit="http://icsharpcode.net/sharpdevelop/avalonedit"
-                                        xmlns:helpers="clr-namespace:Logonaut.UI.Helpers"
-                                        FontFamily="Consolas" FontSize="12pt" IsReadOnly="True"
-                                        SyntaxHighlighting="{x:Null}"
-                                        WordWrap="False"
-                                        VerticalScrollBarVisibility="Disabled"
-                                        HorizontalScrollBarVisibility="Auto"
-                                        Padding="3,0,0,0"
-                                        Style="{StaticResource TextEditorWithOverviewRulerStyle}"
-                                        helpers:AvalonEditHelper.FilterSubstrings="{Binding FilterSubstrings, Mode=OneWay}"
-                                        helpers:AvalonEditHelper.HighlightTimestamps="{Binding HighlightTimestamps, Mode=OneWay}"
-                                        ShowLineNumbers="False"
-                                        helpers:AvalonEditHelper.SearchTerm="{Binding SearchText, Mode=OneWay}"
-                                        helpers:AvalonEditHelper.SelectOffset="{Binding CurrentMatchOffset, Mode=OneWay}"
-                                        helpers:AvalonEditHelper.SelectLength="{Binding CurrentMatchLength, Mode=OneWay}">
-                    </avalonEdit:TextEditor>
-                </Border>
+                <!-- Log Display Area (Row 1). Use a Grid here to layer the editor and the overlay -->
+                <Grid Grid.Row="1">
+                    <Border Style="{DynamicResource CardPanelStyle}" Padding="5">
+                        <avalonEdit:TextEditor x:Name="LogOutputEditor"
+                                            xmlns:avalonEdit="http://icsharpcode.net/sharpdevelop/avalonedit"
+                                            xmlns:helpers="clr-namespace:Logonaut.UI.Helpers"
+                                            FontFamily="Consolas" FontSize="12pt" IsReadOnly="True"
+                                            SyntaxHighlighting="{x:Null}"
+                                            WordWrap="False"
+                                            VerticalScrollBarVisibility="Disabled"
+                                            HorizontalScrollBarVisibility="Auto"
+                                            Padding="3,0,0,0"
+                                            Style="{StaticResource TextEditorWithOverviewRulerStyle}"
+                                            helpers:AvalonEditHelper.FilterSubstrings="{Binding FilterSubstrings, Mode=OneWay}"
+                                            helpers:AvalonEditHelper.HighlightTimestamps="{Binding HighlightTimestamps, Mode=OneWay}"
+                                            ShowLineNumbers="False"
+                                            helpers:AvalonEditHelper.SearchTerm="{Binding SearchText, Mode=OneWay}"
+                                            helpers:AvalonEditHelper.SelectOffset="{Binding CurrentMatchOffset, Mode=OneWay}"
+                                            helpers:AvalonEditHelper.SelectLength="{Binding CurrentMatchLength, Mode=OneWay}">
+                        </avalonEdit:TextEditor>
+                    </Border>
+
+                    <Border x:Name="LoadingOverlayContainer" Grid.Row="1"
+                            IsHitTestVisible="False"
+                            Width="{Binding ElementName=LogOutputEditor, Path=ActualWidth}"
+                            Height="{Binding ElementName=LogOutputEditor, Path=ActualHeight}"
+                            Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}">
+                            <!-- Background can be transparent if the overlay control fills it -->
+                            <!-- Background="#30000000"-->
+                        <controls:LoadingScanlineOverlay/>
+                    </Border>
+                </Grid>
 
                 <!-- Search Panel -->
                  <Border Grid.Row="2" Style="{DynamicResource CardPanelStyle}" Padding="5" Margin="5,0,5,5">
