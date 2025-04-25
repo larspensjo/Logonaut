@@ -1,70 +1,102 @@
-# Plan: Refactoring AnimatedSpinner to BusyIndicator
+# Plan: Refactoring AnimatedSpinner to BusyIndicator (with Overlay)
 
-This document outlines the incremental steps to refactor the existing `AnimatedSpinner` into a more flexible `BusyIndicator` capable of displaying distinct animations for multiple concurrent busy states. Each step results in a functional application.
+This document outlines the incremental steps to refactor the existing `AnimatedSpinner` into a more flexible `BusyIndicator` capable of displaying distinct animations for multiple concurrent busy states, **and** adds a separate overlay animation for initial file loading over the text editor. Each step results in a functional application.
 
 ## Step 1: Refactor State Management (Internal Change, Same Visual)
 
-*   **Goal:** Replace the single `bool IsSpinning` property with a mechanism to track multiple active states using a collection, while keeping the visual output (the original spinner arc) unchanged for now. The spinner will display if *any* state is active.
-*   **Why:** Decouple the *indication* of busyness from the *specific type* of busyness. This foundational change prepares the control for handling multiple states and visuals later.
+This step should now be complete.
+
+*   **Goal:** Replace the single `bool IsSpinning` property with a mechanism to track multiple active states using a collection (`ActiveStates`), while keeping the visual output (the original spinner arc in the *external* `BusyIndicator`) unchanged for now. The spinner will display if *any* state is active.
+*   **Why:** Decouple the *indication* of busyness from the *specific type* of busyness. This foundational change prepares for handling multiple states and visuals later.
 *   **Tasks:**
-    *   Rename the control class and file from `AnimatedSpinner` to `BusyIndicator`. Update XAML references accordingly.
-    *   Define identifiers for different busy states (e.g., static `object` tokens or an `enum`).
-    *   Remove the `IsSpinning` dependency property.
-    *   Add a new dependency property `ActiveStates` of type `ObservableCollection<object>` to hold the currently active busy state identifiers. Implement change handling for this property.
-    *   Implement a `CollectionChanged` handler for the `ActiveStates` collection.
-    *   Create a method (`UpdateRenderingBasedOnState`) that is called when `ActiveStates` or its contents change. This method determines if *any* state is active.
-    *   Modify the existing animation subscription logic (`UpdateRenderingSubscription`) to accept a boolean parameter indicating whether animation should be active, based on the result from `UpdateRenderingBasedOnState`.
-    *   Ensure `OnRender` only draws the original arc if the animation subscription is active.
-    *   Update the `MainViewModel` to remove properties solely used for the old spinner state.
-    *   Add an `ObservableCollection<object> CurrentBusyStates` property to the `MainViewModel`.
-    *   Modify `MainViewModel` logic (e.g., starting/ending file loading, filtering) to add and remove the appropriate state tokens to/from the `CurrentBusyStates` collection.
+    *   Rename the control class and file from `AnimatedSpinner` to `BusyIndicator`. Update XAML references accordingly (`ControlsStyles.xaml`, `MainWindow.xaml`).
+    *   Define identifiers for different busy states in `MainViewModel` (e.g., `public static readonly object LoadingToken = new();`, `public static readonly object FilteringToken = new();`).
+    *   Change `BusyIndicator.ActiveStates` to be a standard read/write `DependencyProperty` of type `ObservableCollection<object>` (using `DependencyProperty.Register`). Ensure the `OnActiveStatesChanged` callback correctly subscribes/unsubscribes to `CollectionChanged` on the *newly bound* collection.
+    *   Implement the `CollectionChanged` handler (`ActiveStates_CollectionChanged`) within `BusyIndicator`.
+    *   Create a method (`UpdateRenderingBasedOnState`) in `BusyIndicator` that is called when `ActiveStates` property changes *or* its contents change (via `CollectionChanged`). This method determines if `ActiveStates` collection `Any()` (after checking for null).
+    *   Modify the `BusyIndicator` animation subscription logic (`UpdateRenderingSubscription`) to accept a boolean parameter indicating whether animation should be active, based on the result from `UpdateRenderingBasedOnState`.
+    *   Ensure `BusyIndicator.OnRender` only draws the original arc if the animation subscription is active.
+    *   Remove old boolean busy flags (`IsBusyFiltering`, `IsPerformingInitialLoad`) from `MainViewModel`.
+    *   Add an `ObservableCollection<object> CurrentBusyStates { get; } = new();` property to the `MainViewModel`.
+    *   Modify `MainViewModel` logic (e.g., starting/ending file loading, filtering) to add and remove the appropriate state tokens (`LoadingToken`, `FilteringToken`) to/from the `CurrentBusyStates` collection. Use `_uiContext.Post` for thread safety if modifying from background operations.
     *   Update the XAML binding in `MainWindow.xaml` to bind the `BusyIndicator`'s `ActiveStates` property to the `MainViewModel`'s `CurrentBusyStates` collection.
-*   **Result:** The application visually functions identically to before, showing the spinner when any busy operation is active. The internal state management is now collection-based, ready for the next steps.
+    *   Update relevant unit tests in `MainViewModelTests` to assert against the `CurrentBusyStates` collection instead of the removed boolean flags.
+*   **Result:** The application visually functions identically to before, showing the external spinner when any busy operation is active. The internal state management is now collection-based, ready for the next steps.
 
-## Step 2: Introduce State-Specific Visuals (No Concurrency Merging Yet)
+## Step 2: Implement AvalonEdit Loading Overlay
 
-*   **Goal:** Display a *different, unique* visual representation (animation/geometry) depending on which busy state is currently active. If multiple states are active concurrently, only the visual for the *first* state in the collection will be shown for now.
-*   **Why:** Introduce the mapping between specific state types and distinct visual outputs.
+*   **Goal:** Add a separate, semi-transparent overlay animation directly on top of the `TextEditor` (`LogOutputEditor`) that is visible *only* when the `LoadingToken` is present in `MainViewModel.CurrentBusyStates`. Use the "Soft Vertical Scanlines" animation.
+*   **Why:** Provide contextual visual feedback during potentially long initial file loads, directly over the content area being populated.
 *   **Tasks:**
-    *   Design and implement the drawing logic for a second, distinct visual state (e.g., for "Filtering"). This could involve simple shape drawing or basic parameter changes to the existing arc logic for now. Create a separate drawing helper function for this new visual.
-    *   Modify the `OnRender` method:
-        *   Check if the `ActiveStates` collection is populated.
-        *   Retrieve the *first* state identifier from the collection.
-        *   Use conditional logic (like `if/else if` or `switch`) based on the first state identifier to call the appropriate drawing function (either the original arc function or the new function created above).
-    *   Ensure the `MainViewModel` adds distinct state tokens for different operations (e.g., a "Filtering" token, a "Loading" token).
-*   **Result:** The busy indicator now shows different visuals depending on the primary active state (e.g., blue spinner for loading, orange spinner for filtering). Concurrency defaults to showing the visual for whichever state was added first.
+    *   **XAML Layout (`MainWindow.xaml`):**
+        *   In the `Grid` containing the `LogOutputEditor` (in the right panel, `Grid.Row="1"`), add a new element *after* the editor, ensuring it overlays it (e.g., a `Border` or `Canvas` named `LoadingOverlay`). It should occupy the same `Grid.Row`.
+        *   Set `LoadingOverlay.IsHitTestVisible="False"` so it doesn't interfere with mouse interactions on the editor below.
+        *   Set a semi-transparent background initially for testing visibility (`Background="#80000000"`, maybe remove later if the animation element fills it).
+        *   Bind `LoadingOverlay.Width` to `LogOutputEditor.ActualWidth` using `ElementName` binding.
+        *   Bind `LoadingOverlay.Height` to `LogOutputEditor.ActualHeight` using `ElementName` binding.
+    *   **Visibility Binding:**
+        *   Create an `IValueConverter` (`CollectionContainsToVisibilityConverter`) that takes a collection and a `ConverterParameter` (the token to check for). It returns `Visibility.Visible` if the collection contains the parameter, otherwise `Visibility.Collapsed`.
+        *   Add an instance of this converter to resources.
+        *   Make the `LoadingToken` (and potentially others) `public static readonly` in `MainViewModel` so it can be referenced in XAML binding.
+        *   Bind `LoadingOverlay.Visibility` to `MainViewModel.CurrentBusyStates` using this converter, passing `{x:Static vm:MainViewModel.LoadingToken}` as the `ConverterParameter` (requires adding `vm:` namespace mapping to `ViewModels`).
+    *   **Animation Implementation (Recommended - Custom Element):**
+        *   Create a new `FrameworkElement`-derived control (e.g., `LoadingScanlineOverlay`) responsible for drawing the "Soft Vertical Scanlines" animation.
+        *   Place this custom control *inside* the `LoadingOverlay` Border/Canvas.
+        *   Inside `LoadingScanlineOverlay`:
+            *   Use `CompositionTarget.Rendering` for animation updates.
+            *   Subscribe/unsubscribe in response to its own `IsVisibleChanged` event (which is controlled by the `LoadingOverlay`'s visibility binding).
+            *   Implement `OnRender` to draw faint, wide, semi-transparent vertical bands.
+            *   Animate the horizontal position of these bands over time to create a slow sweeping effect.
+            *   Use theme-aware colors (e.g., derived from background/foreground) with very high transparency (e.g., Opacity 0.1-0.2).
+            *   Ensure soft edges (e.g., using linear gradients for the bands' brushes).
+    *   **Design:** Finalize the visual appearance (color, width, speed, transparency) of the scanlines to be subtle yet noticeable.
+*   **Result:** When `MainViewModel` adds `LoadingToken` to `CurrentBusyStates`, the scanline animation appears semi-transparently over the `TextEditor`. When the token is removed, the overlay disappears. The external `BusyIndicator` still spins based on *any* token present (including `LoadingToken` at this stage).
 
-## Step 3: Basic Visual Merging (Parameter Blending)
+## Step 3: State-Specific Visuals for *BusyIndicator* (Ignoring Loading)
 
-*   **Goal:** When multiple states are active concurrently, combine their visual indication by modifying a parameter (like color or opacity) of a *single base animation* (e.g., the arc spinner).
-*   **Why:** Implement a simple strategy for visually representing concurrency without complex geometry merging.
+*   **Goal:** Modify the *external* `BusyIndicator` to display a different visual depending on the *active non-loading* state (e.g., `FilteringToken`). It should now *ignore* the `LoadingToken` and display nothing if *only* `LoadingToken` is present.
+*   **Why:** Separate the visual feedback: overlay for loading, external indicator for other tasks like filtering.
 *   **Tasks:**
-    *   Modify the `OnRender` method:
-        *   Determine which specific states are present in the `ActiveStates` collection (e.g., check if both "Loading" and "Filtering" tokens are present).
-        *   Based on the combination of active states, dynamically calculate the visual parameter to use (e.g., determine the appropriate `Brush`).
-        *   Always call the *base* drawing function (e.g., the arc spinner), but ensure it uses the dynamically calculated parameter (e.g., the calculated `Brush`).
-    *   Ensure the `MainViewModel` correctly adds and removes state tokens for potentially overlapping operations.
-*   **Result:** The indicator always shows the base spinner shape, but its appearance (e.g., color) changes to reflect the combination of active states (e.g., Blue for Loading, Orange for Filtering, Purple for Both).
+    *   Modify `BusyIndicator.UpdateRenderingBasedOnState`: Change the condition to check if `ActiveStates` contains *any token other than* `LoadingToken`.
+        *   `bool shouldBeSpinning = ActiveStates?.Any(s => s != MainViewModel.LoadingToken) == true;` (Ensure `MainViewModel.LoadingToken` is accessible or pass it).
+    *   Design and implement drawing logic for the "Filtering" state visual in `BusyIndicator` (e.g., orange arc, different shape). Create a separate drawing function.
+    *   Modify `BusyIndicator.OnRender`:
+        *   Check if the rendering subscription is active (meaning a non-loading state is present).
+        *   Iterate through `ActiveStates` to find the *first* token that is *not* `LoadingToken`.
+        *   Use conditional logic based on this first non-loading token (e.g., `FilteringToken`) to call the appropriate drawing function (original arc, new filtering visual, etc.).
+        *   If only `LoadingToken` was present, `OnRender` shouldn't be called anyway due to the change in `UpdateRenderingBasedOnState`/`UpdateRenderingSubscription`.
+*   **Result:** The external `BusyIndicator` now shows different visuals depending on the primary *non-loading* active state (e.g., blue spinner for filtering). It shows nothing when only the file loading is happening (as the overlay handles that).
 
-## Step 4: Introduce `PathGeometry` for One State
+## Step 4: Basic Visual Merging for *BusyIndicator* (Ignoring Loading)
 
-*   **Goal:** Replace the visual representation for one specific state (e.g., "Filtering") with a custom animation defined using `StreamGeometry` or `PathGeometry`. Implement a simple merging strategy (like layering) when this state is concurrent with others.
-*   **Why:** Integrate the use of advanced vector graphics for specific state animations.
+*   **Goal:** If multiple *non-loading* states become active concurrently in the future (e.g., Filtering + hypothetical "Indexing"), combine their visual indication in the *external* `BusyIndicator` by modifying parameters (color, opacity) of a base animation.
+*   **Why:** Implement a simple strategy for representing concurrency *for non-loading tasks*.
 *   **Tasks:**
-    *   Design the custom geometry and animation logic for the chosen state (e.g., "Filtering").
-    *   Implement a new drawing function that uses `StreamGeometry` or `PathGeometry` to render this custom visual. This function will likely need to use animation timing values to update the geometry or its transformations frame-by-frame.
-    *   Modify the `OnRender` method's merging logic:
-        *   Check which states are active.
-        *   If *only* the custom state is active, call its new drawing function.
-        *   If *only* a basic state (like "Loading") is active, call its drawing function (e.g., the arc).
-        *   If *both* (or multiple) states are active, implement a layering strategy: draw the base visual (e.g., the arc, potentially semi-transparent) and then draw the custom path visual on top (potentially also semi-transparent).
-*   **Result:** The indicator displays the standard arc for one state, the custom path animation for another, and layers them when both are active.
+    *   Modify `BusyIndicator.OnRender`:
+        *   Filter `ActiveStates` to exclude `LoadingToken`.
+        *   Determine which specific *non-loading* states are present.
+        *   Based on the combination, dynamically calculate visual parameters (e.g., `Brush`).
+        *   Call the appropriate drawing function using the calculated parameters.
+*   **Result:** The external indicator shows visuals reflecting the combination of *active non-loading* states.
 
-## Step 5 (Optional/Future): Advanced Merging & Abstraction
+## Step 5: Introduce `PathGeometry` for One *Non-Loading* State in *BusyIndicator*
 
-*   **Goal:** Implement more sophisticated visual merging techniques or refactor the design for easier extensibility with new state types and visuals.
-*   **Why:** Enhance the visual feedback for concurrency or improve the maintainability and scalability of the indicator.
+*   **Goal:** Replace the visual representation for one specific *non-loading* state (e.g., "Filtering") in the *external* `BusyIndicator` with a custom animation using `StreamGeometry`/`PathGeometry`. Implement merging (e.g., layering) if concurrent *non-loading* states occur.
+*   **Why:** Integrate advanced vector graphics for specific non-loading state animations.
 *   **Tasks:**
-    *   **Advanced Merging:** Explore modifying animation parameters (speed, oscillation), combining geometries using `CombinedGeometry`, or creating segmented indicators where different parts represent different active states.
-    *   **Abstraction:** Consider defining an `IBusyStateVisualizer` interface. Create concrete visualizer classes for each state type. The `BusyIndicator` would manage a list of active visualizer instances based on the `ActiveStates` collection and call their `Update` and `Draw` methods in `OnRender`. This decouples the main control from the specific drawing logic of each state.
-*   **Result:** A highly flexible and extensible busy indicator system capable of sophisticated visual feedback for concurrent operations.
+    *   Design the custom geometry/animation for the chosen state (e.g., "Filtering").
+    *   Implement a new drawing function in `BusyIndicator` using `StreamGeometry`/`PathGeometry`.
+    *   Modify `BusyIndicator.OnRender`'s merging logic for *non-loading* states:
+        *   If only the custom state (e.g., Filtering) is active (excluding Loading), call its drawing function.
+        *   If only another basic non-loading state is active, call its function.
+        *   If multiple *non-loading* states are active, implement layering or another merging strategy for them.
+*   **Result:** The external `BusyIndicator` displays standard visuals for some non-loading states, custom path animations for others, and merges them appropriately when concurrent (excluding the Loading state). The AvalonEdit overlay continues to handle the Loading state independently.
+
+## Step 6: Advanced Merging & Abstraction for *BusyIndicator*
+
+*   **Goal:** Implement more sophisticated visual merging or abstraction for the *external* `BusyIndicator` for *non-loading* states.
+*   **Why:** Enhance feedback for concurrency or improve extensibility for *non-loading* tasks.
+*   **Tasks:** (Focus on non-loading states)
+    *   Explore advanced merging (parameter modulation, combined geometry, segmentation).
+    *   Consider `IBusyStateVisualizer` abstraction for *non-loading* states managed by `BusyIndicator`.
+*   **Result:** A highly flexible external busy indicator system for concurrent *non-loading* operations.
