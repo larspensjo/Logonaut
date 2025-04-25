@@ -7,6 +7,7 @@ using System.Windows.Media;
 using System.Windows.Input; // Required for RoutedUICommand
 using ICSharpCode.AvalonEdit;
 using ICSharpCode.AvalonEdit.Rendering;
+using ICSharpCode.AvalonEdit.Document; // Required for DocumentLine
 using Logonaut.UI.Helpers;
 using Logonaut.UI.ViewModels;
 
@@ -179,6 +180,12 @@ public partial class MainWindow : Window, IDisposable
 
                 // Update the transformer state (this method handles redraw)
                 _selectedIndexTransformer.UpdateState(newLineNumberInFilteredDoc, highlightBrush, _logOutputEditor.TextArea.TextView);
+
+                // Scroll only if a valid line index was set
+                if (_viewModel.HighlightedFilteredLineIndex >= 0)
+                {
+                    ScrollToSelectedLine(_viewModel.HighlightedFilteredLineIndex);
+                }
             }
         }
 
@@ -200,6 +207,63 @@ public partial class MainWindow : Window, IDisposable
         // {
                 _logOutputEditor?.ScrollToEnd();
         // }), DispatcherPriority.Background); // Background is usually safe
+    }
+
+    private void ScrollToSelectedLine(int filteredLineIndex)
+    {
+        if (_logOutputEditor?.Document == null)
+            throw new InvalidOperationException("LogOutputEditor Document is null.");
+
+        if (_logOutputEditor.TextArea?.TextView == null)
+            throw new InvalidOperationException("LogOutputEditor TextView is null.");
+
+        // Convert 0-based index to 1-based document line number
+        int targetDocumentLineNumber = filteredLineIndex + 1;
+
+        // Check if the target line number is valid within the *current* document content
+        if (targetDocumentLineNumber <= 0 || targetDocumentLineNumber > _logOutputEditor.Document.LineCount)
+        {
+             System.Diagnostics.Debug.WriteLine($"ScrollToSelectedLine: Invalid target line number {targetDocumentLineNumber} for document length {_logOutputEditor.Document.LineCount}.");
+             return;
+        }
+
+        try
+        {
+            var textView = _logOutputEditor.TextArea.TextView;
+            DocumentLine targetLine = _logOutputEditor.Document.GetLineByNumber(targetDocumentLineNumber);
+
+            // Calculate the visual top position of the line relative to the document start
+            double visualTop = textView.GetVisualTopByDocumentLine(targetDocumentLineNumber);
+
+            if (!double.IsNaN(visualTop) && !double.IsInfinity(visualTop))
+            {
+                // Calculate desired offset to center the line
+                double desiredOffset = visualTop - (textView.ActualHeight / 2.0);
+
+                // Use TextView.DocumentHeight (total content height) and TextView.ActualHeight (visible area height)
+                double maxOffset = Math.Max(0, textView.DocumentHeight - textView.ActualHeight);
+
+                double clampedOffset = Math.Max(0, Math.Min(desiredOffset, maxOffset));
+
+                // Perform the scroll using the calculated vertical offset
+                _logOutputEditor.ScrollToVerticalOffset(clampedOffset);
+            }
+            else
+            {
+                // Fallback to simple ScrollToLine if visual position calculation fails
+                System.Diagnostics.Debug.WriteLine($"ScrollToSelectedLine: VisualTop calculation failed for line {targetDocumentLineNumber}. Falling back to ScrollToLine.");
+                _logOutputEditor.ScrollToLine(targetDocumentLineNumber);
+            }
+        }
+        catch (ArgumentOutOfRangeException argEx)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error during ScrollToSelectedLine (ArgumentOutOfRange): {argEx.Message}");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error during ScrollToSelectedLine: {ex.Message}");
+        }
+
     }
 
     private void MainWindow_Loaded(object sender, RoutedEventArgs e)
