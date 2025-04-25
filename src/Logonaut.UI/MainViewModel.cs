@@ -237,6 +237,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         if (value == true && HighlightedFilteredLineIndex != -1) // Only deselect if enabling and something IS selected
             HighlightedFilteredLineIndex = -1; // This will also reset HighlightedOriginalLineNumber via its handler
+
+        if (value == true)
+            RequestScrollToEnd?.Invoke(this, EventArgs.Empty); // Request scroll to end when enabling
+        
         SaveCurrentSettingsDelayed();
     }
 
