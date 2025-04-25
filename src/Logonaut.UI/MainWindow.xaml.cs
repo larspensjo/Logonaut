@@ -184,6 +184,8 @@ public partial class MainWindow : Window, IDisposable
                 // Scroll only if a valid line index was set
                 if (_viewModel.HighlightedFilteredLineIndex >= 0)
                 {
+                    if (_viewModel.IsAutoScrollEnabled) // Check before setting to avoid redundant updates/saves
+                        _viewModel.IsAutoScrollEnabled = false; // Disable Auto-Scroll when a line is selected
                     ScrollToSelectedLine(_viewModel.HighlightedFilteredLineIndex);
                 }
             }

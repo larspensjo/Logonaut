@@ -235,6 +235,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
     // Save setting when property changes
     partial void OnIsAutoScrollEnabledChanged(bool value)
     {
+        if (value == true && HighlightedFilteredLineIndex != -1) // Only deselect if enabling and something IS selected
+            HighlightedFilteredLineIndex = -1; // This will also reset HighlightedOriginalLineNumber via its handler
         SaveCurrentSettingsDelayed();
     }
 
