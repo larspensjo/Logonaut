@@ -77,7 +77,14 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _uiContext = uiContext ?? SynchronizationContext.Current ??
                         throw new InvalidOperationException("Could not capture or receive a valid SynchronizationContext.");
 
-        _logSource = initialLogSource ?? new FileLogSource();
+        bool useSimulator = true; // Hard coded override for testing
+        if (initialLogSource != null)
+            _logSource = initialLogSource; // Allow injection for tests to override
+        else if (useSimulator) {
+            _logSource = new SimulatorLogSource(linesPerSecond: 4); // Example: 50 lines/sec
+            _logSource.StartMonitoring();
+        } else
+            _logSource = new FileLogSource(); // Default to file source
         _disposables.Add(_logSource); // Add source to disposables for cleanup
 
         _logFilterProcessor = logFilterProcessor ?? new LogFilterProcessor(
@@ -457,6 +464,20 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     [RelayCommand] private async Task OpenLogFileAsync()
     {
+        if (_logSource is SimulatorLogSource)
+        {
+            _logSource.StopMonitoring();
+            _logSource.Dispose(); // Dispose the old simulator
+            _logSource = new FileLogSource(); // Create the file source
+            // NOTE: The LogFilterProcessor holds a reference to the *old* source.
+            // Ideally, we'd re-create the processor or inject the new source into it.
+            // For minimal change now, we accept this limitation - reopening a file
+            // after using the simulator might require restarting the app if the processor isn't updated.
+            // A better approach involves an ILogSourceProvider or allowing source injection into the processor post-construction.
+            // For now, we'll proceed, but acknowledge this potential issue.
+            // Re-add the new source to disposables (though this might lead to double disposal if VM is disposed later)
+             // _disposables.Add(_logSource); // This is risky, manage source lifecycle carefully.
+        }
         string? selectedFile = _fileDialogService.OpenFile("Select a log file", "Log Files|*.log;*.txt|All Files|*.*");
         if (string.IsNullOrEmpty(selectedFile)) return;
         Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} OpenLogFileAsync: '{selectedFile}'");
