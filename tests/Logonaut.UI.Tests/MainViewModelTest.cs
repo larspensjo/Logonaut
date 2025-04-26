@@ -20,7 +20,7 @@ namespace Logonaut.UI.Tests.ViewModels
     {
         // --- Declare Mocks ---
         private MockSettingsService _mockSettings = null!;
-        private MockLogTailerService _mockTailer = null!;
+        private MockLogSource _mockLogSource = null!;
         private MockFileDialogService _mockFileDialog = null!;
         private MockLogFilterProcessor _mockProcessor = null!;
         private SynchronizationContext _testContext = null!;
@@ -50,17 +50,13 @@ namespace Logonaut.UI.Tests.ViewModels
         }
 
         // This runs once after all tests in this class
-        [ClassCleanup]
-        public static void ClassCleanup()
-        {
-            _dispatcher?.InvokeShutdown(); // Shut down the message pump
-        }
+        [ClassCleanup] public static void ClassCleanup() => _dispatcher?.InvokeShutdown();
 
         [TestInitialize]
         public void TestInitialize()
         {
             _mockSettings = new MockSettingsService();
-            _mockTailer = new MockLogTailerService();
+            _mockLogSource = new MockLogSource();
             _mockFileDialog = new MockFileDialogService();
             _mockProcessor = new MockLogFilterProcessor();
             _testContext = new ImmediateSynchronizationContext();
@@ -69,9 +65,9 @@ namespace Logonaut.UI.Tests.ViewModels
 
             _viewModel = new MainViewModel(
                 _mockSettings,
-                _mockTailer,
                 _mockFileDialog,
                 _mockProcessor,
+                _mockLogSource,
                 _testContext
             );
 
@@ -79,15 +75,14 @@ namespace Logonaut.UI.Tests.ViewModels
             _viewModel.RequestScrollToEnd += (s, e) => _requestScrollToEndEventFired = true;
         }
 
-        [TestCleanup]
-        public void TestCleanup()
+        [TestCleanup] public void TestCleanup()
         {
-            // Use Dispatcher if needed for UI cleanup, otherwise run directly
             Action cleanupAction = () =>
             {
-                _viewModel?.Dispose();
-                _mockProcessor?.Dispose();
-                _mockTailer?.Dispose();
+                _viewModel?.Dispose(); // Dispose VM first (which disposes its dependencies like _mockLogSource)
+                // --- NO NEED to dispose mocks explicitly if VM does it ---
+                // _mockProcessor?.Dispose(); // VM disposes processor
+                // _mockLogSource?.Dispose(); // VM disposes source
             };
 
             if (Thread.CurrentThread.GetApartmentState() == ApartmentState.STA && _dispatcher != null)
@@ -96,7 +91,7 @@ namespace Logonaut.UI.Tests.ViewModels
             }
             else
             {
-                cleanupAction(); // Run directly if not STA or dispatcher unavailable
+                cleanupAction();
             }
         }
 
@@ -167,7 +162,7 @@ namespace Logonaut.UI.Tests.ViewModels
             _mockSettings.SettingsToReturn = settings;
 
             // Act: Recreate ViewModel with specific settings
-            _viewModel = new MainViewModel(_mockSettings, _mockTailer, _mockFileDialog, _mockProcessor, _testContext);
+            _viewModel = new MainViewModel(_mockSettings, _mockFileDialog, _mockProcessor, _mockLogSource, _testContext);
 
             // Assert
             Assert.IsTrue(_viewModel.IsAutoScrollEnabled);
@@ -181,7 +176,7 @@ namespace Logonaut.UI.Tests.ViewModels
             _mockSettings.SettingsToReturn = settings;
 
             // Act: Recreate ViewModel with specific settings
-            _viewModel = new MainViewModel(_mockSettings, _mockTailer, _mockFileDialog, _mockProcessor, _testContext);
+            _viewModel = new MainViewModel(_mockSettings, _mockFileDialog, _mockProcessor, _mockLogSource, _testContext);
 
             // Assert
             Assert.IsFalse(_viewModel.IsAutoScrollEnabled);
@@ -691,21 +686,28 @@ namespace Logonaut.UI.Tests.ViewModels
 
         #region Interaction with LogFilterProcessor Tests (NEW)
 
-        [TestMethod] public void OpenLogFileCommand_CallsProcessorReset_AndTailerChangeFileAsync() // Renamed, uses AsyncRelayCommand now
+        [TestMethod] public async Task OpenLogFileCommand_CallsProcessorReset_AndSourcePrepareStart()
         {
             // Arrange
-            _mockFileDialog.FileToReturn = "C:\\good\\log.txt";
-            _mockProcessor.ResetCounters(); // Reset mock state
+            string filePath = "C:\\good\\log.txt";
+            _mockFileDialog.FileToReturn = filePath;
+            _mockProcessor.ResetCounters(); // Reset processor mock state
+             // Inject the _mockLogSource specifically for this test if needed
+            // (Already injected in TestInitialize now)
 
             // Act
-            // ExecuteAsync is needed if manually calling AsyncRelayCommand
-            var task = _viewModel.OpenLogFileCommand.ExecuteAsync(null);
-            task.Wait(); // Wait for the async command to complete in the test
+            await _viewModel.OpenLogFileCommand.ExecuteAsync(null);
 
-            // Assert
-            Assert.AreEqual(1, _mockProcessor.ResetCallCount);
-            Assert.AreEqual("C:\\good\\log.txt", _mockTailer.ChangedFilePath);
-            Assert.AreEqual("C:\\good\\log.txt", _viewModel.CurrentLogFilePath);
+            // Assert Processor Interaction
+            Assert.AreEqual(1, _mockProcessor.ResetCallCount, "Processor Reset should be called once.");
+
+            // Assert LogSource Interaction
+            Assert.AreEqual(filePath, _mockLogSource.PreparedSourceIdentifier, "LogSource Prepare should be called with the correct file path.");
+            Assert.AreEqual(1, _mockLogSource.StartMonitoringCallCount, "LogSource StartMonitoring should be called once.");
+            Assert.IsTrue(_mockLogSource.IsMonitoring, "LogSource should be monitoring.");
+
+            // Assert ViewModel State
+            Assert.AreEqual(filePath, _viewModel.CurrentLogFilePath, "ViewModel CurrentLogFilePath should be updated.");
         }
 
         [TestMethod] public void ApplyFilteredUpdate_Replace_ClearsAndAddsLines_ResetsSearch_ClearsFilteringToken()
@@ -756,6 +758,37 @@ namespace Logonaut.UI.Tests.ViewModels
             Assert.AreEqual(2, _viewModel.FilteredLogLines.Count);
             Assert.AreEqual(0, _viewModel.HighlightedFilteredLineIndex); // Restored highlight
             Assert.AreEqual(10, _viewModel.HighlightedOriginalLineNumber);
+        }
+
+        [TestMethod] public void ApplyFilteredUpdate_Append_AddsLines_UpdatesSearch_ClearsFilteringToken()
+        {
+            // Arrange: Simulate initial state
+            _viewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Line 1 Old"));
+            _mockProcessor.SimulateTotalLinesUpdate(1); // Simulate initial count
+            _testContext.Send(_ => {}, null);
+
+            // Arrange: Simulate Filtering busy state
+            _viewModel.CurrentBusyStates.Clear();
+            _viewModel.CurrentBusyStates.Add(MainViewModel.FilteringToken);
+            Assert.AreEqual(1, _viewModel.CurrentBusyStates.Count);
+
+            // Arrange: Define lines that represent an append
+            var appendedLines = new List<FilteredLogLine>
+            {
+                new FilteredLogLine(1, "Line 1 Old"), // Existing line must match
+                new FilteredLogLine(2, "Line 2 New Append") // New line
+            };
+
+            // Act: Simulate processor sending update
+            _mockProcessor.SimulateFilteredUpdate(appendedLines);
+            _testContext.Send(_ => { }, null); // Process the update
+
+            // Assert: ViewModel state updated
+            Assert.AreEqual(2, _viewModel.FilteredLogLines.Count);
+            Assert.AreEqual("Line 2 New Append", _viewModel.FilteredLogLines[1].Text);
+
+            // Assert: Busy state cleared
+            Assert.AreEqual(0, _viewModel.CurrentBusyStates.Count);
         }
 
         #endregion // Interaction with LogFilterProcessor Tests
@@ -922,32 +955,49 @@ namespace Logonaut.UI.Tests.ViewModels
         #endregion
 
         #region Cleanup Tests
-        [TestMethod] public void Cleanup_ClearsBusyStates_SavesSettings_StopsTailer_DisposesProcessor()
+
+        [TestMethod] public async Task Cleanup_ClearsBusyStates_SavesSettings_StopsSource_DisposesProcessorAndSource()
         {
             // Arrange
             _mockSettings.ResetSettings();
             var processor = _mockProcessor; // Capture instance
+            var source = _mockLogSource;    // Capture instance
 
-            // Arrange: Explicitly set the busy state for *this test scenario*
-            _viewModel.CurrentBusyStates.Clear(); // Clear state from TestInitialize
+            // Simulate busy state
+            _viewModel.CurrentBusyStates.Clear();
             _viewModel.CurrentBusyStates.Add(MainViewModel.LoadingToken);
             _viewModel.CurrentBusyStates.Add(MainViewModel.FilteringToken);
-            Assert.AreEqual(2, _viewModel.CurrentBusyStates.Count, "Arrange phase: Expected 2 busy state tokens."); // Verify setup
+            Assert.AreEqual(2, _viewModel.CurrentBusyStates.Count);
+
+            // --- FIX: Prepare the source before starting monitoring ---
+            // We need to simulate a successful preparation state.
+            // The content doesn't matter for this test.
+            source.LinesForInitialRead.Clear();
+            // Call Prepare and wait for it to complete.
+            await source.PrepareAndGetInitialLinesAsync("C:\\cleanup_test.log", _ => { });
+            Assert.IsTrue(source.IsPrepared, "Source should be prepared before starting monitoring.");
+            // --- End FIX ---
+
+            source.StartMonitoring(); // Now this should succeed
+            Assert.IsTrue(source.IsMonitoring, "Source should be monitoring before cleanup.");
 
             // Act
-            _viewModel.Cleanup();
-            _testContext.Send(_ => { }, null); // Flush context queue to ensure Clear() runs
+            _viewModel.Cleanup(); // Calls Dispose internally
+            _testContext.Send(_ => { }, null); // Flush context queue
 
             // Assert
-            Assert.AreEqual(0, _viewModel.CurrentBusyStates.Count, "Busy states should be cleared by Cleanup.");
-            Assert.IsNotNull(_mockSettings.SavedSettings);
-            Assert.IsTrue(_mockTailer.IsStopped);
+            Assert.AreEqual(0, _viewModel.CurrentBusyStates.Count, "Busy states cleared.");
+            Assert.IsNotNull(_mockSettings.SavedSettings, "Settings saved.");
+            Assert.IsFalse(source.IsMonitoring, "Source monitoring should be stopped."); // Check monitoring stopped
 
-            // Verify Processor Disposal Behavior
+            // Assert processor disposed by VM
             var odeReset = Assert.ThrowsException<ObjectDisposedException>(() => processor.Reset());
             Assert.AreEqual(nameof(MockLogFilterProcessor), odeReset.ObjectName);
-            var odeUpdate = Assert.ThrowsException<ObjectDisposedException>(() => processor.UpdateFilterSettings(new TrueFilter(), 0));
-            Assert.AreEqual(nameof(MockLogFilterProcessor), odeUpdate.ObjectName);
+
+            // Assert source disposed by VM
+            var odePrepare = Assert.ThrowsException<ObjectDisposedException>(() => source.PrepareAndGetInitialLinesAsync("test", _ => { }));
+            Assert.AreEqual(nameof(MockLogSource), odePrepare.ObjectName);
+            Assert.IsTrue(source.IsDisposed, "Source should be disposed.");
         }
 
         #endregion
@@ -1072,16 +1122,6 @@ namespace Logonaut.UI.Tests.ViewModels
         #endregion
 
         #region Original Tests (Review and keep if still valid)
-
-        [TestMethod]
-        public void OpenLogFile_ShouldSetCurrentLogFilePath() // Kept - Valid logic test
-        {
-            _mockFileDialog.FileToReturn = "C:\\fake\\log.txt";
-            _viewModel.OpenLogFileCommand.Execute(null);
-            Assert.AreEqual("C:\\fake\\log.txt", _viewModel.CurrentLogFilePath);
-            Assert.AreEqual("C:\\fake\\log.txt", _mockTailer.ChangedFilePath); // Also check mock tailer
-            Assert.AreEqual(1, _mockProcessor.ResetCallCount); // Verify processor reset
-        }
 
         // PreviousSearch/NextSearch tests are kept as they test command execution and state update logic,
         // even if full UI verification requires integration tests.

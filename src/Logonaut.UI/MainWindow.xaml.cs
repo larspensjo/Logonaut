@@ -85,11 +85,10 @@ public partial class MainWindow : Window, IDisposable
     private SelectedIndexHighlightTransformer? _selectedIndexTransformer;
 
     private static Logonaut.Core.FileSystemSettingsService _settingsService = new();
-    private static Logonaut.LogTailing.LogTailerService _logTailerService = new();
 
     // It seems as if an constructor without parameters is required for XAML to work properly.
     // Inject a settings service.
-    public MainWindow() : this(new MainViewModel(_settingsService, _logTailerService)) {}
+    public MainWindow() : this(new MainViewModel(_settingsService)) {}
 
     // Enable injection of the ViewModel for testing purposes
     public MainWindow(MainViewModel viewModel)

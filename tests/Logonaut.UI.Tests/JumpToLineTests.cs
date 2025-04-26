@@ -1,13 +1,16 @@
+// ===== File: tests\Logonaut.UI.Tests\JumpToLineTests.cs =====
+
 using Logonaut.TestUtils;
 using Logonaut.UI.ViewModels;
 using Logonaut.Common;
+using System.Threading; // Required for SynchronizationContext
+using System.Threading.Tasks; // Required for Task
 
 namespace Logonaut.UI.Tests.ViewModels;
 
 [TestClass] public class MainViewModel_JumpToLineTests
 {
     private MockSettingsService _mockSettings = null!;
-    private MockLogTailerService _mockTailer = null!;
     private SynchronizationContext _testContext = null!;
     private MainViewModel _viewModel = null!;
 
@@ -15,18 +18,27 @@ namespace Logonaut.UI.Tests.ViewModels;
     {
         // Use mocks from Logonaut.TestUtils
         _mockSettings = new MockSettingsService();
-        _mockTailer = new MockLogTailerService();
         _testContext = new ImmediateSynchronizationContext(); // From TestUtils
 
+        // --- MODIFIED: Instantiate MainViewModel without tailer service ---
+        // The VM will create its own internal ILogSource (FileLogSource by default)
         _viewModel = new MainViewModel(
-            _mockSettings, _mockTailer, uiContext:_testContext
+            _mockSettings,
+            // fileDialogService: null, // Can omit if not needed for these tests
+            // logFilterProcessor: null, // Can omit if not needed
+            // initialLogSource: null, // Can omit
+            uiContext: _testContext
         );
 
         // Setup some initial filtered lines for testing
+        // This state is crucial for the jump tests
+        _viewModel.FilteredLogLines.Clear(); // Ensure clean state
         _viewModel.FilteredLogLines.Add(new FilteredLogLine(10, "Line Ten"));    // Index 0
         _viewModel.FilteredLogLines.Add(new FilteredLogLine(25, "Line TwentyFive"));// Index 1
         _viewModel.FilteredLogLines.Add(new FilteredLogLine(50, "Line Fifty"));   // Index 2
     }
+
+    // --- Test methods remain the same as they test UI state logic ---
 
     [TestMethod] public async Task JumpToLineCommand_ValidInputLineFound_SetsHighlightIndex()
     {
@@ -52,18 +64,12 @@ namespace Logonaut.UI.Tests.ViewModels;
         int initialHighlight = _viewModel.HighlightedFilteredLineIndex;
 
         // Act
-        // TODO: We really need to create a IDelayService and mock it to ignore the delay.
         await _viewModel.JumpToLineCommand.ExecuteAsync(null);
 
         // Assert
         Assert.AreEqual(initialHighlight, _viewModel.HighlightedFilteredLineIndex); // Highlight shouldn't change
         StringAssert.Contains(_viewModel.JumpStatusMessage, "not found");
         Assert.IsTrue(_viewModel.IsJumpTargetInvalid); // Feedback triggered
-
-        // Optional: Test feedback reset after delay (more advanced async testing)
-        // await Task.Delay(3000); // Simulate waiting longer than the reset delay
-        // Assert.IsFalse(_viewModel.IsJumpTargetInvalid);
-        // Assert.IsTrue(string.IsNullOrEmpty(_viewModel.JumpStatusMessage));
     }
 
     [TestMethod]
@@ -75,7 +81,6 @@ namespace Logonaut.UI.Tests.ViewModels;
         int initialHighlight = _viewModel.HighlightedFilteredLineIndex;
 
         // Act
-        // TODO: We really need to create a IDelayService and mock it to ignore the delay.
         await _viewModel.JumpToLineCommand.ExecuteAsync(null);
 
         // Assert

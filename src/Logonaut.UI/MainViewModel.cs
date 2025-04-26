@@ -1,3 +1,5 @@
+// ===== File: src\Logonaut.UI\MainViewModel.cs =====
+
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Diagnostics;
@@ -5,13 +7,14 @@ using System.Reactive.Disposables;
 using System.Text.RegularExpressions;
 using System.Reactive.Linq;
 using System.Reactive.Concurrency;
-using System.Windows; // For MessageBox, Visibility
+using System.Windows; // For Visibility
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Logonaut.Common;
 using Logonaut.Core;
 using Logonaut.Filters;
-using Logonaut.UI.Services; // Assuming IInputPromptService will be added here
+using Logonaut.UI.Services;
+using Logonaut.LogTailing;
 using ICSharpCode.AvalonEdit;
 
 namespace Logonaut.UI.ViewModels;
@@ -30,7 +33,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     public static readonly object FilteringToken = new();
     private readonly IFileDialogService _fileDialogService;
     private readonly ISettingsService _settingsService;
-    private readonly ILogTailerService _logTailerService;
+    private ILogSource _logSource; // Instance is managed here now
     private readonly SynchronizationContext _uiContext;
     private readonly ILogFilterProcessor _logFilterProcessor;
 
@@ -38,7 +41,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private readonly CompositeDisposable _disposables = new();
 
     // --- Search State & Ruler Markers ---
-    private List<SearchResult> _searchMatches = new(); // Internal list
+    private List<SearchResult> _searchMatches = new();
     private int _currentSearchIndex = -1;
 
     // Observable property bound to OverviewRulerMargin.SearchMarkers
@@ -64,32 +67,30 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     public MainViewModel(
         ISettingsService settingsService,
-        ILogTailerService logTailerService,
         IFileDialogService? fileDialogService = null,
-        ILogFilterProcessor? logFilterProcessor = null,
+        ILogFilterProcessor? logFilterProcessor = null, // Optional for testing
+        ILogSource? initialLogSource = null,          // Optional for testing
         SynchronizationContext? uiContext = null)
     {
         _settingsService = settingsService;
-        _logTailerService = logTailerService;
         _fileDialogService = fileDialogService ?? new FileDialogService();
         _uiContext = uiContext ?? SynchronizationContext.Current ??
-                        throw new InvalidOperationException("Could not capture or receive a valid SynchronizationContext."); // Store injected or captured
+                        throw new InvalidOperationException("Could not capture or receive a valid SynchronizationContext.");
 
-        // Initialize and own the processor
+        _logSource = initialLogSource ?? new FileLogSource();
+        _disposables.Add(_logSource); // Add source to disposables for cleanup
+
         _logFilterProcessor = logFilterProcessor ?? new LogFilterProcessor(
-            _logTailerService,
+            _logSource, // Pass the ILogSource instance
             LogDoc,
             _uiContext,
             AddLineToLogDocument);
-        
-        // --- Subscribe to CollectionChanged ---
+
         CurrentBusyStates.CollectionChanged += CurrentBusyStates_CollectionChanged;
-        // Add the unsubscription logic to our main disposable container
         _disposables.Add(Disposable.Create(() => {
             CurrentBusyStates.CollectionChanged -= CurrentBusyStates_CollectionChanged;
         }));
 
-        // Subscribe to results from the processor
         var filterSubscription = _logFilterProcessor.FilteredUpdates
             .Subscribe(
                 update => ApplyFilteredUpdate(update),
@@ -98,24 +99,19 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
         var samplingScheduler = Scheduler.Default;
         _totalLinesSubscription = _logFilterProcessor.TotalLinesProcessed
-            // Sample the stream, emitting the latest value every 200 milliseconds. Without a throttle, the UI thread can freeze up.
             .Sample(TimeSpan.FromMilliseconds(200), samplingScheduler)
-            .ObserveOn(_uiContext) // Ensure handler runs on UI thread
+            .ObserveOn(_uiContext)
             .Subscribe(
-                count => ProcessTotalLinesUpdate(count), // Call dedicated method
+                count => ProcessTotalLinesUpdate(count),
                 ex => HandleProcessorError("Total Lines Error", ex)
             );
 
-        // --- Lifecycle Management ---
         _disposables.Add(_logFilterProcessor);
         _disposables.Add(filterSubscription);
         _disposables.Add(_totalLinesSubscription);
 
-        // --- Initial State Setup ---
-        Theme = new ThemeViewModel(); // Part of UI State
-        LoadPersistedSettings(); // Load profiles and settings
-
-        // Initial filter trigger is handled by setting ActiveFilterProfile in LoadPersistedSettings
+        Theme = new ThemeViewModel();
+        LoadPersistedSettings();
     }
 
     private void CurrentBusyStates_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -192,8 +188,6 @@ public partial class MainViewModel : ObservableObject, IDisposable
             // Set the highlighted index. This will trigger PropertyChanged.
             // The MainWindow code-behind will observe this change and trigger the scroll.
             HighlightedFilteredLineIndex = foundLine.Index;
-            // Optional: Refocus the editor after jump?
-            // RequestEditorFocus?.Invoke(this, EventArgs.Empty);
         }
         else
         {
@@ -202,7 +196,6 @@ public partial class MainViewModel : ObservableObject, IDisposable
             // (We can't easily distinguish without checking LogDoc count, which might be large)
             JumpStatusMessage = $"Line {targetLineNumber} not found in filtered view.";
             await TriggerInvalidInputFeedback();
-            // Do NOT change HighlightedFilteredLineIndex
         }
     }
 
@@ -211,36 +204,31 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private async Task TriggerInvalidInputFeedback()
     {
         IsJumpTargetInvalid = true;
-        // Keep the message for a few seconds
         await Task.Delay(2500); // Use Task.Delay
-        // Clear message only if it hasn't been changed by a subsequent action
         if (IsJumpTargetInvalid)
         {
             IsJumpTargetInvalid = false;
             JumpStatusMessage = string.Empty;
         }
-        // Note: IsJumpTargetInvalid is reset immediately in JumpToLine on next attempt
     }
 
     #endregion // Jump To Line Command
 
     #region // --- UI State Management ---
-    // Holds observable properties representing the application's state for data binding.
 
     private void ProcessTotalLinesUpdate(long count)
     {
             TotalLogLines = count;
     }
 
-    // Save setting when property changes
     partial void OnIsAutoScrollEnabledChanged(bool value)
     {
-        if (value == true && HighlightedFilteredLineIndex != -1) // Only deselect if enabling and something IS selected
-            HighlightedFilteredLineIndex = -1; // This will also reset HighlightedOriginalLineNumber via its handler
+        if (value == true && HighlightedFilteredLineIndex != -1)
+            HighlightedFilteredLineIndex = -1;
 
         if (value == true)
-            RequestScrollToEnd?.Invoke(this, EventArgs.Empty); // Request scroll to end when enabling
-        
+            RequestScrollToEnd?.Invoke(this, EventArgs.Empty);
+
         SaveCurrentSettingsDelayed();
     }
 
@@ -259,7 +247,6 @@ public partial class MainViewModel : ObservableObject, IDisposable
     public void SetLogEditorInstance(TextEditor editor)
     {
         _logEditorInstance = editor;
-        // Optional: Trigger an initial full text update if needed when editor is first set
         if (FilteredLogLines.Any())
         {
             ScheduleLogTextUpdate(FilteredLogLines);
@@ -295,7 +282,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     // Configured number of context lines to display around filter matches.
     [ObservableProperty]
-    private int _contextLines = 0; // Default to 0
+    private int _contextLines = 0;
 
     // Controls visibility of the custom line number margin.
     [ObservableProperty]
@@ -303,18 +290,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private bool _showLineNumbers = true;
     public Visibility IsCustomLineNumberMarginVisible => ShowLineNumbers ? Visibility.Visible : Visibility.Collapsed;
 
-    partial void OnShowLineNumbersChanged(bool value)
-    {
-        SaveCurrentSettingsDelayed();
-    }
+    partial void OnShowLineNumbersChanged(bool value) => SaveCurrentSettingsDelayed();
 
     // Controls whether timestamp highlighting rules are applied in AvalonEdit.
     [ObservableProperty] private bool _highlightTimestamps = true;
-
-    partial void OnHighlightTimestampsChanged(bool value)
-    {
-        SaveCurrentSettingsDelayed();
-    }
+    partial void OnHighlightTimestampsChanged(bool value) => SaveCurrentSettingsDelayed();
 
     // Collection of filter patterns (substrings/regex) for highlighting.
     // Note: This state is derived by traversing the *active* FilterProfile.
@@ -333,29 +313,21 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(SearchStatusText))]
     private bool _isCaseSensitiveSearch = false;
 
-    /// <summary>
-    /// The filter node currently selected within the TreeView of the ActiveFilterProfile.
-    /// </summary>
+    // The filter node currently selected within the TreeView of the ActiveFilterProfile.
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(AddFilterCommand))] // Enable adding if composite selected
     [NotifyCanExecuteChangedFor(nameof(RemoveFilterNodeCommand))] // Enable removing selected node
     [NotifyCanExecuteChangedFor(nameof(ToggleEditNodeCommand))] // Enable editing selected node
     private FilterViewModel? _selectedFilterNode;
 
-    /// <summary>
-    /// Collection exposed specifically for the TreeView's ItemsSource.
-    /// Contains only the root node of the ActiveFilterProfile's tree.
-    /// </summary>
+    // Collection exposed specifically for the TreeView's ItemsSource.
+    // Contains only the root node of the ActiveFilterProfile's tree.
     public ObservableCollection<FilterViewModel> ActiveTreeRootNodes { get; } = new();
 
-    // --- Persistence Methods ---
     private void LoadPersistedSettings()
     {
         LogonautSettings settings;
         settings = _settingsService.LoadSettings();
-
-        // Apply loaded settings to ViewModel properties
-        // TODO: Apply theme based on settings.LastTheme
         LoadFilterProfiles(settings);
         ShowLineNumbers = settings.ShowLineNumbers;
         HighlightTimestamps = settings.HighlightTimestamps;
@@ -364,116 +336,86 @@ public partial class MainViewModel : ObservableObject, IDisposable
         IsAutoScrollEnabled = settings.AutoScrollToTail;
     }
 
-    private void SaveCurrentSettingsDelayed() {
-        _uiContext.Post(_ => { SaveCurrentSettings(); }, null);
-    }
+    private void SaveCurrentSettingsDelayed() => _uiContext.Post(_ => SaveCurrentSettings(), null);
 
     private void SaveCurrentSettings()
     {
         var settingsToSave = new LogonautSettings
         {
-            // --- Other settings ---
             ContextLines = this.ContextLines,
             ShowLineNumbers = this.ShowLineNumbers,
             HighlightTimestamps = this.HighlightTimestamps,
             IsCaseSensitiveSearch = this.IsCaseSensitiveSearch,
             AutoScrollToTail = this.IsAutoScrollEnabled,
-            // TODO: Add theme, window state etc.
         };
         SaveFilterProfiles(settingsToSave);
-
         _settingsService.SaveSettings(settingsToSave);
     }
-
     #endregion // --- UI State Management ---
 
     #region // --- Command Handling ---
 
     // === Filter Node Manipulation Commands (Operate on Active Profile's Tree) ===
 
-    // Combined Add Filter command - type determined by parameter
+        // Combined Add Filter command - type determined by parameter
     [RelayCommand(CanExecute = nameof(CanAddFilterNode))]
     private void AddFilter(object? filterTypeParam) // Parameter likely string like "Substring", "And", etc.
     {
-        if (ActiveFilterProfile == null)
-            throw new InvalidOperationException("No active profile"); // Should not happen if CanExecute is right
+        if (ActiveFilterProfile == null) throw new InvalidOperationException("No active profile");
 
-        if (ActiveFilterProfile.RootFilterViewModel == null && SelectedFilterNode == null)
+        IFilter newFilterNodeModel;
+        string type = filterTypeParam as string ?? string.Empty;
+        switch(type)
         {
-            // No profile active OR tree is empty and nothing selected - target the profile root
-            if (ActiveFilterProfile == null) return; // Should not happen if CanExecute is right
+            case "Substring": newFilterNodeModel = new SubstringFilter(""); break;
+            case "Regex": newFilterNodeModel = new RegexFilter(".*"); break;
+            case "And": newFilterNodeModel = new AndFilter(); break;
+            case "Or": newFilterNodeModel = new OrFilter(); break;
+            case "Nor": newFilterNodeModel = new NorFilter(); break;
+            default: return; // Unknown type
         }
-        else if (SelectedFilterNode != null && !(SelectedFilterNode.Filter is CompositeFilter))
-        {
-            throw new InvalidOperationException("Selected node is not composite"); // Should not happen if CanExecute is right
-        }
-
-            IFilter newFilterNodeModel;
-            string type = filterTypeParam as string ?? string.Empty;
-
-            switch(type)
-            {
-                case "Substring": newFilterNodeModel = new SubstringFilter(""); break;
-                case "Regex": newFilterNodeModel = new RegexFilter(".*"); break;
-                case "And": newFilterNodeModel = new AndFilter(); break;
-                case "Or": newFilterNodeModel = new OrFilter(); break;
-                case "Nor": newFilterNodeModel = new NorFilter(); break;
-                default: return; // Unknown type
-            }
 
             // Note: The callback passed down when creating FilterViewModel ensures TriggerFilterUpdate is called
-            FilterViewModel newFilterNodeVM = new FilterViewModel(newFilterNodeModel, TriggerFilterUpdate);
-
-            FilterViewModel? targetParentVM = SelectedFilterNode ?? ActiveFilterProfile.RootFilterViewModel;
+        FilterViewModel newFilterNodeVM = new FilterViewModel(newFilterNodeModel, TriggerFilterUpdate);
+        FilterViewModel? targetParentVM = SelectedFilterNode ?? ActiveFilterProfile.RootFilterViewModel;
 
             // Case 1: Active profile's tree is currently empty
-            if (ActiveFilterProfile.RootFilterViewModel == null)
-            {
+        if (ActiveFilterProfile.RootFilterViewModel == null)
+        {
                 ActiveFilterProfile.SetModelRootFilter(newFilterNodeModel); // This sets model and refreshes RootFilterViewModel
                 UpdateActiveTreeRootNodes(ActiveFilterProfile); // Explicitly update the collection bound to the TreeView
                 SelectedFilterNode = ActiveFilterProfile.RootFilterViewModel; // Select the new root
-            }
+        }
             // Case 2: A composite node is selected - add as child
-            else if (SelectedFilterNode != null && SelectedFilterNode.Filter is CompositeFilter)
-            {
+        else if (SelectedFilterNode != null && SelectedFilterNode.Filter is CompositeFilter)
+        {
                 // AddChildFilter takes the MODEL, adds it, creates the child VM, and adds to Children collection
-                SelectedFilterNode.AddChildFilter(newFilterNodeModel);
+            SelectedFilterNode.AddChildFilter(newFilterNodeModel);
                 SelectedFilterNode.IsExpanded = true; // Expand parent
 
                 // Find and select the newly created child VM
-                var addedVM = SelectedFilterNode.Children.LastOrDefault(vm => vm.Filter == newFilterNodeModel);
-                if (addedVM != null) SelectedFilterNode = addedVM;
-            }
+            var addedVM = SelectedFilterNode.Children.LastOrDefault(vm => vm.Filter == newFilterNodeModel);
+            if (addedVM != null) SelectedFilterNode = addedVM;
+        }
             // Case 3: No node selected (but tree exists), or non-composite selected - Replace root? Show Error?
             // Current Requirement: Select a composite node first. Let's enforce this.
             else // No node selected or non-composite selected
-            {
+        {
             throw new InvalidOperationException("Unexpected state: No node selected or non-composite selected. This should not happen with current logic.");
-            }
+        }
 
         // Editing logic: If the new node is editable, start editing
-            if (SelectedFilterNode != null && SelectedFilterNode.IsEditable)
-            {
-            SelectedFilterNode.BeginEditCommand.Execute(null);
-            }
-            // TriggerFilterUpdate() is handled by callbacks within AddChildFilter/SetModelRootFilter
+        if (SelectedFilterNode != null && SelectedFilterNode.IsEditable)
+        {
+           SelectedFilterNode.BeginEditCommand.Execute(null);
+        }
         SaveCurrentSettingsDelayed();
     }
-
-    // Can add if a profile is active. Adding logic handles where it goes.
     private bool CanAddFilterNode()
     {
-        // Condition 0: Must have an active profile
-        if (ActiveFilterProfile == null)
-            return false;
-
-        // Condition A: Active profile's tree is empty?
+        if (ActiveFilterProfile == null) return false;
         bool isTreeEmpty = ActiveFilterProfile.RootFilterViewModel == null;
-
-        // Condition B: Is a composite node selected?
-        bool isCompositeNodeSelected = SelectedFilterNode != null &&
-                                        SelectedFilterNode.Filter is CompositeFilter; // Check if the *selected node's model* is composite
-
+        bool isCompositeNodeSelected = SelectedFilterNode != null && SelectedFilterNode.Filter is CompositeFilter;
         return isTreeEmpty || isCompositeNodeSelected;
     }
 
@@ -481,24 +423,22 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private void RemoveFilterNode()
     {
         if (SelectedFilterNode == null || ActiveFilterProfile?.RootFilterViewModel == null) return;
-
         FilterViewModel? parent = SelectedFilterNode.Parent;
 
         // Case 1: Removing the root node of the active profile
         if (SelectedFilterNode == ActiveFilterProfile.RootFilterViewModel)
         {
-            ActiveFilterProfile.SetModelRootFilter(null); // Clears the model and VM tree
+            ActiveFilterProfile.SetModelRootFilter(null);
             UpdateActiveTreeRootNodes(ActiveFilterProfile);
-            SelectedFilterNode = null; // Clear selection
+            SelectedFilterNode = null;
         }
         // Case 2: Removing a child node
         else if (parent != null)
         {
-            var nodeToRemove = SelectedFilterNode; // Keep reference
-            SelectedFilterNode = parent; // Select parent *before* removing child
-            parent.RemoveChild(nodeToRemove); // RemoveChild uses callback internally
+            var nodeToRemove = SelectedFilterNode;
+            SelectedFilterNode = parent;
+            parent.RemoveChild(nodeToRemove);
         }
-        // TriggerFilterUpdate(); // Handled by callbacks
         SaveCurrentSettingsDelayed();
     }
     private bool CanRemoveFilterNode() => SelectedFilterNode != null && ActiveFilterProfile != null;
@@ -508,19 +448,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         if (SelectedFilterNode?.IsEditable ?? false)
         {
-            if (SelectedFilterNode.IsNotEditing)
-                SelectedFilterNode.BeginEditCommand.Execute(null);
-            else {
-                SelectedFilterNode.EndEditCommand.Execute(null); // EndEdit uses callback, which triggers save
-                // Save settings after editing is complete
-                SaveCurrentSettingsDelayed();
-            }
+            if (SelectedFilterNode.IsNotEditing) SelectedFilterNode.BeginEditCommand.Execute(null);
+            else SelectedFilterNode.EndEditCommand.Execute(null);
+            SaveCurrentSettingsDelayed(); // Save potentially after EndEdit completes
         }
     }
     private bool CanToggleEditNode() => SelectedFilterNode?.IsEditable ?? false;
-
-    // === Other Commands (File, Search, Context Lines) ===
-    // Ensure they interact correctly with the Active Profile concept if needed
 
     [RelayCommand] private async Task OpenLogFileAsync()
     {
@@ -528,71 +461,67 @@ public partial class MainViewModel : ObservableObject, IDisposable
         if (string.IsNullOrEmpty(selectedFile)) return;
         Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} OpenLogFileAsync: '{selectedFile}'");
 
-        // Add loading state token
-        _uiContext.Post(_ => {
-            CurrentBusyStates.Add(LoadingToken);
-        }, null);
+        _uiContext.Post(_ => CurrentBusyStates.Add(LoadingToken), null);
 
         try
         {
-            // 1. Reset Processor State (sets internal flag)
+            // 1. Stop previous source monitoring (if any)
+             _logSource.StopMonitoring();
+
+            // 2. Reset Processor State
             _logFilterProcessor.Reset();
 
-            // 2. Clear ViewModel/UI State
+            // 3. Clear ViewModel/UI State
             FilteredLogLines.Clear();
             OnPropertyChanged(nameof(FilteredLogLinesCount));
-            ScheduleLogTextUpdate(FilteredLogLines); // Clear editor
-            CurrentLogFilePath = selectedFile; // Update displayed path
+            ScheduleLogTextUpdate(FilteredLogLines); // Clear editor content
+            CurrentLogFilePath = selectedFile;
 
-            // 3. Perform Initial Read & Start Tailing (populates LogDoc)
-            LogDoc.Clear(); // Clear the document before reading
-            long initialLines = await _logTailerService.ChangeFileAsync(selectedFile, AddLineToLogDocument).ConfigureAwait(true);
+            // 4. Prepare Log Source and Read Initial Lines (populates LogDoc)
+            LogDoc.Clear(); // Clear document before reading
+            long initialLines = await _logSource.PrepareAndGetInitialLinesAsync(selectedFile, AddLineToLogDocument).ConfigureAwait(true);
 
-            // 4. Update Total Lines Display immediately after initial read
-            _uiContext.Post(_ => TotalLogLines = initialLines, null); // Use UI context
+            // 5. Update Total Lines Display immediately
+            _uiContext.Post(_ => TotalLogLines = initialLines, null);
 
-            // 5. Trigger the First Filter Explicitly
-            // Add filtering state token *before* triggering
-             _uiContext.Post(_ => CurrentBusyStates.Add(FilteringToken), null);
+            // 6. Start Monitoring *New* Lines from Source
+             _logSource.StartMonitoring();
+
+            // 7. Trigger the First Filter Explicitly
+            _uiContext.Post(_ => CurrentBusyStates.Add(FilteringToken), null);
             IFilter? firstFilter = ActiveFilterProfile?.Model?.RootFilter ?? new TrueFilter();
             _logFilterProcessor.UpdateFilterSettings(firstFilter, ContextLines);
-            // Update highlighting rules based on the active filter
             UpdateFilterSubstrings();
 
-            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} OpenLogFileAsync: ChangeFileAsync completed ({initialLines} lines). First filter triggered.");
+            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} OpenLogFileAsync: Prepare/Start completed ({initialLines} lines). First filter triggered.");
             // LoadingToken removed by ApplyFilteredUpdate handling the *first* Replace.
             // FilteringToken removed by ApplyFilteredUpdate.
         }
         catch (Exception ex)
         {
-            // Reset flags on error
             _uiContext.Post(_ => {
                 CurrentBusyStates.Remove(LoadingToken);
                 CurrentBusyStates.Remove(FilteringToken);
                 MessageBox.Show($"Error opening or reading log file '{selectedFile}':\n{ex.Message}", "File Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                CurrentLogFilePath = null; // Clear path
+                CurrentLogFilePath = null;
                 FilteredLogLines.Clear();
                 OnPropertyChanged(nameof(FilteredLogLinesCount));
-                TotalLogLines = 0; // Reset total lines display
+                TotalLogLines = 0;
+                 _logSource?.StopMonitoring();
             }, null);
         }
     }
 
-    // TODO: We want Shift+F3 to trigger previous search
-    [RelayCommand(CanExecute = nameof(CanSearch))] private void PreviousSearch()
+
+        [RelayCommand(CanExecute = nameof(CanSearch))] private void PreviousSearch()
     {
         if (_searchMatches.Count == 0) return;
-
-        // Handle initial case explicitly for intuitive wrap-around
-        if (_currentSearchIndex == -1)
-            _currentSearchIndex = _searchMatches.Count - 1; // Go to the last match
-        else
-            _currentSearchIndex = (_currentSearchIndex - 1 + _searchMatches.Count) % _searchMatches.Count; // Standard wrap-around
+        if (_currentSearchIndex == -1) _currentSearchIndex = _searchMatches.Count - 1;
+        else _currentSearchIndex = (_currentSearchIndex - 1 + _searchMatches.Count) % _searchMatches.Count;
         SelectAndScrollToCurrentMatch();
         OnPropertyChanged(nameof(SearchStatusText));
     }
 
-    // TODO: We want F3 to trigger next search
     [RelayCommand(CanExecute = nameof(CanSearch))] private void NextSearch()
     {
         if (_searchMatches.Count == 0) return;
@@ -609,35 +538,17 @@ public partial class MainViewModel : ObservableObject, IDisposable
             var match = _searchMatches[_currentSearchIndex];
             CurrentMatchOffset = match.Offset;
             CurrentMatchLength = match.Length;
-
-            // Need LogText to map offset to line
-            string currentLogText = GetCurrentDocumentText(); // Use local copy for safety
-            if (!string.IsNullOrEmpty(currentLogText) && CurrentMatchOffset >= 0 && CurrentMatchOffset < currentLogText.Length)
-            {
-                // This requires creating a temporary TextDocument to use GetLineByOffset reliably
-                // Alternatively, approximate by counting newlines (less robust).
-                // Let's assume we can access the editor's document directly or create one.
-                // **Simplification for now: Search FilteredLogLines. This is less performant.**
-                // TODO: A better way involves direct access to AvalonEdit's Document in MainWindow.xaml.cs
-                // or passing the AvalonEdit control instance to the ViewModel (less ideal).
-
-                // Find the line number containing the start of the match
-                int lineIndex = FindFilteredLineIndexContainingOffset(CurrentMatchOffset);
-                HighlightedFilteredLineIndex = lineIndex; // Update the highlight
-            }
-            else
-            {
-                HighlightedFilteredLineIndex = -1; // Invalid offset
-            }
+            int lineIndex = FindFilteredLineIndexContainingOffset(CurrentMatchOffset);
+            HighlightedFilteredLineIndex = lineIndex;
         }
         else
         {
             CurrentMatchOffset = -1;
             CurrentMatchLength = 0;
-            HighlightedFilteredLineIndex = -1; // Clear highlight if no match selected
+            HighlightedFilteredLineIndex = -1;
         }
     }
-
+    
     // Helper method to find the index in FilteredLogLines containing a character offset
     // Note: This is inefficient for large logs. See comments in SelectAndScrollToCurrentMatch.
     private int FindFilteredLineIndexContainingOffset(int offset)
@@ -646,19 +557,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
         for (int i = 0; i < FilteredLogLines.Count; i++)
         {
             int lineLength = FilteredLogLines[i].Text.Length;
-            // Check if offset falls within this line (inclusive of start, exclusive of end newline)
-            // Add + Environment.NewLine.Length for the newline characters between lines
             int lineEndOffset = currentOffset + lineLength;
-            if (offset >= currentOffset && offset <= lineEndOffset) // <= includes position right after last char
-            {
-                return i;
-            }
-            currentOffset = lineEndOffset + Environment.NewLine.Length; // Move to start of next line
+            if (offset >= currentOffset && offset <= lineEndOffset) return i;
+            currentOffset = lineEndOffset + Environment.NewLine.Length;
         }
-        return -1; // Offset not found
+        return -1;
     }
-
-    partial void OnSearchTextChanged(string value) => UpdateSearchMatches(); // Trigger search update
+    partial void OnSearchTextChanged(string value) => UpdateSearchMatches();
 
     private void UpdateFilterSubstrings() // Triggered by TriggerFilterUpdate
     {
@@ -670,100 +575,59 @@ public partial class MainViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand(CanExecute = nameof(CanDecrementContextLines))]
-    private void DecrementContextLines()
-    {
-        ContextLines = Math.Max(0, ContextLines - 1);
-        // OnContextLinesChanged triggers TriggerFilterUpdate
-    }
+    private void DecrementContextLines() => ContextLines = Math.Max(0, ContextLines - 1);
     private bool CanDecrementContextLines() => ContextLines > 0;
 
-    [RelayCommand] private void IncrementContextLines()
-    {
-        ContextLines++;
-        // OnContextLinesChanged triggers TriggerFilterUpdate
-    }
+    [RelayCommand] private void IncrementContextLines() => ContextLines++;
 
     partial void OnContextLinesChanged(int value)
     {
         DecrementContextLinesCommand.NotifyCanExecuteChanged();
-        TriggerFilterUpdate(); // Trigger re-filter when context changes
+        TriggerFilterUpdate();
         SaveCurrentSettingsDelayed();
     }
 
     #endregion // --- Command Handling ---
 
+    // ... (Orchestration & Updates section - most methods remain the same, check dependencies) ...
     #region // --- Orchestration & Updates ---
 
-    private void AddLineToLogDocument(string line)
-    {
-        // This method will be called by the processor, potentially on a background thread.
-        // LogDocument handles its own locking.
-        LogDoc.AppendLine(line);
-        // Optional: Could add tracing here if needed
-        // System.Diagnostics.Debug.WriteLine($"---> MainViewModel: Added line to LogDoc via callback: {line.Substring(0, Math.Min(line.Length, 20))}");
-    }
+    private void AddLineToLogDocument(string line) => LogDoc.AppendLine(line);
 
-    /// <summary>
-    /// Updates the ActiveTreeRootNodes collection based on the new active profile.
-    /// </summary>
     private void UpdateActiveTreeRootNodes(FilterProfileViewModel? activeProfile)
     {
         ActiveTreeRootNodes.Clear();
         if (activeProfile?.RootFilterViewModel != null)
             ActiveTreeRootNodes.Add(activeProfile.RootFilterViewModel);
-
-        // TODO: There will be an automatic CollectionChanged event, not a PropertyChanged event. However, we shouldn't need a PropertyChanged event here.
-        // The UI controls bound via ItemsSource listen for CollectionChanged.
-        OnPropertyChanged(nameof(ActiveTreeRootNodes));
+        OnPropertyChanged(nameof(ActiveTreeRootNodes)); // Keep for safety, though collection changes might suffice
     }
 
     private void TriggerFilterUpdate()
     {
-        // Add Filtering state token
+        // Ensure token isn't added multiple times if trigger fires rapidly
+        _uiContext.Post(_ => { if (!CurrentBusyStates.Contains(FilteringToken)) CurrentBusyStates.Add(FilteringToken); }, null);
         _uiContext.Post(_ => {
-             // Ensure token isn't added multiple times if trigger fires rapidly
-             if (!CurrentBusyStates.Contains(FilteringToken))
-             {
-                 CurrentBusyStates.Add(FilteringToken);
-             }
-         }, null);
-
-        _uiContext.Post(_ =>
-        {
             IFilter? filterToApply = ActiveFilterProfile?.Model?.RootFilter ?? new TrueFilter();
             _logFilterProcessor.UpdateFilterSettings(filterToApply, ContextLines);
             UpdateFilterSubstrings();
         }, null);
-        // FilteringToken is removed by ApplyFilteredUpdate
     }
 
     private string GetCurrentDocumentText()
     {
         // Priority 1: Use the actual editor document if available (running in UI)
         // Reading Text property is generally thread-safe.
-        if (_logEditorInstance?.Document != null)
-        {
-            return _logEditorInstance.Document.Text;
-        }
-
+        if (_logEditorInstance?.Document != null) return _logEditorInstance.Document.Text;
         // Priority 2: Fallback for testing or before editor is initialized.
         // Simulate the document content by joining the FilteredLogLines.
         // This allows internal logic like search to work correctly in unit tests.
         if (FilteredLogLines.Any())
         {
-            // Use StringBuilder for potentially large test data sets too
             var sb = new System.Text.StringBuilder();
             bool first = true;
-            foreach (var line in FilteredLogLines)
-            {
-                if (!first) { sb.Append(Environment.NewLine); }
-                sb.Append(line.Text);
-                first = false;
-            }
+            foreach (var line in FilteredLogLines) { if (!first) sb.Append(Environment.NewLine); sb.Append(line.Text); first = false; }
             return sb.ToString();
         }
-
-        // Default: Return empty if editor not set AND no filtered lines
         return string.Empty;
     }
 
@@ -781,8 +645,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private void ApplyFilteredUpdate(FilteredUpdate update)
     {
         Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> ApplyFilteredUpdate received. Lines={update.Lines.Count}");
-
-        bool wasInitialLoad = CurrentBusyStates.Contains(LoadingToken); // Check BEFORE modifying collection
+        bool wasInitialLoad = CurrentBusyStates.Contains(LoadingToken);
         bool isAppend = CheckIfAppend(update.Lines);
 
         if (isAppend)
@@ -791,39 +654,24 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
             // 1. Calculate the newly added lines
             var appendedLines = update.Lines.Skip(FilteredLogLines.Count).ToList();
-
             // 2. Add only the new lines to the ObservableCollection
-            AddFilteredLines(appendedLines); // This notifies controls bound to the collection
-
-            // 3. Schedule the text append operation for AvalonEdit
+            AddFilteredLines(appendedLines);
             ScheduleLogTextAppend(appendedLines);
-
             // 4. Trigger Auto-Scroll if enabled
-            if (IsAutoScrollEnabled)
-            {
-                RequestScrollToEnd?.Invoke(this, EventArgs.Empty);
-                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} ---> ApplyFilteredUpdate (Append): AutoScroll Triggered.");
-            }
-
+            if (IsAutoScrollEnabled) RequestScrollToEnd?.Invoke(this, EventArgs.Empty);
             // 5. Reset BusyFiltering (Append means this batch is done)
-            _uiContext.Post(_ => {
-                CurrentBusyStates.Remove(FilteringToken); // Remove filtering token
-                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} ---> ApplyFilteredUpdate (Append): UI Update Complete. FilteringToken removed.");
-            }, null);
+             _uiContext.Post(_ => { CurrentBusyStates.Remove(FilteringToken); }, null);
         }
         else // Handle Replace
         {
             Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> ApplyFilteredUpdate: Detected Replace.");
             int originalLineToRestore = HighlightedOriginalLineNumber;
-
             // 1. Replace the entire ObservableCollection
-            ReplaceFilteredLines(update.Lines); // Clears and adds new lines
-
+            ReplaceFilteredLines(update.Lines);
             // 2. Schedule the full text replace for AvalonEdit
-            ScheduleLogTextUpdate(FilteredLogLines); // Passes the complete new list
-
+            ScheduleLogTextUpdate(FilteredLogLines);
             // 3. Restore Highlight (only makes sense after a replace)
-            if (originalLineToRestore > 0)
+             if (originalLineToRestore > 0)
             {
                 int newIndex = FilteredLogLines
                     .Select((line, index) => new { line.OriginalLineNumber, Index = index })
@@ -834,14 +682,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
             }
 
             // 4. Replace means filtering is done AND if it was the initial load, loading is also done.
-            _uiContext.Post(_ =>
-            {
-                CurrentBusyStates.Remove(FilteringToken); // Remove filtering token
-                if(wasInitialLoad)
-                {
-                    CurrentBusyStates.Remove(LoadingToken); // Remove loading token ONLY if it was the initial load
-                }
-                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} ---> ApplyFilteredUpdate (Replace): UI Update Complete. Tokens removed (Loading removed: {wasInitialLoad}).");
+            _uiContext.Post(_ => {
+                CurrentBusyStates.Remove(FilteringToken);
+                if(wasInitialLoad) CurrentBusyStates.Remove(LoadingToken);
             }, null);
         }
     }
@@ -849,7 +692,6 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private bool CheckIfAppend(IReadOnlyList<FilteredLogLine> newLines)
     {
         int currentCount = FilteredLogLines.Count;
-
         // If the new list isn't longer, it can't be an append.
         if (newLines.Count <= currentCount)
             return false;
@@ -871,9 +713,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         // Ensure we work with a copy in case the original list changes
         var linesSnapshot = linesToAppend.ToList();
-
-        _uiContext.Post(state =>
-        {
+        _uiContext.Post(state => {
             var lines = (List<FilteredLogLine>)state!;
             AppendLogTextInternal(lines);
             // Update search matches *after* appending text
@@ -883,9 +723,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private void AppendLogTextInternal(IReadOnlyList<FilteredLogLine> linesToAppend)
     {
-        // Ensure editor and document exist and there's something to append
         if (_logEditorInstance?.Document == null || !linesToAppend.Any()) return;
-
         try
         {
             var sb = new System.Text.StringBuilder();
@@ -899,38 +737,27 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 if (lastChars != Environment.NewLine)
                 {
                     sb.Append(Environment.NewLine);
-                }
+            }
             }
 
             // Append the new lines, separated by newlines
             for (int i = 0; i < linesToAppend.Count; i++)
             {
                 if (i > 0) // Add newline before second, third, etc. lines
-                {
                     sb.Append(Environment.NewLine);
-                }
                 sb.Append(linesToAppend[i].Text);
             }
 
             string textToAppend = sb.ToString();
-
             _logEditorInstance.Document.Insert(_logEditorInstance.Document.TextLength, textToAppend);
         }
-        catch (Exception ex)
-        {
-            // Log or handle potential errors during text manipulation
-            Debug.WriteLine($"Error appending text to AvalonEdit: {ex.Message}");
-            // Optionally, fall back to a full replace if append fails?
-        }
+        catch (Exception ex) { Debug.WriteLine($"Error appending text to AvalonEdit: {ex.Message}"); }
     }
 
     // Helper methods called by ApplyFilteredUpdate to modify UI collections.
     private void AddFilteredLines(IReadOnlyList<FilteredLogLine> linesToAdd)
     {
-        foreach (var line in linesToAdd)
-        {
-            FilteredLogLines.Add(line);
-        }
+        foreach (var line in linesToAdd) FilteredLogLines.Add(line);
         OnPropertyChanged(nameof(FilteredLogLinesCount));
     }
 
@@ -938,19 +765,16 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         ResetSearchState();
         FilteredLogLines.Clear();
-
-        foreach (var line in newLines)
-        {
-            FilteredLogLines.Add(line);
-        }
+        foreach (var line in newLines) FilteredLogLines.Add(line);
         OnPropertyChanged(nameof(FilteredLogLinesCount));
     }
 
-    private void ResetSearchState() {
-        _searchMatches.Clear(); // Clear internal match list on replace
-        SearchMarkers.Clear(); // Clear ruler markers
-        _currentSearchIndex = -1; // Reset search index
-        SelectAndScrollToCurrentMatch(); // Clear editor selection
+    private void ResetSearchState()
+    {
+        _searchMatches.Clear();
+        SearchMarkers.Clear();
+        _currentSearchIndex = -1;
+        SelectAndScrollToCurrentMatch();
     }
 
     // Schedules the LogText update to run after current UI operations.
@@ -959,15 +783,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
         // Clone relevantLines if it might be modified elsewhere before Post executes?
         // ObservableCollection snapshot for Replace is safe. List passed for Append is safe.
         var linesSnapshot = relevantLines.ToList(); // Create shallow copy for safety
-
-        _uiContext.Post(state =>
-        {
+        _uiContext.Post(state => {
             var lines = (List<FilteredLogLine>)state!;
-
             ReplaceLogTextInternal(lines);
             UpdateSearchMatches();
-
-        }, linesSnapshot); // Pass only lines as state
+        }, linesSnapshot);
     }
 
     private void ReplaceLogTextInternal(IReadOnlyList<FilteredLogLine> allLines)
@@ -984,10 +804,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
             sb.Append(line.Text);
             first = false;
         }
-        string fullText = sb.ToString();
 
         // Set the document text (must be on UI thread)
-        _logEditorInstance.Document.Text = fullText;
+        _logEditorInstance.Document.Text = sb.ToString();
 
         // No auto-scroll on replace typically
     }
@@ -997,9 +816,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         string currentSearchTerm = SearchText;
         string textToSearch = GetCurrentDocumentText();
-
-        ResetSearchState(); // Clears internal list, markers, index, selection
-
+        ResetSearchState();
         if (string.IsNullOrEmpty(currentSearchTerm) || string.IsNullOrEmpty(textToSearch))
         {
             OnPropertyChanged(nameof(SearchStatusText));
@@ -1010,53 +827,41 @@ public partial class MainViewModel : ObservableObject, IDisposable
         var tempMarkers = new List<SearchResult>();
         while (offset < textToSearch.Length)
         {
-            int foundIndex = textToSearch.IndexOf(
-                currentSearchTerm,
-                offset,
-                IsCaseSensitiveSearch ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase);
+            int foundIndex = textToSearch.IndexOf(currentSearchTerm, offset, IsCaseSensitiveSearch ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase);
             if (foundIndex == -1) break;
             var newMatch = new SearchResult(foundIndex, currentSearchTerm.Length);
-                _searchMatches.Add(newMatch); // Add to internal list
-                tempMarkers.Add(newMatch);    // Add to temp list for ruler batch update
-
-                offset = foundIndex + 1; // Continue search after the start of the current match
+            _searchMatches.Add(newMatch);
+            tempMarkers.Add(newMatch);
+            offset = foundIndex + 1;
         }
-
-            // Batch update the observable collection for the ruler for potentially better perf
-            foreach (var marker in tempMarkers)
-            {
-                SearchMarkers.Add(marker);
-            }
-
-            OnPropertyChanged(nameof(SearchStatusText)); // Update match count display
+        foreach (var marker in tempMarkers) SearchMarkers.Add(marker);
+        OnPropertyChanged(nameof(SearchStatusText));
     }
 
     partial void OnIsCaseSensitiveSearchChanged(bool value)
     {
-        UpdateSearchMatches(); // This already happened due to [NotifyPropertyChangedFor] equivalent
+        UpdateSearchMatches();
         SaveCurrentSettingsDelayed();
     }
 
     public void LoadLogFromText(string text)
     {
-        _logFilterProcessor.Reset(); // Reset processor
-        LogDoc.Clear();              // Clear internal document storage
-        FilteredLogLines.Clear();    // Clear UI collection
-        OnPropertyChanged(nameof(FilteredLogLinesCount)); // Notify count changed
-        _searchMatches.Clear();      // Clear search state
-        SearchMarkers.Clear();
-        _currentSearchIndex = -1;
-        HighlightedFilteredLineIndex = -1; // Reset highlight
-
-        LogDoc.AddInitialLines(text); // Add new lines to storage
-
-        // Trigger filter update to process the new content using the active profile
+        _logSource?.StopMonitoring(); // Stop current source
+        _logFilterProcessor.Reset();
+        LogDoc.Clear();
+        FilteredLogLines.Clear();
+        OnPropertyChanged(nameof(FilteredLogLinesCount));
+        ResetSearchState();
+        HighlightedFilteredLineIndex = -1;
+        LogDoc.AddInitialLines(text); // Use existing storage
+        // No need to manually start source here; TriggerFilterUpdate handles processing
         TriggerFilterUpdate();
+        CurrentLogFilePath = "[Pasted Content]"; // Indicate non-file source
     }
 
     public void UpdateSearchIndexFromCharacterOffset(int characterOffset)
     {
-            if (_searchMatches.Count == 0) return;
+        if (_searchMatches.Count == 0) return;
 
             // Find the match whose start offset is closest to the click offset
             int newIndex = _searchMatches
@@ -1064,21 +869,18 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 .OrderBy(item => item.distance)
                 .FirstOrDefault()?.index ?? -1;
 
-            if (newIndex != -1 && newIndex != _currentSearchIndex)
-            {
-                _currentSearchIndex = newIndex;
-                SelectAndScrollToCurrentMatch();
-                OnPropertyChanged(nameof(SearchStatusText));
-            }
-            // If clicking within the currently selected match, maybe don't change index? (Current logic selects closest)
+        if (newIndex != -1 && newIndex != _currentSearchIndex)
+        {
+            _currentSearchIndex = newIndex;
+            SelectAndScrollToCurrentMatch();
+            OnPropertyChanged(nameof(SearchStatusText));
+        }
     }
 
     private void HandleProcessorError(string contextMessage, Exception ex)
     {
         Debug.WriteLine($"{contextMessage}: {ex}");
-        _uiContext.Post(_ =>
-        {
-            // Ensure all busy indicators are off on error
+        _uiContext.Post(_ => {
             CurrentBusyStates.Clear();
             MessageBox.Show($"Error processing logs: {ex.Message}", "Processing Error", MessageBoxButton.OK, MessageBoxImage.Warning);
         }, null);
@@ -1088,37 +890,31 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private void TraverseFilterTreeForHighlighting(FilterViewModel filterViewModel, ObservableCollection<string> patterns)
     {
         if (!filterViewModel.Enabled) return;
-
         string? pattern = null;
         bool isRegex = false;
-
         if (filterViewModel.Filter is SubstringFilter sf && !string.IsNullOrEmpty(sf.Value))
         {
-            pattern = Regex.Escape(sf.Value); // Escape for regex highlighting
+            pattern = Regex.Escape(sf.Value);
             isRegex = false;
         }
         else if (filterViewModel.Filter is RegexFilter rf && !string.IsNullOrEmpty(rf.Value))
         {
-            pattern = rf.Value; // Use raw regex pattern
+            pattern = rf.Value;
             isRegex = true;
         }
-
         if (pattern != null)
         {
             try
             {
-                if (isRegex) { _ = new Regex(pattern); } // Throws if invalid
-                if (!patterns.Contains(pattern)) // Avoid duplicates
+                if (isRegex) { _ = new Regex(pattern); }
+                if (!patterns.Contains(pattern))
                     patterns.Add(pattern);
             }
             catch (ArgumentException ex)
             {
                 Debug.WriteLine($"Invalid regex pattern skipped for highlighting: '{pattern}'. Error: {ex.Message}");
-                // TODO: Optionally provide UI feedback about the invalid regex in the filter.
             }
-        }
-
-        // Recurse through children
+    }
         foreach (var childFilter in filterViewModel.Children)
         {
             TraverseFilterTreeForHighlighting(childFilter, patterns);
@@ -1126,22 +922,16 @@ public partial class MainViewModel : ObservableObject, IDisposable
     }
 
     #endregion // --- Orchestration & Updates ---
-    
     #region Jump To Line State
-
-    // Input string from the TextBox, bound TwoWay
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(JumpToLineCommand))]
     private string _targetOriginalLineNumberInput = string.Empty;
 
-    // Status message for jump feedback (e.g., "Line not found")
     [ObservableProperty]
     private string? _jumpStatusMessage;
 
-    // Used to trigger visual feedback (e.g., flash background red)
     [ObservableProperty]
     private bool _isJumpTargetInvalid;
-
     #endregion
 
     #region // --- Lifecycle Management ---
@@ -1155,8 +945,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         if (disposing)
         {
-            _activeProfileNameSubscription?.Dispose(); // Dispose the name listener
-            _disposables.Dispose(); // Disposes processor and subscriptions
+            _activeProfileNameSubscription?.Dispose();
+            _disposables.Dispose(); // Disposes processor, subscriptions, and log source
         }
     }
 
@@ -1165,15 +955,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         // 1. Clear the busy state collection (good practice)
         _uiContext.Post(_ => CurrentBusyStates.Clear(), null);
-
-        // 2. Save settings before stopping services/disposing
         SaveCurrentSettings();
-
-        // 3. Stop background services
-        _logTailerService?.StopTailing();
-
-        // 4. Dispose resources managed by this ViewModel
-        Dispose();
+         _logSource?.StopMonitoring(); // Explicitly stop monitoring before disposing
+        Dispose(); // Calls the main Dispose method which cleans everything else
     }
     #endregion // --- Lifecycle Management ---
 }

@@ -14,7 +14,7 @@ namespace Logonaut.Core;
 public class LogFilterProcessor : ILogFilterProcessor
 {
     private readonly LogDocument _logDocument; // Reference provided by ViewModel
-    private readonly ILogTailerService _logTailerService;
+    private readonly ILogSource _logSource;
     private readonly SynchronizationContext _uiContext;
     private readonly IScheduler _backgroundScheduler;
 
@@ -28,27 +28,27 @@ public class LogFilterProcessor : ILogFilterProcessor
     private Subject<(IFilter filter, int contextLines)>? _filterChangeTriggerSubject;
     private IDisposable? _logSubscription;
 
-    private bool _isInitialLoadInProgress = false; // Flag remains useful
+    private bool _isInitialLoadInProgress = false;
     private readonly object _stateLock = new object();
 
     private readonly Action<string> _addLineToDocumentCallback;
 
-    // Config Constants
+    // Config Constants  for throttling, but not used currently.
     private const int LineBufferSize = 50;
     private readonly TimeSpan _lineBufferTimeSpan = TimeSpan.FromMilliseconds(100);
-    private readonly TimeSpan _filterDebounceTime = TimeSpan.FromMilliseconds(300); // Debounce for manual changes
+    private readonly TimeSpan _filterDebounceTime = TimeSpan.FromMilliseconds(300);
 
     public IObservable<FilteredUpdate> FilteredUpdates => _filteredUpdatesSubject.AsObservable();
     public IObservable<long> TotalLinesProcessed => _totalLinesSubject.AsObservable();
 
     public LogFilterProcessor(
-        ILogTailerService logTailerService,
+        ILogSource logSource, // Changed parameter type
         LogDocument logDocument,
         SynchronizationContext uiContext,
         Action<string> addLineToDocumentCallback,
         IScheduler? backgroundScheduler = null)
     {
-        _logTailerService = logTailerService;
+        _logSource = logSource;
         _logDocument = logDocument;
         _uiContext = uiContext;
         _backgroundScheduler = backgroundScheduler ?? TaskPoolScheduler.Default;
@@ -64,33 +64,27 @@ public class LogFilterProcessor : ILogFilterProcessor
     {
         _logSubscription?.Dispose(); // Clean up previous if any
 
-        // Pipeline for new lines from the tailer. Responsibility:
+        // Pipeline for new lines from logSource. Responsibilities:
         // 1. Receive a new line.
         // 2. Tell MainViewModel (via callback) to add it to the canonical LogDoc.
         // 3. Trigger the other pipeline (the full refilter pipeline) to re-evaluate everything.
-        _logSubscription = _logTailerService.LogLines
+        _logSubscription = _logSource.LogLines
             .Select(line => {
-                // 1. Assign index (still useful for total count)
                 var newIndex = Interlocked.Increment(ref _currentLineIndex);
                 _totalLinesSubject.OnNext(_totalLinesSubject.Value + 1);
-
-                // 2. Invoke the CALLBACK to add the line to the MainViewModel's LogDoc
-                _addLineToDocumentCallback?.Invoke(line); // <<< USE CALLBACK
-
-                // Return value doesn't matter much, maybe just the line for debugging
-                return line; // Or Unit.Default
+                _addLineToDocumentCallback?.Invoke(line);
+                return line;
             })
-            .ObserveOn(_backgroundScheduler) // Ensure trigger happens on background
-            .Where(_ => { lock (_stateLock) return !_isInitialLoadInProgress; }) // Prevent triggers during initial load
+            .ObserveOn(_backgroundScheduler)
+            .Where(_ => { lock (_stateLock) return !_isInitialLoadInProgress; })
             .Subscribe(
-                lineText => { // Parameter is now just the line text (or Unit)
-                    // 3. Trigger the full refilter pipeline
-                    Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: New line '{lineText.Substring(0, Math.Min(lineText.Length, 20))}...' detected. Triggering full refilter check via callback.");
+                lineText => {
+                    Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: New line '{lineText.Substring(0, Math.Min(lineText.Length, 20))}...' detected from ILogSource. Triggering full refilter check.");
                     _filterChangeTriggerSubject?.OnNext((_currentFilter, _currentContextLines));
                 },
-                ex => HandlePipelineError("New Line Processing Error", ex)
+                ex => HandlePipelineError("Log Source Processing Error", ex) // Updated error context message
             );
-        _disposables.Add(_logSubscription); // Add to disposables
+        _disposables.Add(_logSubscription);
 
         var filterChangeTrigger = new Subject<(IFilter filter, int contextLines)>();
         _disposables.Add(filterChangeTrigger);
@@ -109,17 +103,15 @@ public class LogFilterProcessor : ILogFilterProcessor
             .Throttle(_filterDebounceTime, _backgroundScheduler)
             .Select(settingsTuple => {
                     Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Starting ApplyFullFilter triggered by Setting Change OR New Line.");
-                    // ApplyFullFilter reads the LogDocument updated via callback
                     var result = ApplyFullFilter(settingsTuple.Item1, settingsTuple.Item2);
                     Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Finished ApplyFullFilter. Got {result.Count} lines.");
 
-                    // If this was the FIRST filter run (after Reset), update TotalLines count
                     bool wasInitial = false;
-                    long docCount = 0; // Capture count thread-safely if needed
+                    long docCount = 0;
                     lock(_stateLock) { wasInitial = _isInitialLoadInProgress; }
                     if (wasInitial)
                     {
-                        docCount = _logDocument.Count; // Read count *after* ApplyFullFilter reads it
+                        docCount = _logDocument.Count;
                         _totalLinesSubject.OnNext(docCount);
                         Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Updated TotalLinesSubject after initial filter: {docCount}");
                     }
@@ -158,7 +150,6 @@ public class LogFilterProcessor : ILogFilterProcessor
         return tmp;
     }
 
-    // Called by ViewModel after Reset() and ChangeFileAsync() complete
     public void UpdateFilterSettings(IFilter newFilter, int contextLines)
     {
         _currentFilter = newFilter ?? new TrueFilter();
@@ -173,18 +164,19 @@ public class LogFilterProcessor : ILogFilterProcessor
     {
         lock (_stateLock)
         {
-            _isInitialLoadInProgress = true; // Set flag for the *next* UpdateFilterSettings call
+            _isInitialLoadInProgress = true;
         }
-        Interlocked.Exchange(ref _currentLineIndex, 0); // Reset index for *new* lines
-        // DO NOT CLEAR _logDocument here - ViewModel manages it
-        _totalLinesSubject.OnNext(0); // Reset displayed count
+        Interlocked.Exchange(ref _currentLineIndex, 0);
+        // ViewModel manages LogDocument clearing via source interaction
+        _totalLinesSubject.OnNext(0); // Reset displayed count immediately
         Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Reset() called. _isInitialLoadInProgress=true");
     }
 
     private void HandlePipelineError(string contextMessage, Exception ex)
     {
         System.Diagnostics.Debug.WriteLine($"{contextMessage}: {ex}");
-        _filteredUpdatesSubject.OnError(ex);
+        // Ensure error is propagated to UI thread safely
+        _uiContext.Post(_ => _filteredUpdatesSubject.OnError(ex), null);
     }
 
     public void Dispose()
@@ -192,26 +184,26 @@ public class LogFilterProcessor : ILogFilterProcessor
         // Dispose _filterChangeTriggerSubject first if needed
         _filterChangeTriggerSubject?.OnCompleted();
         _filterChangeTriggerSubject?.Dispose();
-        _filterChangeTriggerSubject = null; // Prevent reuse after disposal
+        _filterChangeTriggerSubject = null;
 
         // Explicitly complete the output subjects BEFORE disposing subscriptions
         // Check if not null and not already disposed (good practice)
         if (_filteredUpdatesSubject != null && !_filteredUpdatesSubject.IsDisposed)
         {
             _filteredUpdatesSubject.OnCompleted();
-            _filteredUpdatesSubject.Dispose(); // Dispose the subject itself
+            _filteredUpdatesSubject.Dispose();
         }
 
         if (_totalLinesSubject != null && !_totalLinesSubject.IsDisposed)
         {
             _totalLinesSubject.OnCompleted();
-            _totalLinesSubject.Dispose(); // Dispose the subject itself
+            _totalLinesSubject.Dispose();
         }
 
-
-        // Now dispose the container which holds the subscriptions
+        // Disposes subscriptions (_logSubscription, fullRefilterSubscription)
         _disposables.Dispose();
 
-        // No need to dispose _logSubscription separately, _disposables handles it.
+        // IMPORTANT: Processor should NOT dispose the _logSource it received.
+        // The owner (MainViewModel) is responsible for disposing the log source.
     }
 }
