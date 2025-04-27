@@ -17,3 +17,5 @@
     *   Use exceptions for unepxected programming errors, but not for user errors.
     *   Avoid using a pop-up dialog with error messages when the user is doing something wrong. Instead, use techniques to disable controls that shouldn't be used, depending on state.
 * Use the new format where you define the namespace as "namespace xxxx;", and then the rest of the file belongs to that namespace (rather than the old where the content of the namespace was inside a block).
+* The sourcode code shall, where possible, contain a comment with a reference to the requirement ID. Do not remove these IDs when source code is updated.
+* Every unit test shall also, if possible, have a comment reference to the requirement ID.

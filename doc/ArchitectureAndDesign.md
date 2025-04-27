@@ -1,72 +1,47 @@
 # Logonaut: Architecture and Design
 
-This document describes the specific architectural choices and high-level design decisions for the Logonaut application. For general design principles, see `GeneralDesignPrinciples.md`.
+This document provides a high-level overview of the Logonaut application's architecture, emphasizing how the design meets its core requirements. For general design principles, see `GeneralDesignPrinciples.md`.
 
-## Module Overview
+## Core Principles & Patterns
 
-Logonaut is organized into several independent modules:
+Logonaut's design prioritizes **modularity**, **testability**, **responsiveness**, and **maintainability** through several key patterns:
 
-*   **Logonaut.UI:** Contains the WPF user interface (Views, ViewModels using CommunityToolkit.Mvvm), custom controls, attached properties for AvalonEdit integration, and UI services (like file dialogs). Manages the presentation layer and user interaction logic. Key helpers include:
-    *   `AvalonEditHelper`: Attached properties for binding text, selection, and dynamic highlighting rules.
-    *   `OriginalLineNumberMargin`: Custom margin displaying original log line numbers.
-    *   `OverviewRulerMargin`: Custom scrollbar replacement showing document overview and markers.
-    *   `ChunkSeparatorRenderer`: Draws visual lines between non-contiguous log chunks.
-    *   `SelectedIndexHighlightTransformer`: `DocumentColorizingTransformer` for highlighting a specific selected line.
-    *   `BusyIndicator`: Custom control displaying animations for background activity. Activated by adding state tokens to its bound `ActiveStates` collection (replaces `AnimatedSpinner`). Visuals currently default to a spinning arc, planned for evolution.
-*   **Logonaut.Core:** Provides core business logic, including the `FilterEngine` for applying filter rules and the reactive `LogFilterProcessor` for orchestrating log processing and filtering. Also includes settings management.
-*   **Logonaut.Filters:** Implements the filtering system, defining various filter types (`SubstringFilter`, `RegexFilter`, `AndFilter`, `OrFilter`, `NorFilter`, `TrueFilter`) and serialization logic for filter trees.
-*   **Logonaut.LogTailing:** Handles asynchronous log file reading and tailing using `LogTailer` and `LogTailerService`, exposing new log lines as an `IObservable<string>` via Reactive Extensions (Rx.NET).
-*   **Logonaut.Theming:** Manages application theming (Light/Dark modes) and associated styles.
-*   **Logonaut.Common:** Contains common data structures (`LogDocument`, `FilteredLogLine`, `LogonautSettings`, `FilterProfile`) shared across modules.
-*   **Tests:** Unit tests for each module using MSTest.
+*   **Modular Design:** The application is divided into distinct projects (`.csproj`), each handling specific concerns (UI, Core Logic, Filtering, Data Handling, Theming). This separation allows for independent development, testing, and replacement of components.
+*   **MVVM (Model-View-ViewModel):** The `Logonaut.UI` layer utilizes MVVM to separate UI presentation (Views) from application logic and state (ViewModels), enhancing testability and maintainability. `CommunityToolkit.Mvvm` facilitates this pattern.
+*   **Dependency Inversion Principle:** Key services (Settings, File Dialogs, Log Source, Filtering Logic) are accessed through interfaces (`ISettingsService`, `IFileDialogService`, `ILogSource`, `ILogFilterProcessor`), allowing for flexible implementation and enabling mocking for unit tests.
+*   **Reactive Programming (Rx.NET):** The `LogFilterProcessor` leverages Rx.NET to handle asynchronous log updates and filter changes reactively. This includes debouncing UI triggers and orchestrating background processing to ensure UI responsiveness, meeting the requirement for handling large files and dynamic updates smoothly.
+*   **Asynchronous Operations:** File I/O (`Logonaut.LogTailing`) and computationally intensive filtering (`LogFilterProcessor`, `FilterEngine`) are performed on background threads, preventing UI freezes. `SynchronizationContext` is used to safely marshal results back to the UI thread.
+
+## Module Responsibilities (High-Level)
+
+*   **Logonaut.UI:** Implements the WPF user interface, including ViewModels that manage UI state and orchestrate interactions. It extends AvalonEdit with custom controls and attached properties to meet specific display requirements.
+*   **Logonaut.Core:** Houses the core business logic, including the reactive filtering pipeline (`LogFilterProcessor`), the synchronous filter application logic (`FilterEngine`), log source abstraction (`ILogSource`), and settings service interfaces/implementations.
+*   **Logonaut.Filters:** Defines the structure and logic for various filter types and their composition.
+*   **Logonaut.LogTailing:** Provides concrete implementations for `ILogSource` (real-time file monitoring and simulation).
+*   **Logonaut.Common:** Contains shared data structures (`LogDocument`, `FilterProfile`, etc.), ensuring consistency across modules.
+*   **Logonaut.Theming:** Manages switchable application themes (Light/Dark).
+*   **Tests:** Provides unit tests for validating the functionality of each module.
+
+## Key Mechanisms & Design Choices
+
+*   **Log Processing & Tailing:** Log input is abstracted via `ILogSource`. `FileLogSource` handles file reading and real-time tailing asynchronously. The central `LogDocument` provides thread-safe storage for original log lines. This design supports both file monitoring and pasted content while keeping I/O off the UI thread.
+*   **Dynamic Filtering:**
+    *   Named **Filter Profiles** (`FilterProfile` within `LogonautSettings`) allow users to save and switch between complex filter configurations.
+    *   The `LogFilterProcessor` subscribes to log source updates and filter setting changes from the `MainViewModel`. It uses **debouncing** (`Throttle`) to manage rapid updates and performs **full re-filtering** on a background thread against the current `LogDocument` snapshot.
+    *   Results are pushed back to the `MainViewModel` as `FilteredUpdate` objects for atomic UI updates. This ensures the UI remains responsive even during intensive filtering or rapid log input.
+*   **Log Display & Highlighting:**
+    *   The **AvalonEdit** control is extended significantly to meet specific requirements:
+        *   **Custom Margins** (`OriginalLineNumberMargin`, `OverviewRulerMargin`) display original line numbers and provide a document overview with markers, decoupling this view logic from the core editor.
+        *   **Custom Renderers** (`ChunkSeparatorRenderer`, `SelectedIndexHighlightTransformer`) handle visual cues for non-contiguous filtered data and selected line background highlighting.
+        *   **Attached Properties** (`AvalonEditHelper`) bridge the gap between ViewModel state (search terms, filter patterns, selection requests) and AvalonEdit's API for highlighting and selection, encapsulating view-specific logic.
+        *   A **programmatic highlighting definition** (`CustomHighlightingDefinition`) allows dynamic rule updates based on user settings (timestamps, search, filter matches).
+*   **State Management & UI Interaction:**
+    *   `MainViewModel` acts as the central orchestrator, managing application state (settings, profiles, current filtered data, search state, busy status).
+    *   **Busy states** are managed via an `ObservableCollection<object>` (`CurrentBusyStates`) bound to custom indicators (`BusyIndicator`, overlay), providing clear feedback during background tasks like loading and filtering.
+    *   UI services like `IFileDialogService` abstract direct UI dependencies.
+    *   User interactions (scrolling, keyboard shortcuts) are handled in `MainWindow.xaml.cs` or via Commands to manage UI state like **disabling Auto-Scroll**.
+*   **Persistence:** The `ISettingsService` (`FileSystemSettingsService`) handles serialization of `LogonautSettings` (including filter profiles using `TypeNameHandling.All` for polymorphism) to JSON, ensuring user configurations are preserved across sessions.
 
 ## Graphical Identity
 
-### Application Icon Concept: Flowing Neon Lines
-
-*   **Core Idea:** The primary application icon (.ico file) will feature a stylized representation of log lines rendered in the application's primary neon accent color (e.g., cyan/blue).
-*   **Visual:** These lines should appear dynamic, perhaps slightly curved, wavy, or like a data stream, suggesting live tailing and analysis.
-*   **Context:** This could be integrated with a simple, modern document shape or a terminal prompt symbol (>_) to provide context.
-*   **Implementation:** A multi-resolution `.ico` file containing standard sizes (16x16, 32x32, 48x48, 256x256) will be created to ensure clarity across different Windows UI contexts (Taskbar, Explorer, Title Bar, etc.).
-
-### Extended Graphical Identity
-
-The "Flowing Neon Lines" motif and the core neon accent color will be consistently applied in other areas to reinforce the application's visual identity:
-
-*   **Splash Screen:** If implemented, it will feature the main logo prominently against a theme-appropriate background (dark or light).
-*   **About Dialog:** The dialog will display the application icon alongside version and copyright information.
-*   **Busy Indicator:** The custom `BusyIndicator` control will eventually incorporate the "Flowing Neon Lines" concept or other state-specific animations. Different busy states (e.g., file loading vs. filtering) will be represented by distinct visual feedback (overlay or external indicator). See [BusyIndicatorPlan.md](BusyIndicatorPlan.md) for evolution details.
-*   **Installer:** Visual assets used in the installer will use the application logo and neon branding.
-*   **(Future) File Associations:** Icons for associated file types could incorporate the flowing lines motif with a document symbol.
-
-## Key Design Decisions
-
-### Filtering System
-
-*   **Named Filter Profiles:** Users can create, save, name, and switch between multiple distinct filter configurations (profiles). This allows tailoring filters for different log types or analysis tasks.
-*   **Profile Management UI:** A `ComboBox` located in the filter panel is used for selecting the active profile. Associated buttons allow creating, renaming, and deleting profiles.
-*   **Reactive Processing:** Filtering is handled reactively using `System.Reactive` within the `LogFilterProcessor`. This service manages background processing, full re-filters on configuration changes or new data arrival, debounced triggers, and safe marshalling of results to the UI thread. See [ReactiveIncrementalFiltering.md](ReactiveIncrementalFiltering.md) for details.
-*   **Filter Engine:** The `FilterEngine` provides the core synchronous logic for applying a given filter tree and context lines to a snapshot of the log document.
-
-### Highlighting System
-
-*   **Programmatic Control:** Highlighting rules (timestamps, levels, filter matches, search terms) are managed programmatically via a custom `IHighlightingDefinition` (`CustomHighlightingDefinition`).
-*   **Selected Line Highlighting:** The background highlighting for the user-selected line is implemented using a custom `DocumentColorizingTransformer` (`SelectedIndexHighlightTransformer`), integrating directly with AvalonEdit's rendering pipeline.
-*   **Dynamic Updates:** Highlighting updates in real-time as filter configurations change or search terms are entered.
-*   **Extensibility:** The system is designed to allow adding new types of highlighting rules easily.
-
-### Log Display
-
-*   **AvalonEdit:** The powerful AvalonEdit control is used for displaying log content, providing features like virtualization and syntax highlighting support.
-*   **Custom Margins:**
-    *   `OriginalLineNumberMargin`: Displays the original line number from the source file, driven by `FilteredLogLine` data. See [LineNumberManagement.md](LineNumberManagement.md).
-    *   `OverviewRulerMargin`: Replaces the standard vertical scrollbar, providing a visual map of the filtered document with markers for search results (and potentially other points of interest). It controls scrolling via events. See [OverviewRulerFlow.md](OverviewRulerFlow.md).
-    *   `ChunkSeparatorRenderer`: Draws visual lines between non-contiguous log chunks resulting from filtering with context.
-
-### Persistence
-
-*   **JSON Settings:** Application settings, including all filter profiles and the last active profile name, are serialized to a JSON file (`settings.json`) in the user's local application data folder (`%LocalAppData%\Logonaut`). Newtonsoft.Json is used for serialization, handling the `IFilter` polymorphism via `TypeNameHandling.All`.
-
-### Data Flow
-
-*   Detailed data flow for log processing and filtering is described in [LogFileProcessingFlow.md](LogFileProcessingFlow.md).
+The "Flowing Neon Lines" concept provides a consistent visual identity across the application icon, busy indicators, loading overlay, and potentially future elements, reinforcing the application's focus on dynamic log data. Theming ensures adaptability to user preferences (Light/Dark).

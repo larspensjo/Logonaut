@@ -2,76 +2,103 @@
 
 This document outlines the functional requirements for the Logonaut application from a user's perspective.
 
+The reuqirement ID is a unique ID that can be referenced from the source code and other documents. The version number is incremented when a requirement is updated.
+
 ## 1. Core Log Viewing
 
-*   **File Monitoring:** The application must allow the user to select a log file via a menu, and then continuously monitor that file for changes, updating the display in real-time as new lines are added.
-*   **Paste Input:** The user must be able to paste log content directly from the clipboard (e.g., using Ctrl+V) to view it without saving it to a file first.
-*   **Large File Handling:** The application must remain responsive and usable even when viewing very large log files (hundreds of megabytes or more).
-*   **Scrolling:** Standard vertical scrolling through the displayed log content must be supported (e.g., via mouse wheel, scrollbar interaction, PgUp/PgDn).
-*   **File Reset Handling:** If the monitored log file is reset (e.g., truncated), the application should ideally detect this, potentially clear the display, and continue monitoring from the beginning of the reset file. *(Current implementation might require reopening)*.
-*   **File Unavailability:** If the log file becomes unavailable (e.g., deleted, network drive disconnects), the application should handle this gracefully (e.g., stop tailing, display a message) without crashing.
+*   [ReqFileMonitorLiveUpdatev1] **File Monitoring:** The application must allow the user to select a log file via a menu (`File > Open Log File` or `Ctrl+O`) and then continuously monitor that file for changes, updating the display in real-time as new lines are added.
+*   [ReqPasteFromClipboardv1] **Paste Input:** The user must be able to paste log content directly from the clipboard (using `Ctrl+V`) to view it without saving it to a file first.
+*   [ReqLargeFileResponsivev1] **Large File Handling:** The application must remain responsive and usable even when viewing very large log files. Background processing should be used for filtering and loading.
+*   [ReqStandardScrollingv1] **Scrolling:** Standard vertical scrolling must be supported (mouse wheel, keyboard: PgUp/PgDn, Arrows, Home/End).
+*   [ReqOverviewScrollbarMapv1] **Overview Scrollbar:** A custom overview scrollbar must provide visual document mapping and scroll control.
+*   [ReqFileResetHandlingv1] **File Reset Handling:** If the monitored log file is reset (e.g., truncated), the application should ideally detect this, potentially clear the display, and continue monitoring from the beginning of the reset file. *(Current implementation might require reopening)*.
+*   [ReqFileUnavailableHandlingv1] **File Unavailability:** If the log file becomes unavailable (e.g., deleted, network drive disconnects), the application should handle this gracefully (e.g., stop tailing, display a message) without crashing.
 
 ## 2. Display and Appearance
 
-*   **Real-Time Updates:** The log display area must update automatically as new relevant log entries arrive or when filtering/settings change.
-*   **Original Line Numbers:** Line numbers displayed next to log entries must correspond to their original line number in the source file, regardless of filtering. This margin should be toggleable.
-*   **Timestamp Highlighting:** The application should provide an option to automatically detect and visually distinguish common timestamp patterns at the beginning of lines for improved readability.
-*   **Readability Customization:** The user should be able to adjust the font size for the log display. Color schemes should be adjustable via selectable themes (e.g., Light/Dark).
-*   **Theming:** The application must provide at least a Light and a Dark theme option.
-*   **Window Management:** The application window must be resizable.
-*   **Status Bar:** The application must display a status bar showing:
-    *   The total number of lines read from the source log.
-    *   The number of lines currently visible after filtering.
-    *   Both values must update dynamically as the log is processed and filters change.
+*   [ReqDisplayRealTimeUpdatev1] **Real-Time Updates:** The log display area must update automatically as new relevant log entries arrive or when filtering/settings change.
+*   [ReqDisplayOriginalLineNumbersv1] **Original Line Numbers:** Line numbers displayed next to log entries must correspond to their **original line number** in the source file, regardless of filtering.
+*   [ReqToggleLineNumbersv1] **Toggleable Line Numbers:** The original line number margin must be toggleable (`Line Numbers` checkbox).
+*   [ReqHighlightTimestampsv1] **Timestamp Highlighting:** The application must provide an option (`Highlight Timestamps` checkbox) to automatically detect and visually distinguish common timestamp patterns at the beginning of lines.
+*   [ReqHighlightSelectedLinev1] **Selected Line Highlighting:** The background of the log line currently selected by the user (via mouse click) must be visually highlighted.
+*   [ReqAdjustFontSizev1] **Readability Customization:** The user must be able to adjust the font size for the log display.
+*   [ReqSelectableThemesv1] **Theming Selection:** Color schemes must be adjustable via selectable themes.
+*   [ReqThemeOptionsLightDarkv1] **Theme Options:** The application must provide at least a **Light ("Clinical Neon")** and a **Dark ("Neon Night")** theme option, selectable via the `Theme` menu.
+*   [ReqThemedTitleBarv1] **Theme Title Bar:** The application should attempt to adapt the window's title bar to the selected theme on compatible Windows versions.
+*   [ReqResizableWindowv1] **Window Resizing:** The application window must be resizable.
+*   [ReqSplitPanelLayoutv1] **Panel Layout:** The main view must consist of **two primary panels** (Filters on left, Log View/Search on right) separated by a draggable splitter.
+*   [ReqStatusBarDisplayv1] **Status Bar Display:** The application must display a status bar.
+*   [ReqStatusBarTotalLinesv1] **Status Bar - Total Lines:** The status bar must show the **total number of lines** read from the source log, updated dynamically.
+*   [ReqStatusBarFilteredLinesv1] **Status Bar - Filtered Lines:** The status bar must show the **number of lines currently visible** after filtering, updated dynamically.
+*   [ReqStatusBarSelectedLinev1] **Status Bar - Selected Line:** The status bar must show the **original line number** of the currently selected log line (or '-' if none selected), updated dynamically.
+*   [ReqGeneralBusyIndicatorv1] **Busy Indicator - General:** A general **busy indicator** (e.g., spinning icon) must be visible during background operations like filtering.
+*   [ReqLoadingOverlayIndicatorv1] **Busy Indicator - Loading Overlay:** A distinct **overlay animation** (e.g., subtle scanlines) must appear directly over the log display area during the initial file loading phase.
 
 ## 3. Filtering System
 
 *   **Filter Profiles:**
-    *   The user must be able to create multiple, distinct filter configurations, referred to as "Filter Profiles".
-    *   Each profile must have a user-defined name.
-    *   The user must be able to select which profile is currently **active** using a dropdown list.
-    *   The application must provide controls to **Create**, **Rename**, and **Delete** filter profiles.
+    *   [ReqCreateMultipleFilterProfilesv1] The user must be able to create multiple, distinct filter configurations, referred to as "Filter Profiles".
+    *   [ReqFilterProfileNamingv1] Each profile must have a user-defined name.
+    *   [ReqFilterProfileRenameInlinev1] Profile renaming must be possible **inline** within the profile selection area.
+    *   [ReqFilterProfileSelectActivev1] The user must be able to select which profile is currently **active** using a `ComboBox`.
+    *   [ReqFilterProfileManageCRUDv1] The application must provide controls (`New`, `Rename`, `Delete` buttons) to manage filter profiles.
 *   **Filter Rules (within a profile):**
-    *   Within the active profile, the user must be able to define filter rules based on:
-        *   Exact substring matching.
-        *   Regular expression pattern matching.
-    *   The user must be able to combine these rules using logical **AND**, **OR**, and **NOR** operators.
-    *   These rules must be manageable in a **hierarchical tree structure** to allow for complex conditions (e.g., `(A or (B and not C))`).
+    *   [ReqFilterRuleSubstringv1] Within the active profile, the user must be able to define filter rules based on **exact substring** matching.
+    *   [ReqFilterRuleRegexv1] Within the active profile, the user must be able to define filter rules based on **regular expression** pattern matching.
+    *   [ReqFilterRuleCombineLogicalv1] The user must be able to combine these rules using logical **AND**, **OR**, and **NOR** operators.
+    *   [ReqFilterRuleTreeStructurev1] These rules must be manageable in a **hierarchical tree structure** displayed in the filter panel.
+    *   [ReqFilterNodeManageButtonsv1] Adding, removing, and editing filter nodes must be done via dedicated buttons operating on the selected node in the tree.
+    *   [ReqFilterNodeEditInlinev1] Editing filter values (substrings/regex) must happen **inline** within the tree view.
 *   **Filtering Behavior:**
-    *   The log display must show only the lines matching the rules of the **active** filter profile.
-    *   The application must provide a setting (global, per profile) to include a specified number of **context lines** before and after each matching line.
-    *   Text segments that cause a line to match a filter rule (substrings or regex matches) should be visually highlighted in the output (e.g., background color).
-    *   Individual filter rules (nodes) within the active profile's tree must be toggleable (enabled/disabled) without removing them.
-*   **Dynamic Updates:** The filtered log view must update automatically and efficiently whenever the active filter profile is changed or the rules/settings within the active profile are modified.
-*   **Persistence:** All created filter profiles (names and structures) must be saved when the application closes and reloaded on startup. The application must remember and automatically select the last active profile upon restarting.
+    *   [ReqFilterDisplayMatchingLinesv1] The log display must show only the lines matching the rules of the **active** filter profile.
+    *   [ReqFilterContextLinesv1] The application must provide a setting (`Context Lines` input with increment/decrement buttons) to include a specified number of **context lines** before and after each matching line.
+    *   [ReqFilterHighlightMatchesv1] Text segments that cause a line to match a filter rule (substrings or regex matches) must be visually highlighted in the output (distinct background color).
+    *   [ReqFilterNodeToggleEnablev1] Individual filter rules (nodes) within the active profile's tree must be toggleable (enabled/disabled) via a `CheckBox` next to the rule, without removing them.
+*   [ReqFilterDynamicUpdateViewv1] **Dynamic Filter Updates:** The filtered log view must update automatically and efficiently whenever the active filter profile is changed or the rules/settings within the active profile are modified.
+*   **Persistence:**
+    *   [ReqPersistFilterProfilesv1] All created filter profiles (names and structures) must be saved when the application closes and reloaded on startup.
+    *   [ReqPersistLastActiveProfilev1] The application must remember and automatically select the last active profile upon restarting.
 
 ## 4. Search Functionality
 
-*   **Text Search:** The user must be able to enter text to search for within the currently displayed (filtered) log content.
-*   **Highlighting:** All occurrences of the search term must be visually highlighted in the log display, distinct from filter highlighting.
-*   **Navigation:** Buttons must be provided to navigate to the **Previous** and **Next** search result occurrence.
-*   **Status:** A status indicator should display the number of matches found and the current match index (e.g., "Match 3 of 15").
-*   **Case Sensitivity:** An option must be provided to toggle case sensitivity for the search.
+*   [ReqSearchTextEntryv1] **Text Search:** The user must be able to enter text (`Ctrl+F` to focus) to search for within the currently displayed (filtered) log content.
+*   [ReqSearchHighlightResultsv1] **Highlighting Search Results:** All occurrences of the search term must be visually highlighted in the log display (distinct from filter highlighting).
+*   [ReqSearchRulerMarkersv1] **Overview Ruler Search Markers:** Search results must be marked on the overview scrollbar.
+*   [ReqSearchNavigateResultsv1] **Search Navigation:** Buttons (`Previous`/`Next`) and keyboard shortcuts (`F3` for Next, `Shift+F3` for Previous) must be provided to navigate between search results.
+*   [ReqSearchSelectedTextShortcutv1] **Search Selected Text:** The user must be able to press `Ctrl+F3` to automatically search for the text currently selected in the log display.
+*   [ReqSearchStatusIndicatorv1] **Search Status:** A status indicator must display the number of matches found and the current match index (e.g., "Match 3 of 15", "Phrase not found").
+*   [ReqSearchCaseSensitiveOptionv1] **Case Sensitivity Option:** An option (`Case Sensitive` checkbox) must be provided to toggle case sensitivity for the search.
 
 ## 5. User Interaction
 
-*   **Filter Controls:** A dedicated panel must provide intuitive controls for:
-    *   Selecting the active filter profile.
-    *   Managing profiles (Create, Rename, Delete).
-    *   Viewing and interacting with the active profile's filter tree (expand/collapse).
-    *   Adding, removing, and editing filter nodes within the active tree.
-    *   Toggling the enabled state of filter nodes.
-*   **Keyboard Shortcuts:** Common actions should be accessible via standard keyboard shortcuts (e.g., `Ctrl+F` for search focus, potentially others for navigation).
-*   **Responsiveness:** The UI must remain responsive during filtering and log updates, especially on large files. A visual indicator should be shown if a filtering operation takes significant time.
+*   [ReqFilterControlsPanelv1] **Filter Controls Panel:** A dedicated panel must provide intuitive controls for profile and filter rule management as described in section 3.
+*   [ReqLineSelectionClickv1] **Line Selection:** Clicking on a line number or log entry in the display area must select that line, highlighting it and updating the selected line number in the status bar.
+*   [ReqGoToLineInputBoxv1] **Go To Line Input:** The user must be able to enter an original line number into a dedicated text box (`Ctrl+G` to focus) in the status bar.
+*   [ReqGoToLineExecuteJumpv1] **Go To Line Execution:** Pressing Enter (or clicking a button) must jump to (select and scroll to) the entered line number if it exists in the *filtered* view.
+*   [ReqGoToLineFeedbackNotFoundv1] **Go To Line Feedback:** Feedback must indicate if the entered line number is not found in the filtered view.
+*   **Auto Scroll:**
+    *   [ReqAutoScrollOptionv1] An "Auto Scroll" option (`CheckBox`) must be available to automatically scroll to the end of the log view when new lines are added.
+    *   [ReqAutoScrollDisableOnManualv1] Auto Scroll must be **automatically disabled** if the user manually scrolls the log view using the mouse wheel (scrolling up), keyboard navigation keys (PgUp/Dn, Arrows, Home/End), or by interacting with the scrollbar/overview ruler.
+*   **Keyboard Shortcuts:** Common actions must be accessible via standard keyboard shortcuts:
+    *   [ReqShortcutOpenFilev1] `Ctrl+O`: Open File (Expected, check implementation)
+    *   [ReqShortcutPasteLogv1] `Ctrl+V`: Paste Log Content
+    *   [ReqShortcutFocusSearchv1] `Ctrl+F`: Focus Search Input
+    *   [ReqShortcutFocusGoToLinev1] `Ctrl+G`: Focus Go To Line Input
+    *   [ReqShortcutSearchSelectedv1] `Ctrl+F3`: Search for Selected Text
+    *   [ReqShortcutFindNextv1] `F3`: Find Next Search Result
+    *   [ReqShortcutFindPreviousv1] `Shift+F3`: Find Previous Search Result
+*   [ReqUIResponsivenessv1] **Responsiveness:** The UI must remain responsive during filtering and log updates, using background processing and visual indicators for long operations.
 
 ## 6. Configuration and Persistence
 
-*   **Load/Save:** Application settings must be loaded at startup and saved at shutdown.
+*   [ReqSettingsLoadSavev1] **Load/Save Settings:** Application settings must be loaded at startup and saved automatically on change and at shutdown.
 *   **Saved Settings:** Saved settings must include:
-    *   All defined filter profiles (names and filter trees).
-    *   The name/identifier of the last active filter profile.
-    *   The context line setting.
-    *   Display options (show line numbers, highlight timestamps).
-    *   Search options (case sensitivity).
-    *   Selected theme.
+    *   [ReqPersistSettingFilterProfilesv1] All defined filter profiles (names and filter trees).
+    *   [ReqPersistSettingLastProfilev1] The name/identifier of the last active filter profile.
+    *   [ReqPersistSettingContextLinesv1] The context line setting.
+    *   [ReqPersistSettingShowLineNumsv1] Display options (show line numbers toggle state).
+    *   [ReqPersistSettingHighlightTimev1] Display options (highlight timestamps toggle state).
+    *   [ReqPersistSettingSearchCasev1] Search options (case sensitivity toggle state).
+    *   [ReqPersistSettingAutoScrollv1] **Auto scroll to tail toggle state.**
+    *   [ReqPersistSettingThemev1] Selected theme.
     *   *(Future: Last viewed file/position, window size/location)*.
