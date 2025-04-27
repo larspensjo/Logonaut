@@ -81,7 +81,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         if (initialLogSource != null)
             _logSource = initialLogSource; // Allow injection for tests to override
         else if (useSimulator) {
-            _logSource = new SimulatorLogSource(linesPerSecond: 4); // Example: 50 lines/sec
+            _logSource = new SimulatorLogSource(linesPerSecond: 8); // Example: 50 lines/sec
             _logSource.StartMonitoring();
         } else
             _logSource = new FileLogSource(); // Default to file source

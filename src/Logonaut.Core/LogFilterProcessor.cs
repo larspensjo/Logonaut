@@ -36,7 +36,7 @@ public class LogFilterProcessor : ILogFilterProcessor
     // Config Constants  for throttling, but not used currently.
     private const int LineBufferSize = 50;
     private readonly TimeSpan _lineBufferTimeSpan = TimeSpan.FromMilliseconds(100);
-    private readonly TimeSpan _filterDebounceTime = TimeSpan.FromMilliseconds(300);
+    private readonly TimeSpan _filterDebounceTime = TimeSpan.FromMilliseconds(100);
 
     public IObservable<FilteredUpdate> FilteredUpdates => _filteredUpdatesSubject.AsObservable();
     public IObservable<long> TotalLinesProcessed => _totalLinesSubject.AsObservable();
