@@ -2,119 +2,117 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Logonaut.Common;
 using System.Linq;
 
-namespace Logonaut.Common.Tests
+namespace Logonaut.Common.Tests;
+[TestClass]
+public class LogDocumentTests
 {
-    [TestClass]
-    public class LogDocumentTests
+    // Verifies: [ReqStatusBarTotalLinesv1] (Indirectly, by testing the source count)
+    [TestMethod] public void AppendLine_IncreasesCount()
     {
-        [TestMethod]
-        public void AppendLine_IncreasesCount()
+        // Arrange
+        var doc = new LogDocument();
+        Assert.AreEqual(0, doc.Count);
+
+        // Act
+        doc.AppendLine("Line 1");
+
+        // Assert
+        Assert.AreEqual(1, doc.Count);
+    }
+
+    // Verifies internal LogDocument logic.
+    [TestMethod] public void GetLines_ReturnsCorrectSubset()
+    {
+        // Arrange
+        var doc = new LogDocument();
+        for (int i = 0; i < 10; i++)
         {
-            // Arrange
-            var doc = new LogDocument();
-            Assert.AreEqual(0, doc.Count);
-
-            // Act
-            doc.AppendLine("Line 1");
-
-            // Assert
-            Assert.AreEqual(1, doc.Count);
+            doc.AppendLine($"Line {i + 1}");
         }
 
-        [TestMethod]
-        public void GetLines_ReturnsCorrectSubset()
-        {
-            // Arrange
-            var doc = new LogDocument();
-            for (int i = 0; i < 10; i++)
-            {
-                doc.AppendLine($"Line {i + 1}");
-            }
+        // Act
+        var subset = doc.GetLines(2, 5);
 
-            // Act
-            var subset = doc.GetLines(2, 5);
+        // Assert
+        Assert.AreEqual(5, subset.Count, "Should return 5 lines.");
+        Assert.AreEqual("Line 3", subset[0], "First line in subset should be 'Line 3'.");
+        Assert.AreEqual("Line 7", subset[4], "Last line in subset should be 'Line 7'.");
+    }
 
-            // Assert
-            Assert.AreEqual(5, subset.Count, "Should return 5 lines.");
-            Assert.AreEqual("Line 3", subset[0], "First line in subset should be 'Line 3'.");
-            Assert.AreEqual("Line 7", subset[4], "Last line in subset should be 'Line 7'.");
-        }
+    // Verifies internal LogDocument logic.
+    [TestMethod] public void Indexer_ReturnsCorrectLine()
+    {
+        // Arrange
+        var doc = new LogDocument();
+        doc.AppendLine("Test Line");
 
-        [TestMethod]
-        public void Indexer_ReturnsCorrectLine()
-        {
-            // Arrange
-            var doc = new LogDocument();
-            doc.AppendLine("Test Line");
+        // Act
+        var line = doc[0];
 
-            // Act
-            var line = doc[0];
+        // Assert
+        Assert.AreEqual("Test Line", line);
+    }
 
-            // Assert
-            Assert.AreEqual("Test Line", line);
-        }
+    // Verifies: [ReqFileMonitorLiveUpdatev1] (Part of switching files), [ReqPasteFromClipboardv1] (Implicitly clears previous)
+    [TestMethod] public void Clear_RemovesAllLines()
+    {
+        // Arrange
+        var doc = new LogDocument();
+        doc.AppendLine("Line 1");
+        doc.AppendLine("Line 2");
 
-        [TestMethod]
-        public void Clear_RemovesAllLines()
-        {
-            // Arrange
-            var doc = new LogDocument();
-            doc.AppendLine("Line 1");
-            doc.AppendLine("Line 2");
+        // Act
+        doc.Clear();
 
-            // Act
-            doc.Clear();
+        // Assert
+        Assert.AreEqual(0, doc.Count, "Document should be empty after clear.");
+    }
 
-            // Assert
-            Assert.AreEqual(0, doc.Count, "Document should be empty after clear.");
-        }
+    // Verifies internal LogDocument logic (edge case).
+    [TestMethod] public void GetLines_StartIndexBeyondCount_ReturnsEmptyCollection()
+    {
+        // Arrange
+        var doc = new LogDocument();
+        doc.AppendLine("Line 1");
 
-        [TestMethod]
-        public void GetLines_StartIndexBeyondCount_ReturnsEmptyCollection()
-        {
-            // Arrange
-            var doc = new LogDocument();
-            doc.AppendLine("Line 1");
+        // Act
+        var subset = doc.GetLines(5, 3);
 
-            // Act
-            var subset = doc.GetLines(5, 3);
+        // Assert
+        Assert.AreEqual(0, subset.Count, "Should return an empty collection when start index is out of range.");
+    }
 
-            // Assert
-            Assert.AreEqual(0, subset.Count, "Should return an empty collection when start index is out of range.");
-        }
+    // Verifies: [ReqFileMonitorLiveUpdatev1] (Initial load), [ReqPasteFromClipboardv1]
+    [TestMethod] public void AddInitialLines_AddsLinesCorrectly()
+    {
+        // Arrange
+        var doc = new LogDocument();
+        string initialLines = "Line 1\r\nLine 2\r\nLine 3\r\n";
 
-        [TestMethod]
-        public void AddInitialLines_AddsLinesCorrectly()
-        {
-            // Arrange
-            var doc = new LogDocument();
-            string initialLines = "Line 1\r\nLine 2\r\nLine 3\r\n";
+        // Act
+        doc.AddInitialLines(initialLines);
 
-            // Act
-            doc.AddInitialLines(initialLines);
+        // Assert
+        Assert.AreEqual(3, doc.Count, "Document should contain 3 lines.");
+        Assert.AreEqual("Line 1", doc[0], "First line should be 'Line 1'.");
+        Assert.AreEqual("Line 2", doc[1], "Second line should be 'Line 2'.");
+        Assert.AreEqual("Line 3", doc[2], "Third line should be 'Line 3'.");
+    }
 
-            // Assert
-            Assert.AreEqual(3, doc.Count, "Document should contain 3 lines.");
-            Assert.AreEqual("Line 1", doc[0], "First line should be 'Line 1'.");
-            Assert.AreEqual("Line 2", doc[1], "Second line should be 'Line 2'.");
-            Assert.AreEqual("Line 3", doc[2], "Third line should be 'Line 3'.");
-        }
+    // Verifies: [ReqFilterDisplayMatchingLinesv1] (Core filtering relies on this)
+    [TestMethod] public void AsReadOnly_ReturnsAllLines()
+    {
+        // Arrange
+        var doc = new LogDocument();
+        doc.AppendLine("Line 1");
+        doc.AppendLine("Line 2");
 
-        [TestMethod]
-        public void AsReadOnly_ReturnsAllLines()
-        {
-            // Arrange
-            var doc = new LogDocument();
-            doc.AppendLine("Line 1");
-            doc.AppendLine("Line 2");
+        // Act
+        var readOnlyLines = doc.ToList();
 
-            // Act
-            var readOnlyLines = doc.ToList();
-
-            // Assert
-            Assert.AreEqual(2, readOnlyLines.Count, "Read-only list should contain all lines.");
-            Assert.AreEqual("Line 1", readOnlyLines[0], "First line should be 'Line 1'.");
-            Assert.AreEqual("Line 2", readOnlyLines[1], "Second line should be 'Line 2'.");
-        }
+        // Assert
+        Assert.AreEqual(2, readOnlyLines.Count, "Read-only list should contain all lines.");
+        Assert.AreEqual("Line 1", readOnlyLines[0], "First line should be 'Line 1'.");
+        Assert.AreEqual("Line 2", readOnlyLines[1], "Second line should be 'Line 2'.");
     }
 }
