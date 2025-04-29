@@ -1,5 +1,4 @@
-// ===== File: tests\Logonaut.Core.Tests\LogFilterProcessorTests.cs =====
-
+using System.Threading.Tasks; // Add for Task
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Collections.Generic;
@@ -418,6 +417,96 @@ public class LogFilterProcessorTests
         Assert.AreEqual("Here is the MATCH line", update.Lines[1].Text);
         Assert.AreEqual(4, update.Lines[1].OriginalLineNumber);
         Assert.IsFalse(update.Lines[1].IsContextLine);
+    }
+
+    // Verifies: [ReqFilterEfficientRealTimev1]
+    [TestMethod]
+    public async Task FilteredUpdates_RapidLineEmits_AreThrottledToOneUpdate_WithCurrentImplementation()
+    {
+        // Arrange: Setup initial load with a filter that matches the incoming lines
+        var initialLines = new List<string> { "Initial Line 0" };
+        var filter = new SubstringFilter("Rapid"); // Filter to match the new lines
+        await SetupInitialFileLoad(initialLines, filter, 0); // Setup helper advances scheduler and clears updates
+
+        Assert.AreEqual(1, _logDocument.Count, "Arrange failure: LogDocument count incorrect.");
+        Assert.AreEqual(0, _receivedUpdates.Count, "Arrange failure: Updates should be cleared by setup.");
+
+        // Act: Emit multiple lines faster than the throttle time (100ms)
+        int emitCount = 5;
+        for (int i = 1; i <= emitCount; i++)
+        {
+            _mockLogSource.EmitLine($"Rapid Line {i}");
+            // Advance virtual time by only 1ms between emits
+            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(1).Ticks);
+        }
+
+        // Assert: No updates should have arrived *during* the rapid emission phase
+        Assert.AreEqual(0, _receivedUpdates.Count, "No updates should be received before throttle window passes.");
+
+        // Act: Advance the scheduler PAST the throttle window (e.g., 350ms)
+        _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks);
+
+        // Assert (Current Failing Behavior):
+        // 1. Only ONE update should be received due to throttling the full refilter trigger.
+        Assert.AreEqual(1, _receivedUpdates.Count, "ERROR: Expected only one throttled update with the current implementation.");
+
+        // 2. This single update should be a Replace update containing the FINAL state.
+        var update = _receivedUpdates[0];
+        // It should contain lines matching "Rapid" from the *entire* document at the time of processing.
+        Assert.AreEqual(emitCount, update.Lines.Count, "The single update should contain all matching emitted lines.");
+        CollectionAssert.AreEqual(
+            Enumerable.Range(1, emitCount).Select(i => $"Rapid Line {i}").ToList(),
+            GetLinesText(update), // Using helper to extract text
+            "Update content mismatch.");
+
+        // 3. Verify LogDocument contains everything
+        Assert.AreEqual(1 + emitCount, _logDocument.Count, "LogDocument should contain initial + emitted lines.");
+    }
+
+
+    // Verifies: [ReqFilterEfficientRealTimev1]
+    [TestMethod]
+    public async Task FilteredUpdates_RapidLineEmits_ProduceIncrementalAppends_WithFixedImplementation()
+    {
+        // Arrange: Setup initial load with a filter that matches the incoming lines
+        var initialLines = new List<string> { "Initial Line 0" };
+        var filter = new SubstringFilter("Rapid"); // Filter to match the new lines
+        await SetupInitialFileLoad(initialLines, filter, 0); // Setup helper advances scheduler and clears updates
+
+        Assert.AreEqual(1, _logDocument.Count);
+        Assert.AreEqual(0, _receivedUpdates.Count);
+
+        // Act: Emit multiple lines faster than the throttle time (100ms)
+        int emitCount = 5;
+        var expectedAppendedLines = new List<string>();
+        for (int i = 1; i <= emitCount; i++)
+        {
+            string line = $"Rapid Line {i}";
+            expectedAppendedLines.Add(line);
+            _mockLogSource.EmitLine(line);
+            // Advance virtual time by only 1ms between emits
+            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(1).Ticks);
+            // ----> Crucially, advance *slightly* more here if the APPEND path uses buffering/throttling too
+            // ----> e.g., _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(150).Ticks); // To trigger potential append buffer
+        }
+
+        // ----> Advance scheduler enough to ensure ALL append processing finishes
+        _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(500).Ticks); // Generous time
+
+        // Assert (Future Fixed Behavior - Approach 1):
+        // 1. Expect multiple updates (ideally one Append update per emit, or fewer if buffered)
+        Assert.IsTrue(_receivedUpdates.Count > 1, "Expected multiple incremental updates.");
+        // Or Assert.AreEqual(emitCount, _receivedUpdates.Count, "Expected one update per emitted line."); // If no buffering on append path
+
+        // 2. Verify the updates contain the correct appended lines incrementally
+        var allReceivedAppendedLines = _receivedUpdates
+                                        //.OfType<AppendFilteredUpdate>() // Requires update type differentiation
+                                        .SelectMany(u => u.Lines.Select(l => l.Text))
+                                        .ToList();
+        CollectionAssert.AreEqual(expectedAppendedLines, allReceivedAppendedLines, "Mismatch in aggregated appended lines.");
+
+        // 3. Verify LogDocument contains everything
+        Assert.AreEqual(1 + emitCount, _logDocument.Count, "LogDocument should contain initial + emitted lines.");
     }
 
     // Helper Filter for Setup

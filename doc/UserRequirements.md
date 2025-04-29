@@ -7,6 +7,7 @@ The reuqirement ID is a unique ID that can be referenced from the source code an
 ## 1. Core Log Viewing
 
 *   [ReqFileMonitorLiveUpdatev1] **File Monitoring:** The application must allow the user to select a log file via a menu (`File > Open Log File` or `Ctrl+O`) and then continuously monitor that file for changes, updating the display in real-time as new lines are added.
+*   [ReqFilterEfficientRealTimev1] Filtering must efficiently handle real-time updates from monitored files or pasted content, applying filters to new data incrementally where possible to maintain UI responsiveness even with large log sources.
 *   [ReqPasteFromClipboardv1] **Paste Input:** The user must be able to paste log content directly from the clipboard (using `Ctrl+V`) to view it without saving it to a file first.
 *   [ReqLargeFileResponsivev1] **Large File Handling:** The application must remain responsive and usable even when viewing very large log files. Background processing should be used for filtering and loading.
 *   [ReqStandardScrollingv1] **Scrolling:** Standard vertical scrolling must be supported (mouse wheel, keyboard: PgUp/PgDn, Arrows, Home/End).
