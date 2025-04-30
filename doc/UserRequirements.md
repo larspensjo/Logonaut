@@ -78,7 +78,7 @@ The reuqirement ID is a unique ID that can be referenced from the source code an
 *   [ReqGoToLineExecuteJumpv1] **Go To Line Execution:** Pressing Enter (or clicking a button) must jump to (select and scroll to) the entered line number if it exists in the *filtered* view.
 *   [ReqGoToLineFeedbackNotFoundv1] **Go To Line Feedback:** Feedback must indicate if the entered line number is not found in the filtered view.
 *   **Auto Scroll:**
-    *   [ReqAutoScrollOptionv1] An "Auto Scroll" option (`CheckBox`) must be available to automatically scroll to the end of the log view when new lines are added.
+    *   [ReqAutoScrollOptionv2] An **anchor toggle button** in the status bar must be available to automatically scroll to the end of the log view when new lines are added. The button's visual state (e.g., icon color) should indicate whether auto-scroll is enabled or disabled.
     *   [ReqAutoScrollDisableOnManualv1] Auto Scroll must be **automatically disabled** if the user manually scrolls the log view using the mouse wheel (scrolling up), keyboard navigation keys (PgUp/Dn, Arrows, Home/End), or by interacting with the scrollbar/overview ruler.
 *   **Keyboard Shortcuts:** Common actions must be accessible via standard keyboard shortcuts:
     *   [ReqShortcutOpenFilev1] `Ctrl+O`: Open File (Expected, check implementation)

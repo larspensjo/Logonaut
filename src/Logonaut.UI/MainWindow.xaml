@@ -25,6 +25,49 @@
         <converters:BoolToVisibilityConverter x:Key="BoolToVis"/>
         <converters:StringToIntConverter x:Key="StringToIntConverter" />
 
+        <Geometry x:Key="AnchorIconGeometry">M16,6 C16,5.448 15.552,5 15,5 L13,5 L13,3 C13,1.343 11.657,0 10,0 C8.343,0 7,1.343 7,3 L7,5 L5,5 C4.448,5 4,5.448 4,6 L4,9 L2,9 C1.448,9 1,9.448 1,10 L1,12 C1,12.552 1.448,13 2,13 L4,13 L4,18 C4,19.657 5.343,21 7,21 C8.657,21 10,19.657 10,18 L10,13 L12,13 C12.552,13 13,12.552 13,12 L13,10 C13,9.448 12.552,9 12,9 L10,9 L10,6 L16,6 Z M9,3 C9,2.448 9.448,2 10,2 C10.552,2 11,2.448 11,3 L11,5 L9,5 L9,3 Z</Geometry>
+
+        <Style x:Key="AnchorToggleButtonStyle" TargetType="ToggleButton">
+            <Setter Property="Width" Value="20"/>
+            <Setter Property="Height" Value="20"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <!-- Default ToolTip (for unchecked state) -->
+            <Setter Property="ToolTip" Value="Auto-scroll disabled. Click to enable."/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                SnapsToDevicePixels="True">
+                            <Viewbox Stretch="Uniform">
+                                <Path x:Name="anchorPath"
+                                    Data="{StaticResource AnchorIconGeometry}"
+                                    Fill="{DynamicResource SecondaryTextBrush}"/> <!-- Default Fill -->
+                            </Viewbox>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="anchorPath" Property="Fill" Value="{DynamicResource AccentBrush}"/>
+                                <Setter Property="ToolTip" Value="Auto-scroll enabled. Click to disable."/>
+                                <!-- Optional: Add background change or effect for checked state -->
+                                <!-- <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}"/> -->
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <!-- Optional: Change background on hover if desired -->
+                                <!-- <Setter Property="Background" Value="{DynamicResource ButtonHoverBackgroundBrush}"/> -->
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style TargetType="{x:Type avalonEdit:TextEditor}" x:Key="TextEditorWithOverviewRulerStyle">
             <!-- Use DynamicResource for theme properties -->
             <Setter Property="Foreground" Value="{DynamicResource EditorForegroundBrush}" />
@@ -236,9 +279,6 @@
                         <CheckBox Content="Highlight Timestamps" IsChecked="{Binding HighlightTimestamps}"
                                       VerticalAlignment="Center"
                                       ToolTip="Highlight timestamp patterns in log entries" Margin="3"/>
-                        <CheckBox Content="Auto Scroll" IsChecked="{Binding IsAutoScrollEnabled}"
-                                      VerticalAlignment="Center"
-                                      ToolTip="Automatically scroll to the end when new lines are added" Margin="3,3,0,3"/>
 
                         <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,2"/>
 
@@ -384,6 +424,12 @@
                      </TextBox.Style>
                 </TextBox>
                 <TextBlock Text="{Binding JumpStatusMessage}" Foreground="OrangeRed" VerticalAlignment="Center" Margin="5,0"/>
+                <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="10,0"/>
+
+                <ToggleButton Style="{StaticResource AnchorToggleButtonStyle}"
+                            IsChecked="{Binding IsAutoScrollEnabled, Mode=TwoWay}"
+                            VerticalAlignment="Center"
+                            Margin="5,0" />
             </StackPanel>
         </Border>
     </Grid>
