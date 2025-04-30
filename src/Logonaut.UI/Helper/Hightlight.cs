@@ -207,7 +207,8 @@ public class CustomHighlightingDefinition : IHighlightingDefinition
                     Color = _namedColors["filter"],
                     Regex = new Regex(substring, RegexOptions.IgnoreCase)
                 };
-                
+                if (rule.Regex.IsMatch(string.Empty))
+                    throw new ArgumentException("Filter substring cannot be empty");
                 _filterHighlightingRules.Add(rule);
                 MainRuleSet.Rules.Add(rule);
             }
