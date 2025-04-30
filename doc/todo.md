@@ -17,3 +17,4 @@
 * When adding a Substring, it shall by default use the selected string from the logwindow, if any.
 * The Auto Scroll option could be better visualized with a picture of an anchor. But it need to be placed at a proper place.
 * Implement deployment
+* When opening a new log, the dialog should remember last folder.
