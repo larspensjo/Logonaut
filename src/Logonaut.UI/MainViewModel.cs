@@ -927,8 +927,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             try
             {
-                if (isRegex) { _ = new Regex(pattern); }
-                if (!patterns.Contains(pattern))
+                var regexIssues = false;
+                if (isRegex && new Regex(pattern).IsMatch(string.Empty))
+                    regexIssues = true;
+                if (!regexIssues && !patterns.Contains(pattern))
                     patterns.Add(pattern);
             }
             catch (ArgumentException ex)
