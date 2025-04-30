@@ -64,12 +64,12 @@ namespace Logonaut.TestUtils
     // --- Log Filter Processor Mock ---
     public class MockLogFilterProcessor : ILogFilterProcessor
     {
-        private readonly Subject<FilteredUpdate> _filteredUpdatesSubject = new Subject<FilteredUpdate>();
+        private readonly Subject<FilteredUpdateBase> _filteredUpdatesSubject = new Subject<FilteredUpdateBase>();
         private readonly BehaviorSubject<long> _totalLinesSubject = new BehaviorSubject<long>(0); // <<< ADDED
         private bool _isDisposed = false;
 
         // --- ILogFilterProcessor Implementation ---
-        public IObservable<FilteredUpdate> FilteredUpdates => _filteredUpdatesSubject.AsObservable();
+        public IObservable<FilteredUpdateBase> FilteredUpdates => _filteredUpdatesSubject.AsObservable();
         public IObservable<long> TotalLinesProcessed => _totalLinesSubject.AsObservable(); // <<< ADDED
 
         // --- Mock Control Properties & Methods ---
@@ -102,11 +102,28 @@ namespace Logonaut.TestUtils
             LastFilterSettings = (newFilter, contextLines);
         }
 
-        // --- Simulation Methods for Tests ---
-        public void SimulateFilteredUpdate(List<FilteredLogLine> lines)
+        /// <summary>
+        /// Simulates the processor emitting a ReplaceFilteredUpdate.
+        /// Use this for tests simulating initial loads or filter setting changes.
+        /// </summary>
+        /// <param name="lines">The complete list of lines for the replacement.</param>
+        public void SimulateReplaceUpdate(List<FilteredLogLine> lines)
         {
-            var update = new FilteredUpdate(lines);
-            if (!_isDisposed) _filteredUpdatesSubject.OnNext(update);
+            if (_isDisposed) throw new ObjectDisposedException(nameof(MockLogFilterProcessor));
+            var update = new ReplaceFilteredUpdate(lines); // Create specific type
+            _filteredUpdatesSubject.OnNext(update);        // Emit
+        }
+
+        /// <summary>
+        /// Simulates the processor emitting an AppendFilteredUpdate.
+        /// Use this for tests simulating incremental updates from new log lines.
+        /// </summary>
+        /// <param name="linesToAppend">The list of new/context lines to append.</param>
+        public void SimulateAppendUpdate(List<FilteredLogLine> linesToAppend)
+        {
+            if (_isDisposed) throw new ObjectDisposedException(nameof(MockLogFilterProcessor));
+            var update = new AppendFilteredUpdate(linesToAppend); // Create specific type
+            _filteredUpdatesSubject.OnNext(update);           // Emit
         }
 
         public void SimulateTotalLinesUpdate(long newTotal) // <<< ADDED

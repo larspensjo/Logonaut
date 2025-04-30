@@ -28,7 +28,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         var newLines = new List<FilteredLogLine> { new FilteredLogLine(10, "New") };
 
         // Act: Simulate the processor sending the update
-        _mockProcessor.SimulateFilteredUpdate(newLines);
+        _mockProcessor.SimulateReplaceUpdate(newLines);
         _testContext.Send(_ => { }, null); // Flushes queue, runs ApplyFilteredUpdate logic
 
         // Assert: ViewModel state updated
@@ -56,7 +56,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         var newLines = new List<FilteredLogLine> { new(10, "Ten"), new(20, "Twenty") };
 
         // Act
-        _mockProcessor.SimulateFilteredUpdate(newLines);
+        _mockProcessor.SimulateReplaceUpdate(newLines);
         _testContext.Send(_ => { }, null); // Process update and highlight restore
 
         // Assert
@@ -86,7 +86,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         };
 
         // Act: Simulate processor sending update
-        _mockProcessor.SimulateFilteredUpdate(appendedLines);
+        _mockProcessor.SimulateReplaceUpdate(appendedLines);
         _testContext.Send(_ => { }, null); // Process the update
 
         // Assert: ViewModel state updated
@@ -122,7 +122,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         CollectionAssert.Contains(_viewModel.CurrentBusyStates, MainViewModel.FilteringToken, "FilteringToken missing after read.");
 
         // Act 3: Simulate the FilterProcessor sending the *first* Replace update
-        _mockProcessor.SimulateFilteredUpdate(initialLines);
+        _mockProcessor.SimulateReplaceUpdate(initialLines);
         _testContext.Send(_ => { }, null); // Process ApplyFilteredUpdate
 
         // Assert 3: Both tokens removed by the first Replace update after load
@@ -141,7 +141,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         Assert.AreEqual(1, _viewModel.CurrentBusyStates.Count);
 
         // Act
-        _mockProcessor.SimulateFilteredUpdate(new List<FilteredLogLine> { new(1, "New") });
+        _mockProcessor.SimulateReplaceUpdate(new List<FilteredLogLine> { new(1, "New") });
         _testContext.Send(_ => { }, null);
 
         // Assert

@@ -663,7 +663,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     *
     * Accepts a FilteredUpdate object containing new lines and the update type (Replace or Append).
     */
-    private void ApplyFilteredUpdate(FilteredUpdate update)
+    private void ApplyFilteredUpdate(FilteredUpdateBase update)
     {
         Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> ApplyFilteredUpdate received. Lines={update.Lines.Count}");
         bool wasInitialLoad = CurrentBusyStates.Contains(LoadingToken);

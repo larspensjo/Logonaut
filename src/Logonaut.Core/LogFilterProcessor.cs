@@ -18,7 +18,7 @@ public class LogFilterProcessor : ILogFilterProcessor
     private readonly SynchronizationContext _uiContext;
     private readonly IScheduler _backgroundScheduler;
 
-    private readonly BehaviorSubject<FilteredUpdate> _filteredUpdatesSubject = new(new FilteredUpdate(Array.Empty<FilteredLogLine>()));
+    private readonly BehaviorSubject<FilteredUpdateBase> _filteredUpdatesSubject = new(new ReplaceFilteredUpdate(Array.Empty<FilteredLogLine>()));
     private readonly BehaviorSubject<long> _totalLinesSubject = new BehaviorSubject<long>(0);
     private readonly CompositeDisposable _disposables = new();
 
@@ -38,7 +38,7 @@ public class LogFilterProcessor : ILogFilterProcessor
     private readonly TimeSpan _lineBufferTimeSpan = TimeSpan.FromMilliseconds(100);
     private readonly TimeSpan _filterDebounceTime = TimeSpan.FromMilliseconds(100);
 
-    public IObservable<FilteredUpdate> FilteredUpdates => _filteredUpdatesSubject.AsObservable();
+    public IObservable<FilteredUpdateBase> FilteredUpdates => _filteredUpdatesSubject.AsObservable();
     public IObservable<long> TotalLinesProcessed => _totalLinesSubject.AsObservable();
 
     public LogFilterProcessor(
@@ -64,10 +64,8 @@ public class LogFilterProcessor : ILogFilterProcessor
     {
         _logSubscription?.Dispose(); // Clean up previous if any
 
-        // Pipeline for new lines from logSource. Responsibilities:
-        // 1. Receive a new line.
-        // 2. Tell MainViewModel (via callback) to add it to the canonical LogDoc.
-        // 3. Trigger the other pipeline (the full refilter pipeline) to re-evaluate everything.
+        // Pipeline for new lines from logSource.
+        // For NOW, it still triggers the full refilter path.
         _logSubscription = _logSource.LogLines
             .Select(line => {
                 var newIndex = Interlocked.Increment(ref _currentLineIndex);
@@ -82,7 +80,7 @@ public class LogFilterProcessor : ILogFilterProcessor
                     Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: New line '{lineText.Substring(0, Math.Min(lineText.Length, 20))}...' detected from ILogSource. Triggering full refilter check.");
                     _filterChangeTriggerSubject?.OnNext((_currentFilter, _currentContextLines));
                 },
-                ex => HandlePipelineError("Log Source Processing Error", ex) // Updated error context message
+                ex => HandlePipelineError("Log Source Processing Error", ex)
             );
         _disposables.Add(_logSubscription);
 
@@ -90,14 +88,7 @@ public class LogFilterProcessor : ILogFilterProcessor
         _disposables.Add(filterChangeTrigger);
         _filterChangeTriggerSubject = filterChangeTrigger;
 
-        /* Responsibilities of this pipeline:
-            1. Triggered by explicit filter changes or new log lines (via _filterChangeTriggerSubject).
-            2. Executes filtering logic on a background thread to keep the UI responsive.
-            3. Throttles rapid triggers to avoid excessive recalculations, processing only the last request after a pause.
-            4. Applies the latest filter/context settings to the entire, up-to-date LogDocument.
-            5. Marshals the complete list of FilteredLogLine results safely back to the UI thread.
-            6. Delivers results as a Replace update via _filteredUpdatesSubject for the ViewModel to consume.
-        */
+        // Full refilter pipeline (triggered by settings change OR new lines *for now*)
         var fullRefilterSubscription = filterChangeTrigger
             .ObserveOn(_backgroundScheduler)
             .Throttle(_filterDebounceTime, _backgroundScheduler)
@@ -105,8 +96,7 @@ public class LogFilterProcessor : ILogFilterProcessor
                     Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Starting ApplyFullFilter triggered by Setting Change OR New Line.");
                     var result = ApplyFullFilter(settingsTuple.Item1, settingsTuple.Item2);
                     Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Finished ApplyFullFilter. Got {result.Count} lines.");
-
-                    bool wasInitial = false;
+                     bool wasInitial = false;
                     long docCount = 0;
                     lock(_stateLock) { wasInitial = _isInitialLoadInProgress; }
                     if (wasInitial)
@@ -115,26 +105,26 @@ public class LogFilterProcessor : ILogFilterProcessor
                         _totalLinesSubject.OnNext(docCount);
                         Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Updated TotalLinesSubject after initial filter: {docCount}");
                     }
-
                     return result;
                 })
-            .ObserveOn(_uiContext)
+            .ObserveOn(_uiContext) // Switch to UI thread before Subscribe
             .Subscribe(
-                newFilteredLines => {
+                newFilteredLines => { // Receives the IReadOnlyList<FilteredLogLine>
                     Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Sending Replace Update to UI. Lines={newFilteredLines.Count}. _isInitialLoadInProgress(BeforeSend) = { _isInitialLoadInProgress}");
                     bool wasInitialLoad = false;
                     lock(_stateLock) { wasInitialLoad = _isInitialLoadInProgress; }
 
-                    _filteredUpdatesSubject.OnNext(new FilteredUpdate(newFilteredLines));
+                    // *** CREATE and EMIT the specific ReplaceFilteredUpdate type ***
+                    _filteredUpdatesSubject.OnNext(new ReplaceFilteredUpdate(newFilteredLines));
 
                     if (wasInitialLoad)
                     {
-                        lock(_stateLock) { _isInitialLoadInProgress = false; } // Clear flag *after* sending
+                        lock(_stateLock) { _isInitialLoadInProgress = false; }
                         Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Initial Load Filter Complete. _isInitialLoadInProgress=false");
                     }
                 },
                 ex => {
-                    lock(_stateLock) { _isInitialLoadInProgress = false; } // Clear flag on error too
+                    lock(_stateLock) { _isInitialLoadInProgress = false; }
                     HandlePipelineError("Full Re-Filtering Error", ex);
                 }
             );

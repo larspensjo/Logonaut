@@ -50,7 +50,7 @@ public class MainViewModel_InteractionTests : MainViewModelTestBase
         };
 
         // Act
-        _mockProcessor.SimulateFilteredUpdate(newFullList);
+        _mockProcessor.SimulateReplaceUpdate(newFullList);
         _testContext.Send(_ => { }, null); // Process ApplyFilteredUpdate
 
         // Assert
@@ -72,7 +72,7 @@ public class MainViewModel_InteractionTests : MainViewModelTestBase
         };
 
         // Act
-        _mockProcessor.SimulateFilteredUpdate(newFullList);
+        _mockProcessor.SimulateReplaceUpdate(newFullList);
         _testContext.Send(_ => { }, null); // Process ApplyFilteredUpdate
 
         // Assert
@@ -91,7 +91,7 @@ public class MainViewModel_InteractionTests : MainViewModelTestBase
         var replacingList = new List<FilteredLogLine> { new FilteredLogLine(5, "Filtered Line A") };
 
         // Act
-        _mockProcessor.SimulateFilteredUpdate(replacingList);
+        _mockProcessor.SimulateReplaceUpdate(replacingList);
         _testContext.Send(_ => { }, null); // Process ApplyFilteredUpdate
 
         // Assert
@@ -110,7 +110,7 @@ public class MainViewModel_InteractionTests : MainViewModelTestBase
         var replacingList = new List<FilteredLogLine> { new FilteredLogLine(5, "Filtered Line A") };
 
         // Act
-        _mockProcessor.SimulateFilteredUpdate(replacingList);
+        _mockProcessor.SimulateReplaceUpdate(replacingList);
         _testContext.Send(_ => { }, null); // Process ApplyFilteredUpdate
 
         // Assert

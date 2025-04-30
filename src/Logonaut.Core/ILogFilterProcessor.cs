@@ -12,7 +12,7 @@ namespace Logonaut.Core
         /// <summary>
         /// Gets an observable sequence of updates for the filtered log view.
         /// </summary>
-        IObservable<FilteredUpdate> FilteredUpdates { get; }
+        IObservable<FilteredUpdateBase> FilteredUpdates { get; }
 
         /// <summary>
         /// Gets an observable sequence representing the total number of lines
