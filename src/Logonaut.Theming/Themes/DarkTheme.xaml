@@ -35,6 +35,11 @@
     <SolidColorBrush x:Key="DividerBrush" Color="{StaticResource BorderColor}" /> <!-- For VerticalLineMargin/Separators -->
     <SolidColorBrush x:Key="ChunkSeparatorBrush" Color="#307070"/>
 
+    <SolidColorBrush x:Key="AnchorButton.Static.Background" Color="#FF38383A"/> <!-- Slightly lighter than PanelBackground -->
+    <SolidColorBrush x:Key="AnchorButton.Static.Border" Color="#FF4A4A4C"/>    <!-- Subtle border -->
+    <SolidColorBrush x:Key="AnchorButton.Checked.Background" Color="#4C00BFFF"/> <!-- Semi-transparent Accent -->
+    <SolidColorBrush x:Key="AnchorButton.MouseOver.Background" Color="#FF4A4A4C"/>
+
     <!-- CheckBox Specific Brushes -->
     <SolidColorBrush x:Key="CheckBox.Static.Background" Color="Transparent"/>
     <!-- Make the static border visible against the dark background -->

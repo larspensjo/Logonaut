@@ -25,43 +25,51 @@
         <converters:BoolToVisibilityConverter x:Key="BoolToVis"/>
         <converters:StringToIntConverter x:Key="StringToIntConverter" />
 
-        <Geometry x:Key="AnchorIconGeometry">M16,6 C16,5.448 15.552,5 15,5 L13,5 L13,3 C13,1.343 11.657,0 10,0 C8.343,0 7,1.343 7,3 L7,5 L5,5 C4.448,5 4,5.448 4,6 L4,9 L2,9 C1.448,9 1,9.448 1,10 L1,12 C1,12.552 1.448,13 2,13 L4,13 L4,18 C4,19.657 5.343,21 7,21 C8.657,21 10,19.657 10,18 L10,13 L12,13 C12.552,13 13,12.552 13,12 L13,10 C13,9.448 12.552,9 12,9 L10,9 L10,6 L16,6 Z M9,3 C9,2.448 9.448,2 10,2 C10.552,2 11,2.448 11,3 L11,5 L9,5 L9,3 Z</Geometry>
+        <Geometry x:Key="AnchorIconGeometry">M 100 12 A 8 8 0 1 1 99.9 12 M 93 28 H 107 V 129 H 92 Z M 50 40 H 150 V 53 H 50 Z M 100 125 C 73 119 57 104 50 87 M 100 125 C 126 121 142 105 150 87 M 44 80 L 57 86 L 48 95 Z M 143 86 L 157 80 L 151 96 Z</Geometry>
 
         <Style x:Key="AnchorToggleButtonStyle" TargetType="ToggleButton">
             <Setter Property="Width" Value="20"/>
             <Setter Property="Height" Value="20"/>
             <Setter Property="Focusable" Value="False"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <!-- Default ToolTip (for unchecked state) -->
+            <Setter Property="Background" Value="{DynamicResource AnchorButton.Static.Background}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AnchorButton.Static.Border}"/>
+            <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="ToolTip" Value="Auto-scroll disabled. Click to enable."/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ToggleButton">
-                        <Border Background="{TemplateBinding Background}"
+                        <Border x:Name="BackgroundBorder"
+                                Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="2"
                                 SnapsToDevicePixels="True">
-                            <Viewbox Stretch="Uniform">
+                            <Viewbox Stretch="Uniform"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Margin="2">
+                                <!-- *** APPLY RENDER TRANSFORM TO VIEWBOX *** -->
+                                <Viewbox.RenderTransform>
+                                    <TranslateTransform X="-2" />
+                                </Viewbox.RenderTransform>
                                 <Path x:Name="anchorPath"
                                     Data="{StaticResource AnchorIconGeometry}"
-                                    Fill="{DynamicResource SecondaryTextBrush}"/> <!-- Default Fill -->
+                                    Fill="{DynamicResource SecondaryTextBrush}"/>
                             </Viewbox>
                         </Border>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="anchorPath" Property="Fill" Value="{DynamicResource AccentBrush}"/>
-                                <Setter Property="ToolTip" Value="Auto-scroll enabled. Click to disable."/>
-                                <!-- Optional: Add background change or effect for checked state -->
-                                <!-- <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}"/> -->
-                            </Trigger>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <!-- Optional: Change background on hover if desired -->
-                                <!-- <Setter Property="Background" Value="{DynamicResource ButtonHoverBackgroundBrush}"/> -->
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.5"/>
-                            </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="anchorPath" Property="Fill" Value="{DynamicResource AccentBrush}"/>
+                            <Setter TargetName="BackgroundBorder" Property="Background" Value="{DynamicResource AnchorButton.Checked.Background}"/>
+                            <Setter Property="ToolTip" Value="Auto-scroll enabled. Click to disable."/>
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="BackgroundBorder" Property="Background" Value="{DynamicResource AnchorButton.MouseOver.Background}"/>
+                            <Setter TargetName="BackgroundBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5"/>
+                        </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -79,21 +87,31 @@
                     <ControlTemplate TargetType="{x:Type avalonEdit:TextEditor}">
                         <Grid Background="{TemplateBinding Background}">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />      <!-- Column 0: ScrollViewer -->
+                                <ColumnDefinition Width="Auto" />   <!-- Column 1: Ruler + Button -->
                             </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*" />      <!-- Row 0: Main Area (Ruler) -->
+                                <RowDefinition Height="Auto" />   <!-- Row 1: Button Area -->
+                            </Grid.RowDefinitions>
+
+                            <!-- ScrollViewer remains in Column 0, spanning both rows conceptually -->
                             <ScrollViewer x:Name="PART_ScrollViewer"
                                           Grid.Column="0"
+                                          Grid.Row="0"
+                                          Grid.RowSpan="2"
                                           Focusable="False"
                                           CanContentScroll="True"
                                           VerticalScrollBarVisibility="Hidden"
                                           HorizontalScrollBarVisibility="{TemplateBinding HorizontalScrollBarVisibility}"
                                           Content="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=TextArea}">
                             </ScrollViewer>
-                            <!-- NEON: Use DynamicResource for ruler appearance -->
+
+                            <!-- OverviewRuler goes in Column 1, Row 0 (main area) -->
                             <helpers:OverviewRulerMargin
                                 x:Name="OverviewRuler"
                                 Grid.Column="1"
+                                Grid.Row="0"
                                 Width="18"
                                 Background="{DynamicResource OverviewRuler.Background}"
                                 BorderBrush="{DynamicResource OverviewRuler.BorderBrush}"
@@ -106,6 +124,16 @@
                                 SearchMarkerBrush="{DynamicResource OverviewRuler.SearchMarkerBrush}"
                                 ThumbBrush="{DynamicResource OverviewRuler.ThumbBrush}"
                                 />
+
+                            <!-- Anchor ToggleButton goes in Column 1, Row 1 (bottom corner) -->
+                            <!-- Binding needs RelativeSource to find Window's DataContext (ViewModel) -->
+                            <ToggleButton Style="{StaticResource AnchorToggleButtonStyle}"
+                                          Grid.Column="1"
+                                          Grid.Row="1"
+                                          IsChecked="{Binding DataContext.IsAutoScrollEnabled, RelativeSource={RelativeSource AncestorType=Window}, Mode=TwoWay}"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Margin="0,1,0,1" /> <!-- Adjust margin as needed -->
                         </Grid>
                     </ControlTemplate>
                 </Setter.Value>
@@ -424,12 +452,6 @@
                      </TextBox.Style>
                 </TextBox>
                 <TextBlock Text="{Binding JumpStatusMessage}" Foreground="OrangeRed" VerticalAlignment="Center" Margin="5,0"/>
-                <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="10,0"/>
-
-                <ToggleButton Style="{StaticResource AnchorToggleButtonStyle}"
-                            IsChecked="{Binding IsAutoScrollEnabled, Mode=TwoWay}"
-                            VerticalAlignment="Center"
-                            Margin="5,0" />
             </StackPanel>
         </Border>
     </Grid>

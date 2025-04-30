@@ -40,6 +40,11 @@
     <SolidColorBrush x:Key="ButtonPressedBackgroundBrush" Color="{StaticResource ButtonPressedBackgroundColor}" />
     <SolidColorBrush x:Key="ChunkSeparatorBrush" Color="#A0B0D0"/>
 
+    <SolidColorBrush x:Key="AnchorButton.Static.Background" Color="#FFEFEFF4"/> <!-- Slightly darker than PanelBackground -->
+    <SolidColorBrush x:Key="AnchorButton.Static.Border" Color="#FFC7C7CC"/>    <!-- Subtle border -->
+    <SolidColorBrush x:Key="AnchorButton.Checked.Background" Color="#4C00BFFF"/> <!-- Semi-transparent Accent -->
+    <SolidColorBrush x:Key="AnchorButton.MouseOver.Background" Color="#FFDADAE0"/>
+
     <!-- CheckBox Specific Brushes -->
     <SolidColorBrush x:Key="CheckBox.Static.Background" Color="Transparent"/>
     <!-- Standard border for light theme -->
