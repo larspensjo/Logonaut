@@ -77,7 +77,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _uiContext = uiContext ?? SynchronizationContext.Current ??
                         throw new InvalidOperationException("Could not capture or receive a valid SynchronizationContext.");
 
-        bool useSimulator = true; // Hard coded override for testing
+        bool useSimulator = false; // Hard coded override for testing
         if (initialLogSource != null)
             _logSource = initialLogSource; // Allow injection for tests to override
         else if (useSimulator) {
@@ -249,7 +249,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     public ObservableCollection<FilteredLogLine> FilteredLogLines { get; } = new();
 
     // While not pure MVVM, the simplest way for this specific performance optimization is to allow the ViewModel to interact directly (but safely via the dispatcher)
-    // with the TextEditor's document.
+    // with the TextEditor's document. This isn't always available, for example when running unit tests.
     private TextEditor? _logEditorInstance;
     public void SetLogEditorInstance(TextEditor editor)
     {
@@ -418,6 +418,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
         SaveCurrentSettingsDelayed();
     }
+
     private bool CanAddFilterNode()
     {
         if (ActiveFilterProfile == null) return false;
@@ -523,18 +524,19 @@ public partial class MainViewModel : ObservableObject, IDisposable
             _uiContext.Post(_ => {
                 CurrentBusyStates.Remove(LoadingToken);
                 CurrentBusyStates.Remove(FilteringToken);
+                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} OpenLogFileAsync: Error opening file '{selectedFile}': {ex.Message}");
                 MessageBox.Show($"Error opening or reading log file '{selectedFile}':\n{ex.Message}", "File Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 CurrentLogFilePath = null;
                 FilteredLogLines.Clear();
                 OnPropertyChanged(nameof(FilteredLogLinesCount));
                 TotalLogLines = 0;
-                 _logSource?.StopMonitoring();
+                _logSource?.StopMonitoring();
             }, null);
+            throw;
         }
     }
 
-
-        [RelayCommand(CanExecute = nameof(CanSearch))] private void PreviousSearch()
+    [RelayCommand(CanExecute = nameof(CanSearch))] private void PreviousSearch()
     {
         if (_searchMatches.Count == 0) return;
         if (_currentSearchIndex == -1) _currentSearchIndex = _searchMatches.Count - 1;
@@ -656,78 +658,65 @@ public partial class MainViewModel : ObservableObject, IDisposable
     * Processes updates from the LogFilterProcessor to update the UI state.
     *
     * Responsibilities include:
-    *   - Updating the FilteredLogLines collection.
+    *   - Updating the FilteredLogLines collection based on update type.
     *   - Scheduling direct TextEditor.Document updates (Append/Replace) on the UI thread.
-    *   - Managing busy indicators (IsBusyFiltering, IsPerformingInitialLoad).
+    *   - Managing busy indicators (FilteringToken, LoadingToken).
     *   - Preserving highlighted line selection during Replace updates.
     *
-    * Accepts a FilteredUpdate object containing new lines and the update type (Replace or Append).
+    * Accepts explicit FilteredUpdateBase subtypes (ReplaceFilteredUpdate or AppendFilteredUpdate).
     */
     private void ApplyFilteredUpdate(FilteredUpdateBase update)
     {
-        Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> ApplyFilteredUpdate received. Lines={update.Lines.Count}");
+        Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> ApplyFilteredUpdate received: {update.GetType().Name}. Lines={update.Lines.Count}");
         bool wasInitialLoad = CurrentBusyStates.Contains(LoadingToken);
-        bool isAppend = CheckIfAppend(update.Lines);
 
-        if (isAppend)
+        if (update is AppendFilteredUpdate appendUpdate) // <<< Use type pattern matching
         {
-            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> ApplyFilteredUpdate: Detected Append.");
+            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> ApplyFilteredUpdate: Handling Append.");
 
-            // 1. Calculate the newly added lines
-            var appendedLines = update.Lines.Skip(FilteredLogLines.Count).ToList();
-            // 2. Add only the new lines to the ObservableCollection
-            AddFilteredLines(appendedLines);
-            ScheduleLogTextAppend(appendedLines);
-            // 4. Trigger Auto-Scroll if enabled
+            // 1. Add only the new lines from the Append update
+            AddFilteredLines(appendUpdate.Lines); // This contains ONLY the new/context lines
+            // 2. Schedule the append text operation for AvalonEdit
+            ScheduleLogTextAppend(appendUpdate.Lines);
+            // 3. Trigger Auto-Scroll if enabled
             if (IsAutoScrollEnabled) RequestScrollToEnd?.Invoke(this, EventArgs.Empty);
-            // 5. Reset BusyFiltering (Append means this batch is done)
-             _uiContext.Post(_ => { CurrentBusyStates.Remove(FilteringToken); }, null);
+            // 4. Reset BusyFiltering (Append means this batch is done)
+            _uiContext.Post(_ => { CurrentBusyStates.Remove(FilteringToken); }, null);
         }
-        else // Handle Replace
+        else if (update is ReplaceFilteredUpdate replaceUpdate) // <<< Use type pattern matching
         {
-            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> ApplyFilteredUpdate: Detected Replace.");
+            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> ApplyFilteredUpdate: Handling Replace.");
             int originalLineToRestore = HighlightedOriginalLineNumber;
-            // 1. Replace the entire ObservableCollection
-            ReplaceFilteredLines(update.Lines);
+            // 1. Replace the entire ObservableCollection with lines from Replace update
+            ReplaceFilteredLines(replaceUpdate.Lines);
             // 2. Schedule the full text replace for AvalonEdit
-            ScheduleLogTextUpdate(FilteredLogLines);
+            ScheduleLogTextUpdate(FilteredLogLines); // Pass the *updated* collection
             // 3. Restore Highlight (only makes sense after a replace)
-             if (originalLineToRestore > 0)
+            if (originalLineToRestore > 0)
             {
                 int newIndex = FilteredLogLines
                     .Select((line, index) => new { line.OriginalLineNumber, Index = index })
                     .FirstOrDefault(item => item.OriginalLineNumber == originalLineToRestore)?.Index ?? -1;
-                _uiContext.Post(_ => { HighlightedFilteredLineIndex = newIndex; }, null);
-            } else {
+                // Post the update to the UI thread
+                _uiContext.Post(idx => { HighlightedFilteredLineIndex = (int)idx!; }, newIndex);
+            }
+            else
+            {
+                 // Post the update to the UI thread
                 _uiContext.Post(_ => { HighlightedFilteredLineIndex = -1; }, null);
             }
 
             // 4. Replace means filtering is done AND if it was the initial load, loading is also done.
             _uiContext.Post(_ => {
                 CurrentBusyStates.Remove(FilteringToken);
-                if(wasInitialLoad) CurrentBusyStates.Remove(LoadingToken);
+                if (wasInitialLoad) CurrentBusyStates.Remove(LoadingToken);
             }, null);
         }
-    }
-
-    private bool CheckIfAppend(IReadOnlyList<FilteredLogLine> newLines)
-    {
-        int currentCount = FilteredLogLines.Count;
-        // If the new list isn't longer, it can't be an append.
-        if (newLines.Count <= currentCount)
-            return false;
-
-        // If the current list is empty, any new lines are technically an append (or initial load)
-        // but ApplyFilteredUpdate's 'else' branch handles initial load correctly (Replace).
-        // So, only treat it as a UI append if the current list *wasn't* empty.
-        if (currentCount == 0)
-            return false; // Let the Replace logic handle the initial population.
-
-        // Compare the original line numbers of the existing lines with the start of the new list.
-        // This is more robust than comparing text content.
-        return newLines.Take(currentCount)
-                    .Select(l => l.OriginalLineNumber)
-                    .SequenceEqual(FilteredLogLines.Select(l => l.OriginalLineNumber));
+        else
+        {
+            // Should not happen if processor only emits known types
+            Debug.WriteLine($"WARN: ApplyFilteredUpdate received unknown update type: {update.GetType().Name}");
+        }
     }
 
     private void ScheduleLogTextAppend(IReadOnlyList<FilteredLogLine> linesToAppend)
@@ -735,6 +724,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
         // Ensure we work with a copy in case the original list changes
         var linesSnapshot = linesToAppend.ToList();
         _uiContext.Post(state => {
+            if (_logEditorInstance?.Document == null) {
+                Debug.WriteLine("WARN: ScheduleLogTextAppend skipped - editor instance or document is null.");
+                return; // Skip if editor isn't set or document isn't ready
+            }
             var lines = (List<FilteredLogLine>)state!;
             AppendLogTextInternal(lines);
             // Update search matches *after* appending text
@@ -744,35 +737,46 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private void AppendLogTextInternal(IReadOnlyList<FilteredLogLine> linesToAppend)
     {
+        // Guard against null editor or document, or empty append list
         if (_logEditorInstance?.Document == null || !linesToAppend.Any()) return;
+
         try
         {
             var sb = new System.Text.StringBuilder();
+            bool needsLeadingNewline = false;
 
-            // Prepend a newline ONLY if the editor has text AND doesn't already end with a newline
+            // Check if editor has content AND if it doesn't already end with a newline
             if (_logEditorInstance.Document.TextLength > 0)
             {
-                string lastChars = _logEditorInstance.Document.GetText(
-                    _logEditorInstance.Document.TextLength - Environment.NewLine.Length,
-                    Environment.NewLine.Length);
-                if (lastChars != Environment.NewLine)
+                // Avoid GetText if possible for performance, check last char directly
+                char lastChar = _logEditorInstance.Document.GetCharAt(_logEditorInstance.Document.TextLength - 1);
+                if (lastChar != '\n' && lastChar != '\r') // Simple check, might need refinement for \r\n vs \n
                 {
-                    sb.Append(Environment.NewLine);
-            }
+                    needsLeadingNewline = true;
+                }
             }
 
-            // Append the new lines, separated by newlines
             for (int i = 0; i < linesToAppend.Count; i++)
             {
-                if (i > 0) // Add newline before second, third, etc. lines
+                // Add newline BEFORE the line if needed (either leading or between lines)
+                if (needsLeadingNewline || i > 0)
+                {
                     sb.Append(Environment.NewLine);
+                }
                 sb.Append(linesToAppend[i].Text);
             }
 
             string textToAppend = sb.ToString();
+            // Use BeginUpdate/EndUpdate for potentially large appends
+            _logEditorInstance.Document.BeginUpdate();
             _logEditorInstance.Document.Insert(_logEditorInstance.Document.TextLength, textToAppend);
+            _logEditorInstance.Document.EndUpdate();
         }
-        catch (Exception ex) { Debug.WriteLine($"Error appending text to AvalonEdit: {ex.Message}"); }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Error appending text to AvalonEdit: {ex.Message}");
+            // Consider how to handle errors here - maybe log to a status bar?
+        }
     }
 
     // Helper methods called by ApplyFilteredUpdate to modify UI collections.
@@ -805,6 +809,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
         // ObservableCollection snapshot for Replace is safe. List passed for Append is safe.
         var linesSnapshot = relevantLines.ToList(); // Create shallow copy for safety
         _uiContext.Post(state => {
+            if (_logEditorInstance?.Document == null) {
+                Debug.WriteLine("WARN: ScheduleLogTextUpdate skipped - editor instance or document is null.");
+                return; // Skip if editor isn't set or document isn't ready
+            }
             var lines = (List<FilteredLogLine>)state!;
             ReplaceLogTextInternal(lines);
             UpdateSearchMatches();
@@ -878,24 +886,6 @@ public partial class MainViewModel : ObservableObject, IDisposable
         // No need to manually start source here; TriggerFilterUpdate handles processing
         TriggerFilterUpdate();
         CurrentLogFilePath = "[Pasted Content]"; // Indicate non-file source
-    }
-
-    public void UpdateSearchIndexFromCharacterOffset(int characterOffset)
-    {
-        if (_searchMatches.Count == 0) return;
-
-            // Find the match whose start offset is closest to the click offset
-            int newIndex = _searchMatches
-                .Select((match, index) => new { match, index, distance = Math.Abs(match.Offset - characterOffset) })
-                .OrderBy(item => item.distance)
-                .FirstOrDefault()?.index ?? -1;
-
-        if (newIndex != -1 && newIndex != _currentSearchIndex)
-        {
-            _currentSearchIndex = newIndex;
-            SelectAndScrollToCurrentMatch();
-            OnPropertyChanged(nameof(SearchStatusText));
-        }
     }
 
     private void HandleProcessorError(string contextMessage, Exception ex)

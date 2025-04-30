@@ -11,9 +11,10 @@ using Logonaut.Common;
 using Logonaut.Filters;
 
 namespace Logonaut.Core;
+
 public class LogFilterProcessor : ILogFilterProcessor
 {
-    private readonly LogDocument _logDocument; // Reference provided by ViewModel
+    private readonly LogDocument _logDocument;
     private readonly ILogSource _logSource;
     private readonly SynchronizationContext _uiContext;
     private readonly IScheduler _backgroundScheduler;
@@ -22,27 +23,26 @@ public class LogFilterProcessor : ILogFilterProcessor
     private readonly BehaviorSubject<long> _totalLinesSubject = new BehaviorSubject<long>(0);
     private readonly CompositeDisposable _disposables = new();
 
-    private long _currentLineIndex = 0; // Tracks original numbers for *new* lines post-initial load
+    private long _currentLineIndex = 0;
     private IFilter _currentFilter = new TrueFilter();
     private int _currentContextLines = 0;
-    private Subject<(IFilter filter, int contextLines)>? _filterChangeTriggerSubject;
-    private IDisposable? _logSubscription;
+    private readonly Subject<(IFilter filter, int contextLines)> _filterChangeTriggerSubject = new();
 
     private bool _isInitialLoadInProgress = false;
     private readonly object _stateLock = new object();
 
     private readonly Action<string> _addLineToDocumentCallback;
 
-    // Config Constants  for throttling, but not used currently.
-    private const int LineBufferSize = 50;
-    private readonly TimeSpan _lineBufferTimeSpan = TimeSpan.FromMilliseconds(100);
-    private readonly TimeSpan _filterDebounceTime = TimeSpan.FromMilliseconds(100);
+    // Configuration constants for incremental update buffering
+    private const int LineBufferSize = 50; // Process lines in batches of 50
+    private readonly TimeSpan _lineBufferTimeSpan = TimeSpan.FromMilliseconds(100); // Or process after 100ms
+    private readonly TimeSpan _filterDebounceTime = TimeSpan.FromMilliseconds(200); // Slightly increased debounce for settings changes
 
     public IObservable<FilteredUpdateBase> FilteredUpdates => _filteredUpdatesSubject.AsObservable();
     public IObservable<long> TotalLinesProcessed => _totalLinesSubject.AsObservable();
 
     public LogFilterProcessor(
-        ILogSource logSource, // Changed parameter type
+        ILogSource logSource,
         LogDocument logDocument,
         SynchronizationContext uiContext,
         Action<string> addLineToDocumentCallback,
@@ -56,98 +56,116 @@ public class LogFilterProcessor : ILogFilterProcessor
 
         InitializePipelines();
 
+        _disposables.Add(_filterChangeTriggerSubject); // Add trigger subject to disposables
         _disposables.Add(_filteredUpdatesSubject);
         _disposables.Add(_totalLinesSubject);
     }
 
     private void InitializePipelines()
     {
-        _logSubscription?.Dispose(); // Clean up previous if any
-
-        // Pipeline for new lines from logSource.
-        // For NOW, it still triggers the full refilter path.
-        _logSubscription = _logSource.LogLines
+        // --- Pipeline 1: Incremental Updates for New Log Lines ---
+        var incrementalUpdatePipeline = _logSource.LogLines
             .Select(line => {
-                var newIndex = Interlocked.Increment(ref _currentLineIndex);
-                _totalLinesSubject.OnNext(_totalLinesSubject.Value + 1);
-                _addLineToDocumentCallback?.Invoke(line);
-                return line;
+                // Assign original index and add to document
+                // Note: _currentLineIndex must track the *next* index to assign
+                var newIndex = Interlocked.Read(ref _currentLineIndex); // Read current count *before* adding
+                Interlocked.Increment(ref _currentLineIndex); // Increment for the next line
+                _totalLinesSubject.OnNext(_totalLinesSubject.Value + 1); // Update total count
+                _addLineToDocumentCallback(line);
+                return new OriginalLineInfo((int)newIndex, line); // Pass 0-based index
             })
-            .ObserveOn(_backgroundScheduler)
-            .Where(_ => { lock (_stateLock) return !_isInitialLoadInProgress; })
-            .Subscribe(
-                lineText => {
-                    Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: New line '{lineText.Substring(0, Math.Min(lineText.Length, 20))}...' detected from ILogSource. Triggering full refilter check.");
-                    _filterChangeTriggerSubject?.OnNext((_currentFilter, _currentContextLines));
-                },
-                ex => HandlePipelineError("Log Source Processing Error", ex)
-            );
-        _disposables.Add(_logSubscription);
+            .ObserveOn(_backgroundScheduler) // Shift further processing to background
+            .Where(_ => { lock (_stateLock) return !_isInitialLoadInProgress; }) // Don't process new lines during initial load
+            .Buffer(_lineBufferTimeSpan, LineBufferSize, _backgroundScheduler) // Buffer lines by time or count
+            .Where(buffer => buffer.Any()) // Only process non-empty buffers
+            .Select(bufferedLines => {
+                // Apply incremental filter to the buffer
+                IFilter filter;
+                int context;
+                lock (_stateLock) { // Access current filter settings safely
+                    filter = _currentFilter;
+                    context = _currentContextLines;
+                }
+                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Applying incremental filter to batch of {bufferedLines.Count} lines.");
+                // ApplyFilterToSubset needs the full document for context lookup
+                var appendResult = FilterEngine.ApplyFilterToSubset(bufferedLines, _logDocument, filter, context);
+                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Incremental filter yielded {appendResult.Count} lines (incl. context).");
+                return appendResult;
+            })
+            .Where(result => result.Any()) // Only emit if the incremental filter yielded results
+            .Select(lines => new AppendFilteredUpdate(lines)); // Map to AppendFilteredUpdate type
 
-        var filterChangeTrigger = new Subject<(IFilter filter, int contextLines)>();
-        _disposables.Add(filterChangeTrigger);
-        _filterChangeTriggerSubject = filterChangeTrigger;
-
-        // Full refilter pipeline (triggered by settings change OR new lines *for now*)
-        var fullRefilterSubscription = filterChangeTrigger
-            .ObserveOn(_backgroundScheduler)
-            .Throttle(_filterDebounceTime, _backgroundScheduler)
+        // --- Pipeline 2: Full Re-Filter for Settings Changes ---
+        var fullRefilterPipeline = _filterChangeTriggerSubject
+            .ObserveOn(_backgroundScheduler) // Shift processing to background
+            .Throttle(_filterDebounceTime, _backgroundScheduler) // Debounce setting changes
             .Select(settingsTuple => {
-                    Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Starting ApplyFullFilter triggered by Setting Change OR New Line.");
-                    var result = ApplyFullFilter(settingsTuple.Item1, settingsTuple.Item2);
-                    Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Finished ApplyFullFilter. Got {result.Count} lines.");
-                     bool wasInitial = false;
-                    long docCount = 0;
-                    lock(_stateLock) { wasInitial = _isInitialLoadInProgress; }
-                    if (wasInitial)
-                    {
-                        docCount = _logDocument.Count;
-                        _totalLinesSubject.OnNext(docCount);
-                        Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Updated TotalLinesSubject after initial filter: {docCount}");
-                    }
-                    return result;
-                })
-            .ObserveOn(_uiContext) // Switch to UI thread before Subscribe
+                lock (_stateLock) { // Update current settings safely
+                    _currentFilter = settingsTuple.filter;
+                    _currentContextLines = settingsTuple.contextLines;
+                }
+                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Applying full filter (Settings Change or Initial). Context={settingsTuple.contextLines}");
+                // Apply full filter
+                var fullResult = FilterEngine.ApplyFilters(_logDocument, settingsTuple.filter, settingsTuple.contextLines);
+                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Full filter yielded {fullResult.Count} lines.");
+
+                bool wasInitial = false;
+                lock (_stateLock) { wasInitial = _isInitialLoadInProgress; }
+                if (wasInitial)
+                {
+                    // Set total lines *after* the initial filtering gives the final count
+                    // This assumes the first UpdateFilterSettings call *after* Reset marks the end of initial lines processing.
+                    long docCount = _logDocument.Count;
+                     // Update the total line count state *here* after initial load calculation
+                    Interlocked.Exchange(ref _currentLineIndex, docCount);
+                     // Publish the count to the ViewModel
+                    _totalLinesSubject.OnNext(docCount);
+                    Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Updated TotalLinesSubject and _currentLineIndex after initial filter: {docCount}");
+                }
+                return new ReplaceFilteredUpdate(fullResult); // Map to ReplaceFilteredUpdate type
+            });
+
+        // --- Merge Pipelines and Subscribe ---
+        var mergedPipelineSubscription = Observable.Merge(
+                incrementalUpdatePipeline.OfType<FilteredUpdateBase>(), // Cast to base type for merge
+                fullRefilterPipeline.OfType<FilteredUpdateBase>()     // Cast to base type for merge
+            )
+            .ObserveOn(_uiContext) // Switch to UI thread *before* the final subscription
             .Subscribe(
-                newFilteredLines => { // Receives the IReadOnlyList<FilteredLogLine>
-                    Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Sending Replace Update to UI. Lines={newFilteredLines.Count}. _isInitialLoadInProgress(BeforeSend) = { _isInitialLoadInProgress}");
+                update => { // Receives ReplaceFilteredUpdate OR AppendFilteredUpdate
+                    Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Sending {update.GetType().Name} to UI. Lines={update.Lines.Count}. _isInitialLoadInProgress(BeforeSend) = {_isInitialLoadInProgress}");
                     bool wasInitialLoad = false;
-                    lock(_stateLock) { wasInitialLoad = _isInitialLoadInProgress; }
+                    lock (_stateLock) { wasInitialLoad = _isInitialLoadInProgress; }
 
-                    // *** CREATE and EMIT the specific ReplaceFilteredUpdate type ***
-                    _filteredUpdatesSubject.OnNext(new ReplaceFilteredUpdate(newFilteredLines));
+                    _filteredUpdatesSubject.OnNext(update); // Emit the update
 
-                    if (wasInitialLoad)
+                    // If this update was the result of the initial load (always a Replace), mark initial load as finished
+                    if (wasInitialLoad && update is ReplaceFilteredUpdate)
                     {
-                        lock(_stateLock) { _isInitialLoadInProgress = false; }
+                        lock (_stateLock) { _isInitialLoadInProgress = false; }
                         Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Initial Load Filter Complete. _isInitialLoadInProgress=false");
                     }
                 },
                 ex => {
-                    lock(_stateLock) { _isInitialLoadInProgress = false; }
-                    HandlePipelineError("Full Re-Filtering Error", ex);
+                    lock (_stateLock) { _isInitialLoadInProgress = false; } // Ensure flag is reset on error
+                    HandlePipelineError("Log Processing Pipeline Error", ex);
                 }
             );
 
-        _disposables.Add(fullRefilterSubscription);
+        _disposables.Add(mergedPipelineSubscription);
     }
 
-    private IReadOnlyList<FilteredLogLine> ApplyFullFilter(IFilter filter, int contextLines)
-    {
-        Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} LogFitlerProcessor.ApplyFullFilter() before ApplyFilters");
-        var tmp = FilterEngine.ApplyFilters(_logDocument, filter, contextLines);
-        Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} LogFitlerProcessor.ApplyFullFilter() after ApplyFilters");
-        return tmp;
-    }
+    // No changes needed for ApplyFullFilter helper
+    // private IReadOnlyList<FilteredLogLine> ApplyFullFilter(IFilter filter, int contextLines) { ... }
 
     public void UpdateFilterSettings(IFilter newFilter, int contextLines)
     {
-        _currentFilter = newFilter ?? new TrueFilter();
-        _currentContextLines = Math.Max(0, contextLines);
+        var filterToUse = newFilter ?? new TrueFilter();
+        var contextToUse = Math.Max(0, contextLines);
 
-        // Trigger the pipeline
-        _filterChangeTriggerSubject?.OnNext((_currentFilter, _currentContextLines));
-        Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: UpdateFilterSettings called. Triggering re-filter.");
+        // Trigger the pipeline responsible for settings changes
+        _filterChangeTriggerSubject.OnNext((filterToUse, contextToUse));
+        Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: UpdateFilterSettings called. Triggering full re-filter.");
     }
 
     public void Reset()
@@ -156,8 +174,8 @@ public class LogFilterProcessor : ILogFilterProcessor
         {
             _isInitialLoadInProgress = true;
         }
-        Interlocked.Exchange(ref _currentLineIndex, 0);
-        // ViewModel manages LogDocument clearing via source interaction
+        Interlocked.Exchange(ref _currentLineIndex, 0); // Reset internal indexer
+        // LogDocument clearing is handled by MainViewModel via _logSource.Prepare...
         _totalLinesSubject.OnNext(0); // Reset displayed count immediately
         Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Reset() called. _isInitialLoadInProgress=true");
     }
@@ -171,29 +189,29 @@ public class LogFilterProcessor : ILogFilterProcessor
 
     public void Dispose()
     {
-        // Dispose _filterChangeTriggerSubject first if needed
-        _filterChangeTriggerSubject?.OnCompleted();
-        _filterChangeTriggerSubject?.Dispose();
-        _filterChangeTriggerSubject = null;
+        // Dispose filterChangeTriggerSubject first if needed
+        if (!_filterChangeTriggerSubject.IsDisposed)
+        {
+            _filterChangeTriggerSubject.OnCompleted();
+            _filterChangeTriggerSubject.Dispose();
+        }
 
-        // Explicitly complete the output subjects BEFORE disposing subscriptions
-        // Check if not null and not already disposed (good practice)
-        if (_filteredUpdatesSubject != null && !_filteredUpdatesSubject.IsDisposed)
+        // Complete output subjects BEFORE disposing subscriptions
+        if (!_filteredUpdatesSubject.IsDisposed)
         {
             _filteredUpdatesSubject.OnCompleted();
             _filteredUpdatesSubject.Dispose();
         }
 
-        if (_totalLinesSubject != null && !_totalLinesSubject.IsDisposed)
+        if (!_totalLinesSubject.IsDisposed)
         {
             _totalLinesSubject.OnCompleted();
             _totalLinesSubject.Dispose();
         }
 
-        // Disposes subscriptions (_logSubscription, fullRefilterSubscription)
+        // Disposes merged pipeline subscription
         _disposables.Dispose();
 
-        // IMPORTANT: Processor should NOT dispose the _logSource it received.
-        // The owner (MainViewModel) is responsible for disposing the log source.
+        // Processor should NOT dispose the _logSource it received.
     }
 }

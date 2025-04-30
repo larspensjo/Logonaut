@@ -40,22 +40,20 @@ public class MainViewModel_InteractionTests : MainViewModelTestBase
     [TestMethod] public void RequestScrollToEnd_ShouldFire_When_UpdateAppendsLines_And_AutoScrollEnabled()
     {
         // Arrange
-        _viewModel.IsAutoScrollEnabled = true; // Auto-scroll IS enabled
-        _requestScrollToEndEventFired = false; // Reset flag
+        _viewModel.IsAutoScrollEnabled = true;
+        _requestScrollToEndEventFired = false;
         _viewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Line 1")); // Initial state
 
-        var newFullList = new List<FilteredLogLine> {
-            new FilteredLogLine(1, "Line 1"),
+        var linesToAppend = new List<FilteredLogLine> {
             new FilteredLogLine(2, "Line 2 Appended")
         };
 
-        // Act
-        _mockProcessor.SimulateReplaceUpdate(newFullList);
+        _mockProcessor.SimulateAppendUpdate(linesToAppend);
         _testContext.Send(_ => { }, null); // Process ApplyFilteredUpdate
 
         // Assert
         Assert.IsTrue(_requestScrollToEndEventFired, "Event should fire for append when enabled.");
-        Assert.AreEqual(2, _viewModel.FilteredLogLines.Count);
+        Assert.AreEqual(2, _viewModel.FilteredLogLines.Count); // 1 initial + 1 appended
     }
 
     // Verifies: [ReqAutoScrollOptionv1]
@@ -66,18 +64,18 @@ public class MainViewModel_InteractionTests : MainViewModelTestBase
         _requestScrollToEndEventFired = false; // Reset flag
         _viewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Line 1"));
 
-        var newFullList = new List<FilteredLogLine> {
-            new FilteredLogLine(1, "Line 1"),
+        // *** FIX: Simulate ONLY the appended lines ***
+        var linesToAppend = new List<FilteredLogLine> {
             new FilteredLogLine(2, "Line 2 Appended")
         };
 
-        // Act
-        _mockProcessor.SimulateReplaceUpdate(newFullList);
+        // *** FIX: Use SimulateAppendUpdate ***
+        _mockProcessor.SimulateAppendUpdate(linesToAppend);
         _testContext.Send(_ => { }, null); // Process ApplyFilteredUpdate
 
         // Assert
         Assert.IsFalse(_requestScrollToEndEventFired, "Event should NOT fire when auto-scroll is disabled.");
-        Assert.AreEqual(2, _viewModel.FilteredLogLines.Count);
+        Assert.AreEqual(2, _viewModel.FilteredLogLines.Count); // 1 initial + 1 appended
     }
 
     // Verifies: [ReqAutoScrollOptionv1]
