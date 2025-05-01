@@ -16,10 +16,12 @@
 * The Auto Scroll option could be better visualized with a picture of an anchor. But it need to be placed at a proper place.
 * Implement deployment using Inno
 * When opening a new log, the dialog should remember last folder.
+* Opening a new log file will not honor the Auto Scroll.
+* The nice moving waves when opening a new file are no longer visible.
 
 * **SimulatorLogSource UI overlay**
 *   1. Implement the key combination trigger and the overlay UI placement over the filter tree. Secret key to toggle overlay: Ctrl+Alt+Shift+S. (DONE)
-*   2. Add basic controls: Lines Per Second slider, Start/Stop/Restart buttons, Clear Log button.
+*   2. Add basic controls: Lines Per Second slider, Start/Stop/Restart buttons, Clear Log button. (DONE)
 *   3. Start/Stop/Restart buttons within the simulator UI. Controls the Timer in SimulatorLogSource. Needs to be independent of file opening.
 *   4. Add an "Error Rate %" slider and an "Inject ERROR Now" button.
 *   5. Refactor SimulatorLogSource to accept and use these basic parameters.

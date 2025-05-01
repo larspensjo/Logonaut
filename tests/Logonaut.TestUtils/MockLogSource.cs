@@ -2,32 +2,32 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Reactive.Subjects;
-using System.Reactive.Linq; // For AsObservable
+using System.Reactive.Linq;
 using System.Threading.Tasks;
-using Logonaut.Core; // For ILogSource
+using Logonaut.Core;
 
 namespace Logonaut.TestUtils;
 
-public class MockLogSource : ILogSource
+public class MockLogSource : ISimulatorLogSource
 {
     private readonly Subject<string> _logLinesSubject = new Subject<string>();
     private bool _isMonitoring = false;
     private bool _isPrepared = false;
 
     public bool IsDisposed { get; private set; } = false;
-    public bool IsMonitoring => _isMonitoring;
     public bool IsPrepared => _isPrepared;
     public string? PreparedSourceIdentifier { get; private set; }
-    public int StartMonitoringCallCount { get; private set; } = 0;
-    public int StopMonitoringCallCount { get; private set; } = 0;
+    public int StartCallCount { get; private set; } = 0;
+    public int StopCallCount { get; private set; } = 0;
+    public int RestartCallCount { get; private set; } = 0;
+    public int UpdateRateCallCount { get; private set; } = 0;
+    public int LastRateUpdate { get; private set; } = -1;
 
-    /// <summary>
-    /// Set this list *before* calling PrepareAndGetInitialLinesAsync
-    /// to simulate the initial content of the source.
-    /// </summary>
     public List<string> LinesForInitialRead { get; set; } = new List<string>();
 
-    // --- ILogSource Implementation ---
+    // --- ISimulatorLogSource Implementation ---
+    public int LinesPerSecond { get; set; } = 10; // Add property
+    public bool IsRunning => _isMonitoring;     // Implement property
 
     public IObservable<string> LogLines => _logLinesSubject.AsObservable();
 
@@ -43,51 +43,73 @@ public class MockLogSource : ILogSource
         }
 
         PreparedSourceIdentifier = sourceIdentifier;
-        _isPrepared = false; // Reset prepared state
-        StopMonitoring();    // Stop any previous monitoring
+        _isPrepared = false;
+        Stop(); // Call the mock's Stop method
 
         long count = 0;
-        Debug.WriteLine($"---> MockLogSource: PrepareAndGetInitialLinesAsync started for '{sourceIdentifier}'. Reading {LinesForInitialRead.Count} initial lines.");
+        Debug.WriteLine($"---> MockLogSource: Prepare started for '{sourceIdentifier}'. Reading {LinesForInitialRead.Count} lines.");
         foreach (var line in LinesForInitialRead)
         {
             addLineToDocumentCallback(line);
             count++;
         }
-        Debug.WriteLine($"---> MockLogSource: PrepareAndGetInitialLinesAsync finished for '{sourceIdentifier}'. Read {count} lines.");
-        _isPrepared = true; // Mark as prepared AFTER reading lines
+        Debug.WriteLine($"---> MockLogSource: Prepare finished for '{sourceIdentifier}'. Read {count} lines.");
+        _isPrepared = true;
         return Task.FromResult(count);
     }
 
-    public void StartMonitoring()
+    // Explicit ILogSource calls delegate to ISimulatorLogSource methods
+    void ILogSource.StartMonitoring() => Start();
+    void ILogSource.StopMonitoring() => Stop();
+
+    public void Start()
     {
         if (IsDisposed) throw new ObjectDisposedException(nameof(MockLogSource));
-        if (!_isPrepared) throw new InvalidOperationException("PrepareAndGetInitialLinesAsync must be called successfully before StartMonitoring.");
-
+        if (!_isPrepared) throw new InvalidOperationException("PrepareAndGetInitialLinesAsync must be called successfully before Start.");
         if (!_isMonitoring)
         {
-            StartMonitoringCallCount++;
+            StartCallCount++;
             _isMonitoring = true;
-            Debug.WriteLine($"---> MockLogSource: StartMonitoring called for '{PreparedSourceIdentifier}'. Now monitoring.");
-        }
-        else
-        {
-            Debug.WriteLine($"---> MockLogSource: StartMonitoring called for '{PreparedSourceIdentifier}' but already monitoring.");
+            Debug.WriteLine($"---> MockLogSource: Start called for '{PreparedSourceIdentifier}'. Now monitoring.");
+        } else {
+             Debug.WriteLine($"---> MockLogSource: Start called for '{PreparedSourceIdentifier}' but already monitoring.");
         }
     }
 
-    public void StopMonitoring()
+    public void Stop()
     {
         if (IsDisposed) return;
         if (_isMonitoring)
         {
-            StopMonitoringCallCount++;
+            StopCallCount++;
             _isMonitoring = false;
-                Debug.WriteLine($"---> MockLogSource: StopMonitoring called for '{PreparedSourceIdentifier}'. Monitoring stopped.");
+            Debug.WriteLine($"---> MockLogSource: Stop called for '{PreparedSourceIdentifier}'. Monitoring stopped.");
         }
     }
 
-    // --- Simulation Methods for Tests ---
+    public void Restart()
+    {
+         if (IsDisposed) throw new ObjectDisposedException(nameof(MockLogSource));
+         RestartCallCount++;
+         Debug.WriteLine($"---> MockLogSource: Restart called for '{PreparedSourceIdentifier}'.");
+         // Simulate basic Stop/Start behavior for the mock
+         Stop();
+         Start();
+    }
 
+    public void UpdateRate(int newLinesPerSecond)
+    {
+         if (IsDisposed) throw new ObjectDisposedException(nameof(MockLogSource));
+         UpdateRateCallCount++;
+         LastRateUpdate = newLinesPerSecond;
+         LinesPerSecond = newLinesPerSecond; // Update internal state
+         Debug.WriteLine($"---> MockLogSource: UpdateRate called ({newLinesPerSecond}) for '{PreparedSourceIdentifier}'.");
+         // Mock doesn't need to restart timer, just record the call/value
+    }
+    // --- End ISimulatorLogSource Implementation ---
+
+
+    // --- Simulation Methods for Tests ---
     /// <summary>
     /// Emits a line if monitoring is active. Call StartMonitoring() first.
     /// </summary>
@@ -113,21 +135,21 @@ public class MockLogSource : ILogSource
         if (IsDisposed) throw new ObjectDisposedException(nameof(MockLogSource));
         Debug.WriteLine($"---> MockLogSource: Emitting error: {ex.Message}");
         _logLinesSubject.OnError(ex);
-            // Optionally stop monitoring on error? Depends on desired simulation
-            // StopMonitoring();
+        // Optionally stop monitoring on error? Depends on desired simulation
+        // StopMonitoring();
     }
 
     /// <summary>
     /// Emits completion if not disposed.
     /// </summary>
-        public void EmitCompletion()
-        {
-            if (IsDisposed) throw new ObjectDisposedException(nameof(MockLogSource));
-            Debug.WriteLine($"---> MockLogSource: Emitting completion.");
-            _logLinesSubject.OnCompleted();
-            // Stop monitoring on completion?
-            // StopMonitoring();
-        }
+    public void EmitCompletion()
+    {
+        if (IsDisposed) throw new ObjectDisposedException(nameof(MockLogSource));
+        Debug.WriteLine($"---> MockLogSource: Emitting completion.");
+        _logLinesSubject.OnCompleted();
+        // Stop monitoring on completion?
+        // StopMonitoring();
+    }
 
     // --- IDisposable ---
 
@@ -136,7 +158,7 @@ public class MockLogSource : ILogSource
         if (IsDisposed) return;
         Debug.WriteLine($"---> MockLogSource: Dispose called for '{PreparedSourceIdentifier}'.");
         IsDisposed = true;
-        StopMonitoring(); // Ensure monitoring stops on dispose
+        Stop(); // Ensure monitoring stops on dispose
         _logLinesSubject.OnCompleted(); // Signal completion
         _logLinesSubject.Dispose();     // Dispose subject
         GC.SuppressFinalize(this);

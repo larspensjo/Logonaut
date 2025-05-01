@@ -7,31 +7,29 @@ using Microsoft.VisualStudio.TestTools.UnitTesting; // Explicit using
 
 namespace Logonaut.UI.Tests.ViewModels;
 
-[TestClass]
-public class MainViewModel_JumpToLineTests
+[TestClass] public class MainViewModel_JumpToLineTests : MainViewModelTestBase // Inherit from the updated base
 {
-    private MockSettingsService _mockSettings = null!;
-    private SynchronizationContext _testContext = null!;
-    private MainViewModel _viewModel = null!;
-
-    [TestInitialize] public void TestInitialize()
+    // No separate TestInitialize needed here if the base setup is sufficient,
+    // unless specific LogDoc/FilteredLines setup is required ONLY for these tests.
+    // Let's add one to ensure the FilteredLogLines are always set consistently for jump tests.
+    [TestInitialize]
+    public override void TestInitialize() // Use override if extending base behavior
     {
-        _mockSettings = new MockSettingsService();
-        _testContext = new ImmediateSynchronizationContext();
-
-        // Use constructor suitable for this test focus
-        _viewModel = new MainViewModel(
-            _mockSettings,
-            uiContext: _testContext
-            // Omit services not directly needed for jump logic tests
-        );
+        base.TestInitialize(); // Run the base setup first
 
         // Setup initial filtered lines crucial for jump tests
-        _viewModel.FilteredLogLines.Clear();
+        _viewModel.FilteredLogLines.Clear(); // Ensure clean state
         _viewModel.FilteredLogLines.Add(new FilteredLogLine(10, "Line Ten"));    // Index 0
         _viewModel.FilteredLogLines.Add(new FilteredLogLine(25, "Line TwentyFive"));// Index 1
         _viewModel.FilteredLogLines.Add(new FilteredLogLine(50, "Line Fifty"));   // Index 2
+
+        // Reset jump-related state before each test
+        _viewModel.TargetOriginalLineNumberInput = string.Empty;
+        _viewModel.JumpStatusMessage = string.Empty;
+        _viewModel.IsJumpTargetInvalid = false;
+        _viewModel.HighlightedFilteredLineIndex = -1; // Reset highlight
     }
+
 
     // Verifies: [ReqGoToLineExecuteJumpv1] (Success case)
     [TestMethod] public async Task JumpToLineCommand_ValidInputLineFound_SetsHighlightIndex()
@@ -41,6 +39,7 @@ public class MainViewModel_JumpToLineTests
 
         // Act
         await _viewModel.JumpToLineCommand.ExecuteAsync(null);
+        _testContext.Send(_ => { }, null); // Process any potential posts
 
         // Assert
         Assert.AreEqual(1, _viewModel.HighlightedFilteredLineIndex, "Highlight index mismatch.");
@@ -50,8 +49,8 @@ public class MainViewModel_JumpToLineTests
     }
 
     // Verifies: [ReqGoToLineFeedbackNotFoundv1] (Line not in filtered view)
-    [Ignore("Can't test the message as it is cleared before JumpToLineCommand returns")]
-    [TestMethod] public async Task JumpToLineCommand_ValidInputLineNotFound_SetsStatusMessage()
+    // REMOVED Ignore: Test the setting of the message, delay tests clearing.
+    [TestMethod] public async Task JumpToLineCommand_ValidInputLineNotFound_SetsStatusMessageAndFeedback()
     {
         // Arrange
         _viewModel.TargetOriginalLineNumberInput = "100"; // Not in FilteredLogLines
@@ -59,16 +58,24 @@ public class MainViewModel_JumpToLineTests
 
         // Act
         await _viewModel.JumpToLineCommand.ExecuteAsync(null);
+        _testContext.Send(_ => { }, null); // Process any potential posts
 
-        // Assert
+        // Assert: Check state immediately after command execution
         Assert.AreEqual(initialHighlight, _viewModel.HighlightedFilteredLineIndex, "Highlight index should not change.");
-        StringAssert.Contains(_viewModel.JumpStatusMessage, "not found", "Status message incorrect.");
-        Assert.IsTrue(_viewModel.IsJumpTargetInvalid, "Invalid feedback should be true.");
+        StringAssert.Contains(_viewModel.JumpStatusMessage, "not found", "Status message incorrect immediately after execution.");
+        Assert.IsTrue(_viewModel.IsJumpTargetInvalid, "Invalid feedback should be true immediately after execution.");
+
+        // Assert: Check state after delay (feedback should clear)
+        await Task.Delay(3000); // Wait longer than the delay in TriggerInvalidInputFeedback
+        _testContext.Send(_ => { }, null); // Ensure any clearing posts are processed
+
+        Assert.IsTrue(string.IsNullOrEmpty(_viewModel.JumpStatusMessage), "Status message should be cleared after delay.");
+        Assert.IsFalse(_viewModel.IsJumpTargetInvalid, "Invalid feedback should be false after delay.");
     }
 
     // Verifies: [ReqGoToLineFeedbackNotFoundv1] (Invalid input)
-    [Ignore("Can't test the message as it is cleared before JumpToLineCommand returns")]
-    [TestMethod] public async Task JumpToLineCommand_InvalidInput_SetsStatusMessage()
+    // REMOVED Ignore: Test the setting of the message, delay tests clearing.
+    [TestMethod] public async Task JumpToLineCommand_InvalidInput_SetsStatusMessageAndFeedback()
     {
         // Arrange
         _viewModel.TargetOriginalLineNumberInput = "abc";
@@ -76,11 +83,19 @@ public class MainViewModel_JumpToLineTests
 
         // Act
         await _viewModel.JumpToLineCommand.ExecuteAsync(null);
+        _testContext.Send(_ => { }, null); // Process any potential posts
 
-        // Assert
+        // Assert: Check state immediately after command execution
         Assert.AreEqual(initialHighlight, _viewModel.HighlightedFilteredLineIndex, "Highlight index should not change.");
-        StringAssert.Contains(_viewModel.JumpStatusMessage, "Invalid line number", "Status message incorrect.");
-        Assert.IsTrue(_viewModel.IsJumpTargetInvalid, "Invalid feedback should be true.");
+        StringAssert.Contains(_viewModel.JumpStatusMessage, "Invalid line number", "Status message incorrect immediately after execution.");
+        Assert.IsTrue(_viewModel.IsJumpTargetInvalid, "Invalid feedback should be true immediately after execution.");
+
+        // Assert: Check state after delay (feedback should clear)
+        await Task.Delay(3000); // Wait longer than the delay in TriggerInvalidInputFeedback
+         _testContext.Send(_ => { }, null); // Ensure any clearing posts are processed
+
+        Assert.IsTrue(string.IsNullOrEmpty(_viewModel.JumpStatusMessage), "Status message should be cleared after delay.");
+        Assert.IsFalse(_viewModel.IsJumpTargetInvalid, "Invalid feedback should be false after delay.");
     }
 
     // Verifies: [ReqStatusBarSelectedLinev1] (Update based on highlight)
@@ -88,12 +103,14 @@ public class MainViewModel_JumpToLineTests
     {
         // Act: Select line index 2 (Original Line 50)
         _viewModel.HighlightedFilteredLineIndex = 2;
+        _testContext.Send(_ => { }, null); // Process property changed handler
 
         // Assert
         Assert.AreEqual("50", _viewModel.TargetOriginalLineNumberInput, "Target input not updated for index 2.");
 
         // Act: Deselect line
         _viewModel.HighlightedFilteredLineIndex = -1;
+        _testContext.Send(_ => { }, null); // Process property changed handler
 
         // Assert
         Assert.AreEqual("", _viewModel.TargetOriginalLineNumberInput, "Target input not cleared for index -1.");

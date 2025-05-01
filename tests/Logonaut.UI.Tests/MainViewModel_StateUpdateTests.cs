@@ -1,204 +1,237 @@
+// tests/Logonaut.UI.Tests/MainViewModel_StateUpdateTests.cs
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Collections.Generic;
 using System.Linq;
 using Logonaut.Common;
-using Logonaut.Core;
-using Logonaut.UI;
+using Logonaut.Filters; // Ensure the correct namespace for IFilter is imported
 using Logonaut.UI.ViewModels;
+using System.Threading.Tasks; // For Task
 
 namespace Logonaut.UI.Tests.ViewModels;
 
- /// Tests focused on how the VM state changes in response to processor updates, highlighting, busy states
-[TestClass] public class MainViewModel_StateUpdateTests : MainViewModelTestBase
+/// <summary>
+/// Tests focused on how the VM state changes in response to processor updates,
+/// highlighting changes, and busy state management.
+/// </summary>
+[TestClass] public class MainViewModel_StateUpdateTests : MainViewModelTestBase // Inherit from updated base
 {
-    // Verifies: [ReqDisplayRealTimeUpdatev1], [ReqStatusBarFilteredLinesv1]
-    [TestMethod] public void ApplyFilteredUpdate_Replace_ClearsAndAddsLines_ResetsSearch_ClearsFilteringToken()
+    // Helper to populate the LogDoc and trigger an initial filter, simulating a loaded state
+    private async Task SetupWithInitialLines(IEnumerable<string> lines, IFilter? initialFilter = null)
     {
-        // Arrange: Setup init        // Arrange: Setup initial FilteredLogLines and search state
-        _viewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Old Line 1"));
-        _viewModel.SearchText = "Old"; // Triggers search via property setter logic
-        _testContext.Send(_ => { }, null); // Ensure search updates
-        Assert.AreEqual(1, _viewModel.SearchMarkers.Count, "Arrange failure: Search markers not set.");
+        var source = GetActiveMockSource();
+        source.LinesForInitialRead.AddRange(lines);
+        _mockFileDialog.FileToReturn = "C:\\test_state.log"; // Provide a dummy path
 
-        _viewModel.CurrentBusyStates.Clear(); // Set specific busy state for this test
-        _viewModel.CurrentBusyStates.Add(MainViewModel.FilteringToken);
+        await _viewModel.OpenLogFileCommand.ExecuteAsync(null);
+        _testContext.Send(_ => { }, null); // Ensure initial load processing completes
+
+        // Optionally apply a specific filter *after* the initial load if needed
+        if (initialFilter != null && !(initialFilter is TrueFilter)) // OpenLogFile uses TrueFilter initially
+        {
+            Assert.IsNotNull(_viewModel.ActiveFilterProfile, "ActiveFilterProfile should not be null.");
+            _viewModel.ActiveFilterProfile.SetModelRootFilter(initialFilter);
+            _testContext.Send(_ => { }, null); // Process filter change
+        }
+    }
+
+    // Verifies: [ReqDisplayRealTimeUpdatev1], [ReqStatusBarFilteredLinesv1], [ReqSearchHighlightResultsv1] (Reset)
+    [TestMethod]
+    public async Task FilterChange_TriggersReplace_ClearsAndAddsLines_ResetsSearch_ClearsFilteringToken()
+    {
+        // Arrange: Setup with initial lines and search state
+        await SetupWithInitialLines(new List<string> { "Old Line 1", "Match Me" });
+        _viewModel.SearchText = "Old";
+        _testContext.Send(_ => { }, null);
+        Assert.AreEqual(1, _viewModel.FilteredLogLines.Count(l => l.Text.Contains("Old")), "Arrange FilteredLines count mismatch.");
+        Assert.AreEqual(1, _viewModel.SearchMarkers.Count, "Arrange SearchMarkers count mismatch.");
+
+        _viewModel.CurrentBusyStates.Clear(); // Clear initial busy state
+        _viewModel.CurrentBusyStates.Add(MainViewModel.FilteringToken); // Simulate busy
         Assert.AreEqual(1, _viewModel.CurrentBusyStates.Count);
 
-        var newLines = new List<FilteredLogLine> { new FilteredLogLine(10, "New") };
+        // Act: Change the filter (e.g., by changing context lines, which is simple)
+        _viewModel.ContextLines = 1; // This triggers internal processor UpdateFilterSettings
+        _testContext.Send(_ => { }, null); // Process ApplyFilteredUpdate resulting from filter change
 
-        // Act: Simulate processor sending a Replace update
-        _mockProcessor.SimulateReplaceUpdate(newLines); // Use the specific simulation method
-        _testContext.Send(_ => { }, null); // Process ApplyFilteredUpdate
-
-        // Assert: ViewModel state updated
-        Assert.AreEqual(1, _viewModel.FilteredLogLines.Count);
-        Assert.AreEqual("New", _viewModel.FilteredLogLines[0].Text);
-        Assert.AreEqual(1, _viewModel.FilteredLogLinesCount);
+        // Assert: ViewModel state updated (expecting ALL lines now due to TrueFilter + context=1)
+        Assert.AreEqual(2, _viewModel.FilteredLogLines.Count, "Filtered line count after context change mismatch.");
+        Assert.AreEqual("Old Line 1", _viewModel.FilteredLogLines[0].Text);
+        Assert.AreEqual("Match Me", _viewModel.FilteredLogLines[1].Text);
+        Assert.AreEqual(2, _viewModel.FilteredLogLinesCount);
         Assert.AreEqual(0, _viewModel.SearchMarkers.Count, "Search markers should be cleared on Replace.");
         Assert.AreEqual(-1, _viewModel.CurrentMatchOffset);
 
         // Assert: Busy state cleared
-        Assert.AreEqual(0, _viewModel.CurrentBusyStates.Count);
+        Assert.AreEqual(0, _viewModel.CurrentBusyStates.Count, "Busy state should be cleared.");
         CollectionAssert.DoesNotContain(_viewModel.CurrentBusyStates, MainViewModel.FilteringToken);
     }
 
     // Verifies: [ReqHighlightSelectedLinev1], [ReqStatusBarSelectedLinev1]
-    [TestMethod] public void ApplyFilteredUpdate_Replace_RestoresHighlightBasedOnOriginalLineNumber()
+    [TestMethod]
+    public async Task FilterChange_TriggersReplace_RestoresHighlightBasedOnOriginalLineNumber()
     {
-        // Arrange
-        _viewModel.FilteredLogLines.Add(new FilteredLogLine(5, "Line Five"));
-        _viewModel.FilteredLogLines.Add(new FilteredLogLine(10, "Line Ten"));    // Index 1
-        _viewModel.FilteredLogLines.Add(new FilteredLogLine(15, "Line Fifteen"));
-        _viewModel.HighlightedFilteredLineIndex = 1; // Select "Line Ten"
-        Assert.AreEqual(10, _viewModel.HighlightedOriginalLineNumber, "Arrange failure: Original line number mismatch.");
+        // Arrange: Setup with specific lines
+        await SetupWithInitialLines(new List<string> {
+            "Line 5 Data",      // Orig 1
+            "Line 10 Highlight",// Orig 2
+            "Line 15 Info"      // Orig 3
+        });
+        // Highlight "Line 10 Highlight" (index 1 in current filtered list)
+        _viewModel.HighlightedFilteredLineIndex = 1;
+        _testContext.Send(_ => { }, null); // Process highlight change
+        Assert.AreEqual(2, _viewModel.HighlightedOriginalLineNumber, "Arrange: Original line number mismatch.");
 
-        // New list where original line 10 is now at index 0
-        var newLines = new List<FilteredLogLine> { new(10, "Ten"), new(20, "Twenty") };
+        // Arrange: Set up a new filter that will change the filtered list order/content
+        // Filter for "Line" - all lines match, order maintained initially
+        // Change ContextLines to trigger replace - order still maintained
+        var filter = new SubstringFilter("Line");
+        Assert.IsNotNull(_viewModel.ActiveFilterProfile, "ActiveFilterProfile should not be null.");
+        _viewModel.ActiveFilterProfile.SetModelRootFilter(filter);
+        _testContext.Send(_ => { }, null); // Process filter change
+         // Highlight should still be on index 1, original line 2
+        Assert.AreEqual(1, _viewModel.HighlightedFilteredLineIndex, "Arrange: Highlight index mismatch after filter.");
+        Assert.AreEqual(2, _viewModel.HighlightedOriginalLineNumber, "Arrange: Original line number mismatch after filter.");
 
-        // Act
-        _mockProcessor.SimulateReplaceUpdate(newLines);
-        _testContext.Send(_ => { }, null); // Process update and highlight restore
 
-        // Assert
-        Assert.AreEqual(2, _viewModel.FilteredLogLines.Count, "Filtered lines count mismatch.");
-        Assert.AreEqual(0, _viewModel.HighlightedFilteredLineIndex, "Highlight index not restored correctly.");
-        Assert.AreEqual(10, _viewModel.HighlightedOriginalLineNumber, "Original line number incorrect after restore.");
+        // Act: Trigger a Replace update by changing ContextLines again
+        _viewModel.ContextLines = 1; // Causes full refilter
+        _testContext.Send(_ => { }, null); // Process ApplyFilteredUpdate and highlight restore
+
+        // Assert: The filtered list content/order might change based on filter/context,
+        // but the highlight should be restored to the line with OriginalLineNumber = 2.
+        Assert.AreEqual(3, _viewModel.FilteredLogLines.Count, "Filtered lines count mismatch after replace.");
+        // Find the new index of the line that was originally line 2
+        int expectedNewIndex = _viewModel.FilteredLogLines
+                                     .Select((line, index) => new { line.OriginalLineNumber, Index = index })
+                                     .FirstOrDefault(item => item.OriginalLineNumber == 2)?.Index ?? -1;
+
+        Assert.AreEqual(expectedNewIndex, _viewModel.HighlightedFilteredLineIndex, "Highlight index not restored correctly to original line 2.");
+        Assert.AreEqual(2, _viewModel.HighlightedOriginalLineNumber, "Original line number incorrect after restore.");
+        Assert.AreEqual(1, expectedNewIndex, "Expected new index of original line 2 is wrong."); // Double check test logic
     }
 
     // Verifies: [ReqDisplayRealTimeUpdatev1] (append scenario), [ReqStatusBarFilteredLinesv1]
-    [TestMethod] public void ApplyFilteredUpdate_Append_AddsOnlyNewLines_UpdatesSearch_ClearsFilteringToken()
+    [TestMethod]
+    public async Task NewLineArrival_TriggersAppend_AddsOnlyNewLines_UpdatesSearch_ClearsFilteringToken()
     {
         // Arrange: Initial state
-        _viewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Line 1 Old"));
-        _viewModel.FilteredLogLines.Add(new FilteredLogLine(2, "Line 2 Old"));
-        _mockProcessor.SimulateTotalLinesUpdate(2);
+        await SetupWithInitialLines(new List<string> { "Line 1 Old", "Line 2 Old" });
         _viewModel.SearchText = "Old";
         _testContext.Send(_ => { }, null); // Run initial search
-        // *** FIX: Reflect the fact that UpdateSearchMatches runs within the Post callback ***
-        // In the test, GetCurrentDocumentText uses the FilteredLogLines. At this point, it only contains the initial lines.
         Assert.AreEqual(2, _viewModel.SearchMarkers.Count, "Arrange SearchMarkers");
 
         _viewModel.CurrentBusyStates.Clear();
-        _viewModel.CurrentBusyStates.Add(MainViewModel.FilteringToken);
+        _viewModel.CurrentBusyStates.Add(MainViewModel.FilteringToken); // Simulate busy
         Assert.AreEqual(1, _viewModel.CurrentBusyStates.Count);
 
-        var linesToAppend = new List<FilteredLogLine>
-        {
-            new FilteredLogLine(3, "Line 3 New Append"),
-            new FilteredLogLine(4, "Line 4 Old Context") // This line contains "Old"
-        };
-
-        // Act: Simulate processor sending an Append update
-        _mockProcessor.SimulateAppendUpdate(linesToAppend);
-        _testContext.Send(_ => { }, null); // Process ApplyFilteredUpdate
-
-        // *** FIX: Manually trigger search update AFTER ApplyFilteredUpdate completes ***
-        // This simulates what happens implicitly when the editor text *actually* updates in the UI.
-        var updateSearchMethod = _viewModel.GetType().GetMethod("UpdateSearchMatches", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        Assert.IsNotNull(updateSearchMethod, "Could not find UpdateSearchMatches method.");
-        updateSearchMethod.Invoke(_viewModel, null);
-        _testContext.Send(_ => { }, null); // Process any posts from UpdateSearchMatches if needed
+        // Act: Simulate new lines arriving via the source mock
+        var source = GetActiveMockSource();
+        source.EmitLine("Line 3 New Append");
+        source.EmitLine("Line 4 Old Context"); // This line contains "Old"
+        _testContext.Send(_ => { }, null); // Process ApplyFilteredUpdate (Append) and Search Update
 
         // Assert: ViewModel state updated by appending
-        Assert.AreEqual(4, _viewModel.FilteredLogLines.Count); // 2 initial + 2 appended
-        Assert.AreEqual(4, _viewModel.FilteredLogLinesCount);
+        // Note: With TrueFilter (default from OpenLogFile), all lines appear
+        Assert.AreEqual(4, _viewModel.FilteredLogLines.Count, "Append: Filtered lines count"); // 2 initial + 2 appended
+        Assert.AreEqual(4, _viewModel.FilteredLogLinesCount, "Append: FilteredLogLinesCount");
         Assert.AreEqual("Line 3 New Append", _viewModel.FilteredLogLines[2].Text);
         Assert.AreEqual("Line 4 Old Context", _viewModel.FilteredLogLines[3].Text);
 
         // Assert: Search should now find matches in lines 1, 2, and 4.
-        Assert.AreEqual(3, _viewModel.SearchMarkers.Count, "Search markers count after append mismatch.");
+        // UpdateSearchMatches runs within ApplyFilteredUpdate for Append now.
+        Assert.AreEqual(3, _viewModel.SearchMarkers.Count, "Append: Search markers count mismatch.");
 
         // Assert: Busy state cleared
-        Assert.AreEqual(0, _viewModel.CurrentBusyStates.Count);
+        Assert.AreEqual(0, _viewModel.CurrentBusyStates.Count, "Append: Busy state count");
         CollectionAssert.DoesNotContain(_viewModel.CurrentBusyStates, MainViewModel.FilteringToken);
     }
 
     // Verifies: [ReqGeneralBusyIndicatorv1], [ReqLoadingOverlayIndicatorv1]
-    [TestMethod] public void BusyStates_ManagedCorrectly_DuringInitialLoad_WithIncrementalPipeline()
+    [TestMethod]
+    public async Task BusyStates_ManagedCorrectly_DuringInitialLoad()
     {
         // Arrange
         _mockFileDialog.FileToReturn = "C:\\good\\log.txt";
-        List<FilteredLogLine> initialLinesResult = new() { new(1, "Line 1") };
-        _viewModel.CurrentBusyStates.Clear();
+        GetActiveMockSource().LinesForInitialRead = new List<string> { "Line 1" }; // Setup source before command
+        _viewModel.CurrentBusyStates.Clear(); // Ensure clean state
 
-        // Act 1: Start the file open process
+        // Act 1: Execute the command - this posts state changes
         var openTask = _viewModel.OpenLogFileCommand.ExecuteAsync(null);
-        // It runs synchronously up to the first await because of mocks & ImmediateSynchronizationContext
+        // Run pending UI tasks immediately (like adding Loading/Filtering tokens)
+        _testContext.Send(_ => { }, null);
 
-        // Assert 1: *Both* LoadingToken and FilteringToken should be added by synchronous Post calls
-        _testContext.Send(_ => { }, null); // Flush context queue
-        // *** FIX: Expect 2 tokens here ***
-        Assert.AreEqual(2, _viewModel.CurrentBusyStates.Count, "State 1 Count (Loading+Filtering)");
-        CollectionAssert.Contains(_viewModel.CurrentBusyStates, MainViewModel.LoadingToken, "State 1 Loading");
-        CollectionAssert.Contains(_viewModel.CurrentBusyStates, MainViewModel.FilteringToken, "State 1 Filtering");
+        // Assert 1: Check state *during* load (before processor finishes)
+        Assert.AreEqual(2, _viewModel.CurrentBusyStates.Count, "Busy state count during load mismatch.");
+        CollectionAssert.Contains(_viewModel.CurrentBusyStates, MainViewModel.LoadingToken, "LoadingToken missing during load.");
+        CollectionAssert.Contains(_viewModel.CurrentBusyStates, MainViewModel.FilteringToken, "FilteringToken missing during load.");
 
-        // Act 2: Simulate the FilterProcessor sending the *first* Replace update
-        _mockProcessor.SimulateReplaceUpdate(initialLinesResult);
-        _testContext.Send(_ => { }, null); // Process ApplyFilteredUpdate
+        // Act 2: Allow the async file reading and subsequent filter processing to complete.
+        // The internal processor will eventually call ApplyFilteredUpdate via the test context.
+        await openTask; // Wait for the command's async parts to finish
+        _testContext.Send(_ => { }, null); // Ensure the final ApplyFilteredUpdate is processed
 
-        // Assert 2 (was Assert 3): Both tokens removed by the first Replace update after load
-        Assert.AreEqual(0, _viewModel.CurrentBusyStates.Count, "State 2 Count (After Replace)");
-        CollectionAssert.DoesNotContain(_viewModel.CurrentBusyStates, MainViewModel.LoadingToken, "State 2 Loading");
-        CollectionAssert.DoesNotContain(_viewModel.CurrentBusyStates, MainViewModel.FilteringToken, "State 2 Filtering");
-        Assert.AreEqual(1, _viewModel.FilteredLogLines.Count, "Filtered lines not updated.");
-
-        // Ensure the async command actually completes (though it likely already has)
-        // Need to await the task if it wasn't fully synchronous due to some unforeseen awaiter.
-        // Using Task.Run to await safely in a test context if needed, but might not be necessary with mocks.
-        // await Task.Run(() => openTask); // Or simply `await openTask;` if context allows.
-        // Given the mocks, it should complete synchronously.
+        // Assert 2: Check state *after* load and initial filter completes
+        Assert.AreEqual(0, _viewModel.CurrentBusyStates.Count, "Busy state count after load mismatch.");
+        CollectionAssert.DoesNotContain(_viewModel.CurrentBusyStates, MainViewModel.LoadingToken, "LoadingToken not cleared after load.");
+        CollectionAssert.DoesNotContain(_viewModel.CurrentBusyStates, MainViewModel.FilteringToken, "FilteringToken not cleared after load.");
+        Assert.AreEqual(1, _viewModel.FilteredLogLines.Count, "Filtered lines not updated after load.");
     }
 
     // Verifies: [ReqGeneralBusyIndicatorv1]
-    [TestMethod] public void ApplyFilteredUpdate_Append_AfterNewLineArrival_ClearsFilteringToken()
+    [TestMethod]
+    public async Task NewLineArrival_ClearsFilteringToken_AfterAppendProcessed()
     {
-         // Arrange: Simulate filtering busy state active because new lines arrived
-         // (Note: In reality, the token might not be added for *every* buffer, but for testing the removal, assume it was added)
+         // Arrange: Setup initial state
+        await SetupWithInitialLines(new List<string> { "Initial" });
         _viewModel.CurrentBusyStates.Clear();
-        _viewModel.CurrentBusyStates.Add(MainViewModel.FilteringToken);
+        _viewModel.CurrentBusyStates.Add(MainViewModel.FilteringToken); // Simulate busy
         Assert.AreEqual(1, _viewModel.CurrentBusyStates.Count);
 
-        // Act: Simulate Append update resulting from processing those new lines
-        _mockProcessor.SimulateAppendUpdate(new List<FilteredLogLine> { new(5, "Appended Line") });
-        _testContext.Send(_ => { }, null);
+        // Act: Emit a new line
+        GetActiveMockSource().EmitLine("Appended Line");
+        _testContext.Send(_ => { }, null); // Process the Append update
 
         // Assert
-        Assert.AreEqual(0, _viewModel.CurrentBusyStates.Count);
+        Assert.AreEqual(0, _viewModel.CurrentBusyStates.Count, "FilteringToken not cleared after append.");
         CollectionAssert.DoesNotContain(_viewModel.CurrentBusyStates, MainViewModel.FilteringToken);
-        CollectionAssert.DoesNotContain(_viewModel.CurrentBusyStates, MainViewModel.LoadingToken);
+        Assert.AreEqual(2, _viewModel.FilteredLogLines.Count); // Verify line was added
     }
 
     // Verifies: [ReqHighlightSelectedLinev1], [ReqStatusBarSelectedLinev1]
-    [TestMethod] public void HighlightedFilteredLineIndex_SetValid_UpdatesOriginalLineNumber()
+    [TestMethod]
+    public async Task HighlightedFilteredLineIndex_SetValid_UpdatesOriginalLineNumber()
     {
-        // Arrange
-        _viewModel.FilteredLogLines.Add(new FilteredLogLine(5, "Line Five")); // Index 0
-        _viewModel.FilteredLogLines.Add(new FilteredLogLine(10, "Line Ten")); // Index 1
+        // Arrange: Setup initial state
+        await SetupWithInitialLines(new List<string> { "Line 5", "Line 10" }); // Orig 1, 2
 
         // Act
-        _viewModel.HighlightedFilteredLineIndex = 1;
+        _viewModel.HighlightedFilteredLineIndex = 1; // Select "Line 10" (Orig 2)
+        _testContext.Send(_ => { }, null); // Process PropertyChanged
 
         // Assert
         Assert.AreEqual(1, _viewModel.HighlightedFilteredLineIndex, "Filtered index mismatch.");
-        Assert.AreEqual(10, _viewModel.HighlightedOriginalLineNumber, "Original number mismatch.");
+        Assert.AreEqual(2, _viewModel.HighlightedOriginalLineNumber, "Original number mismatch."); // Line 10 is the 2nd original line
     }
 
     // Verifies: [ReqHighlightSelectedLinev1], [ReqStatusBarSelectedLinev1]
-    [TestMethod] public void HighlightedFilteredLineIndex_SetInvalid_ResetsOriginalLineNumber()
+    [TestMethod] public async Task HighlightedFilteredLineIndex_SetInvalid_ResetsOriginalLineNumber()
     {
-        // Arrange
-        _viewModel.FilteredLogLines.Add(new FilteredLogLine(5, "Line Five")); // Index 0
-        _viewModel.HighlightedFilteredLineIndex = 0;
-        Assert.AreEqual(5, _viewModel.HighlightedOriginalLineNumber, "Arrange failure.");
+        // Arrange: Setup initial state
+        await SetupWithInitialLines(new List<string> { "Line 5" }); // Orig 1
+        _viewModel.HighlightedFilteredLineIndex = 0; // Highlight "Line 5" (Orig 1)
+        _testContext.Send(_ => { }, null);
+        Assert.AreEqual(1, _viewModel.HighlightedOriginalLineNumber, "Arrange failure.");
 
         // Act: Set to -1
         _viewModel.HighlightedFilteredLineIndex = -1;
+        _testContext.Send(_ => { }, null);
         // Assert
         Assert.AreEqual(-1, _viewModel.HighlightedFilteredLineIndex, "Filtered index should be -1.");
         Assert.AreEqual(-1, _viewModel.HighlightedOriginalLineNumber, "Original number should be -1.");
 
         // Act: Set out of bounds
         _viewModel.HighlightedFilteredLineIndex = 5; // Out of bounds (count is 1)
+        _testContext.Send(_ => { }, null);
         // Assert
         Assert.AreEqual(5, _viewModel.HighlightedFilteredLineIndex, "Filtered index should be 5.");
         Assert.AreEqual(-1, _viewModel.HighlightedOriginalLineNumber, "Original number should reset to -1 on invalid index.");

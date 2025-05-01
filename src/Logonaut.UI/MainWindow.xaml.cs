@@ -105,10 +105,6 @@ public partial class MainWindow : Window, IDisposable
 
     private static Logonaut.Core.FileSystemSettingsService _settingsService = new();
 
-    // It seems as if an constructor without parameters is required for XAML to work properly.
-    // Inject a settings service.
-    public MainWindow() : this(new MainViewModel(_settingsService)) {}
-
     // Enable injection of the ViewModel for testing purposes
     public MainWindow(MainViewModel viewModel)
     {

@@ -1,42 +1,42 @@
+// tests/Logonaut.UI.Tests/MainViewModelTestBase.cs
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using System.Windows; // For DispatcherPriority, Size, Rect
-using System.Windows.Controls; // For TreeView
-using System.Windows.Media; // For VisualTreeHelper
-using System.Windows.Threading; // For Dispatcher
-using System.Collections.Generic; // For List
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
+using System.Windows.Threading;
+using System.Collections.Generic; // Keep for other potential uses if needed
 using Logonaut.Common;
 using Logonaut.Core;
 using Logonaut.Filters;
 using Logonaut.UI.ViewModels;
 using Logonaut.TestUtils;
-using System.Threading; // For SynchronizationContext, AutoResetEvent
-using System; // For Environment, Exception
-using System.Linq; // For LINQ methods
+using System.Threading;
+using System;
+using System.Linq;
 
 namespace Logonaut.UI.Tests.ViewModels;
 
-/// <summary>
-/// Base class for MainViewModel tests, providing common setup, teardown, mocks,
-/// helper methods, and STA thread management for WPF control interaction tests.
-/// </summary>
-[TestClass] // Still needs TestClass attribute for ClassInitialize/Cleanup
-public abstract class MainViewModelTestBase
+[TestClass] public abstract class MainViewModelTestBase
 {
     // --- Shared Mocks & Context ---
     protected MockSettingsService _mockSettings = null!;
-    protected MockLogSource _mockLogSource = null!;
+    protected MockLogSourceProvider _mockSourceProvider = null!;
+    protected MockLogSource _mockFileLogSource = null!;
+    protected MockLogSource _mockSimulatorLogSource = null!;
     protected MockFileDialogService _mockFileDialog = null!;
-    protected MockLogFilterProcessor _mockProcessor = null!;
+    protected MockLogSource _mockSimulatorSource = null!;
     protected SynchronizationContext _testContext = null!;
     protected MainViewModel _viewModel = null!;
 
-    // --- WPF Control Testing Helper Fields ---
-    private static Dispatcher? _dispatcher; // For STA thread tests
-    private static AutoResetEvent _initEvent = new AutoResetEvent(false); // Synchronization for STA thread
+    // --- Test State ---
     protected bool _requestScrollToEndEventFired = false;
 
-    // --- STA Thread Setup/Teardown for WPF Control Tests ---
-    [ClassInitialize(Microsoft.VisualStudio.TestTools.UnitTesting.InheritanceBehavior.BeforeEachDerivedClass)] // Ensure STA thread is ready before derived classes run
+    // --- WPF Control Testing Helper Fields ---
+    private static Dispatcher? _dispatcher;
+    private static AutoResetEvent _initEvent = new AutoResetEvent(false);
+
+    // --- STA Thread Setup/Teardown ---
+    [ClassInitialize(Microsoft.VisualStudio.TestTools.UnitTesting.InheritanceBehavior.BeforeEachDerivedClass)]
     public static void ClassInitialize(TestContext context)
     {
         // Prevent re-initialization if already done by another derived class test run
@@ -54,62 +54,72 @@ public abstract class MainViewModelTestBase
         _initEvent.WaitOne(); // Wait for dispatcher to be ready
     }
 
-    [ClassCleanup] // Runs once after all tests in derived classes inheriting from here
-    public static void ClassCleanup()
+    [ClassCleanup] public static void ClassCleanup()
     {
         _dispatcher?.InvokeShutdown();
-        _dispatcher = null; // Allow re-initialization if run again
-        _initEvent.Dispose(); // Dispose the event handle
+        _dispatcher = null;
+        _initEvent?.Dispose();
     }
 
     // --- Per-Test Setup ---
-    [TestInitialize] public virtual void TestInitialize() // Make virtual if derived classes need specific additions
+    [TestInitialize] public virtual void TestInitialize()
     {
+        // Instantiate mocks
         _mockSettings = new MockSettingsService();
-        _mockLogSource = new MockLogSource();
+        _mockSourceProvider = new MockLogSourceProvider();
+        _mockFileLogSource = _mockSourceProvider.MockFileSource;
+        _mockSimulatorSource = _mockSourceProvider.MockSimulatorSource;
         _mockFileDialog = new MockFileDialogService();
-        _mockProcessor = new MockLogFilterProcessor();
         _testContext = new ImmediateSynchronizationContext();
 
         _mockSettings.SettingsToReturn = MockSettingsService.CreateDefaultTestSettings();
 
+        // Instantiate ViewModel using the provider
         _viewModel = new MainViewModel(
             _mockSettings,
+            _mockSourceProvider,
             _mockFileDialog,
-            _mockProcessor,
-            _mockLogSource,
             _testContext
         );
 
+        // Reset test state variables
         _requestScrollToEndEventFired = false;
-        _viewModel.RequestScrollToEnd += (s, e) => _requestScrollToEndEventFired = true;
+
+        // Subscribe to other relevant VM events if needed
+        _viewModel.RequestScrollToEnd += ViewModel_RequestScrollToEndHandler;
     }
 
     // --- Per-Test Teardown ---
-    [TestCleanup] public virtual void TestCleanup() // Make virtual if derived classes need specific additions
+    [TestCleanup]
+    public virtual void TestCleanup()
     {
-        Action cleanupAction = () =>
-        {
-            _viewModel?.Dispose(); // Dispose VM first
-        };
-
-        if (Thread.CurrentThread.GetApartmentState() == ApartmentState.STA && _dispatcher != null && !_dispatcher.HasShutdownStarted)
-        {
-            try
+        RunOnSta(() => {
+            if (_viewModel != null)
             {
-                _dispatcher.Invoke(cleanupAction);
-            } catch (Exception ex) {
-                 // Log or handle dispatcher invoke exception during cleanup if necessary
-                 System.Diagnostics.Debug.WriteLine($"Exception during STA cleanup invoke: {ex.Message}");
+                _viewModel.RequestScrollToEnd -= ViewModel_RequestScrollToEndHandler;
             }
-        }
-        else
-        {
-            cleanupAction();
-        }
+             _viewModel?.Dispose();
+            _mockFileLogSource?.Dispose();
+            _mockSimulatorSource?.Dispose();
+        });
+    }
+
+    // Define the handler method to match the event signature for proper removal
+    private void ViewModel_RequestScrollToEndHandler(object? sender, EventArgs e)
+    {
+        _requestScrollToEndEventFired = true;
     }
 
     #region Helper Methods
+
+    /// <summary>
+    /// Helper to get the currently active mock source based on VM state.
+    /// </summary>
+    protected MockLogSource GetActiveMockSource()
+    {
+        // Use the IsSimulatorRunning property to determine which mock the VM is likely using
+        return _viewModel.IsSimulatorRunning ? _mockSimulatorSource : _mockFileLogSource;
+    }
 
     // Static helper, doesn't rely on instance state
     protected static T? FindVisualChild<T>(DependencyObject parent, string name = "") where T : FrameworkElement
@@ -199,7 +209,6 @@ public abstract class MainViewModelTestBase
         });
         if (threadException != null) throw threadException; // Re-throw exception from STA thread
     }
-
 
     #endregion // Helper Methods
 }

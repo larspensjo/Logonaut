@@ -1,5 +1,3 @@
-// ===== File: src\Logonaut.UI\MainViewModel.cs =====
-
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Diagnostics;
@@ -16,6 +14,7 @@ using Logonaut.Filters;
 using Logonaut.UI.Services;
 using Logonaut.LogTailing;
 using ICSharpCode.AvalonEdit;
+using System.ComponentModel; // For PropertyChangedEventArgs
 
 namespace Logonaut.UI.ViewModels;
 
@@ -26,85 +25,96 @@ namespace Logonaut.UI.ViewModels;
 // Also holds state tightly coupled to View for features like search navigation.
 public partial class MainViewModel : ObservableObject, IDisposable
 {
-    #region // --- Fields ---
+    #region Fields
 
-    // --- UI Services & Context ---
+    // --- Services & Context ---
+    private readonly ILogSourceProvider _sourceProvider;
     public static readonly object LoadingToken = new();
     public static readonly object FilteringToken = new();
     private readonly IFileDialogService _fileDialogService;
     private readonly ISettingsService _settingsService;
-    private ILogSource _logSource; // Instance is managed here now
+    private ILogSource _currentActiveLogSource;
     private readonly SynchronizationContext _uiContext;
-    private readonly ILogFilterProcessor _logFilterProcessor;
+    private ILogFilterProcessor _logFilterProcessor; // This will be recreated when switching sources
+
+    // --- Simulator Specific Fields ---
+    private ISimulatorLogSource? _simulatorLogSource; // Keep a dedicated instance
+    private ILogSource? _fileLogSource; // Keep a reference to the file source instance
 
     // --- Lifecycle Management ---
     private readonly CompositeDisposable _disposables = new();
+    private IDisposable? _filterSubscription;
+    private IDisposable? _totalLinesSubscription;
 
     // --- Search State & Ruler Markers ---
     private List<SearchResult> _searchMatches = new();
     private int _currentSearchIndex = -1;
-
-    // Observable property bound to OverviewRulerMargin.SearchMarkers
     [ObservableProperty] private ObservableCollection<SearchResult> _searchMarkers = new();
-
     [ObservableProperty] private bool _isAutoScrollEnabled = true;
-
     public event EventHandler? RequestScrollToEnd; // Triggered when Auto Scroll is enabled
 
     #endregion // --- Fields ---
 
-    #region Simulator Configuration UI State
+    #region Stats Properties
 
-    [ObservableProperty] private bool _isSimulatorConfigurationVisible = false;
-
-    #endregion // Simulator Configuration UI State
-
-    #region // --- Stats Properties ---
-
-    [ObservableProperty]
-    private long _totalLogLines; // Bound to TotalLinesProcessed
-
-    // No need for ObservableProperty here, just needs to raise notification
+    [ObservableProperty] private long _totalLogLines;
     public int FilteredLogLinesCount => FilteredLogLines.Count;
 
     #endregion // --- Stats Properties ---
 
-    #region // --- Constructor ---
+    #region Constructor
 
     public MainViewModel(
         ISettingsService settingsService,
+        ILogSourceProvider sourceProvider,
         IFileDialogService? fileDialogService = null,
-        ILogFilterProcessor? logFilterProcessor = null, // Optional for testing
-        ILogSource? initialLogSource = null,          // Optional for testing
+        // Processor and Source are now managed internally based on mode
         SynchronizationContext? uiContext = null)
     {
         _settingsService = settingsService;
+        _sourceProvider = sourceProvider;
         _fileDialogService = fileDialogService ?? new FileDialogService();
-        _uiContext = uiContext ?? SynchronizationContext.Current ??
-                        throw new InvalidOperationException("Could not capture or receive a valid SynchronizationContext.");
+        _uiContext = uiContext ?? SynchronizationContext.Current ?? throw new InvalidOperationException("Could not capture or receive a valid SynchronizationContext.");
 
-        bool useSimulator = false; // Hard coded override for testing
-        if (initialLogSource != null)
-            _logSource = initialLogSource; // Allow injection for tests to override
-        else if (useSimulator) {
-            _logSource = new SimulatorLogSource(linesPerSecond: 8); // Example: 50 lines/sec
-            _logSource.StartMonitoring();
-        } else
-            _logSource = new FileLogSource(); // Default to file source
-        _disposables.Add(_logSource); // Add source to disposables for cleanup
+        // Initialize with FileLogSource as the default
+        _fileLogSource = _sourceProvider.CreateFileLogSource();
+        _currentActiveLogSource = _fileLogSource; // Start with file source active
+        _disposables.Add(_fileLogSource); // Add file source to disposables
 
-        _logFilterProcessor = logFilterProcessor ?? new LogFilterProcessor(
-            _logSource, // Pass the ILogSource instance
-            LogDoc,
-            _uiContext,
-            AddLineToLogDocument);
+        // Create the initial processor with the file source
+        _logFilterProcessor = CreateProcessor(_currentActiveLogSource);
+        _disposables.Add(_logFilterProcessor); // Add processor to disposables
+        SubscribeToProcessor(); // Subscribe to the initial processor
 
         CurrentBusyStates.CollectionChanged += CurrentBusyStates_CollectionChanged;
         _disposables.Add(Disposable.Create(() => {
             CurrentBusyStates.CollectionChanged -= CurrentBusyStates_CollectionChanged;
         }));
 
-        var filterSubscription = _logFilterProcessor.FilteredUpdates
+        Theme = new ThemeViewModel();
+        LoadPersistedSettings(); // Loads basic settings, not files yet
+    }
+
+    private ILogFilterProcessor CreateProcessor(ILogSource source)
+    {
+        Debug.WriteLine($"---> Creating LogFilterProcessor with source: {source.GetType().Name}");
+        return new LogFilterProcessor(
+            source,
+            LogDoc,
+            _uiContext,
+            AddLineToLogDocument);
+    }
+
+    private void SubscribeToProcessor()
+    {
+        // Dispose previous subscriptions if they exist
+        _filterSubscription?.Dispose();
+        _totalLinesSubscription?.Dispose();
+
+        Debug.WriteLine($"---> Subscribing to processor: {_logFilterProcessor.GetType().Name}");
+
+        _filterSubscription = _logFilterProcessor.FilteredUpdates
+            .ObserveOn(_uiContext) // Ensure UI thread for updates
             .Subscribe(
                 update => ApplyFilteredUpdate(update),
                 ex => HandleProcessorError("Log Processing Error", ex)
@@ -113,18 +123,31 @@ public partial class MainViewModel : ObservableObject, IDisposable
         var samplingScheduler = Scheduler.Default;
         _totalLinesSubscription = _logFilterProcessor.TotalLinesProcessed
             .Sample(TimeSpan.FromMilliseconds(200), samplingScheduler)
-            .ObserveOn(_uiContext)
+            .ObserveOn(_uiContext) // Ensure UI thread for updates
             .Subscribe(
                 count => ProcessTotalLinesUpdate(count),
                 ex => HandleProcessorError("Total Lines Error", ex)
             );
 
-        _disposables.Add(_logFilterProcessor);
-        _disposables.Add(filterSubscription);
+        _disposables.Add(_filterSubscription);
         _disposables.Add(_totalLinesSubscription);
+    }
 
-        Theme = new ThemeViewModel();
-        LoadPersistedSettings();
+    // Dispose processor and its subscriptions
+    private void DisposeAndClearProcessor()
+    {
+        Debug.WriteLine($"---> Disposing processor and subscriptions.");
+        _filterSubscription?.Dispose();
+        _totalLinesSubscription?.Dispose();
+        _filterSubscription = null;
+        _totalLinesSubscription = null;
+
+        // Assuming processor was added to _disposables when created
+        if (_logFilterProcessor != null)
+        {
+            _disposables.Remove(_logFilterProcessor); // Remove from main collection before disposing
+            _logFilterProcessor.Dispose();
+        }
     }
 
     private void CurrentBusyStates_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -137,7 +160,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     #endregion // --- Constructor ---
 
-    #region // --- Highlighted Line State ---
+    #region Highlighted Line State
 
     // The 0-based index of the highlighted line within the FilteredLogLines collection.
     // Bound to the PersistentLineHighlightRenderer.HighlightedLineIndex DP.
@@ -227,7 +250,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     #endregion // Jump To Line Command
 
-    #region // --- UI State Management ---
+    #region UI State Management
 
     private void ProcessTotalLinesUpdate(long count)
     {
@@ -319,8 +342,6 @@ public partial class MainViewModel : ObservableObject, IDisposable
     public ObservableCollection<object> CurrentBusyStates { get; } = new();
     public bool IsLoading => CurrentBusyStates.Contains(LoadingToken);
 
-    private IDisposable? _totalLinesSubscription;
-
     // Controls whether search is case sensitive
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SearchStatusText))]
@@ -366,7 +387,172 @@ public partial class MainViewModel : ObservableObject, IDisposable
     }
     #endregion // --- UI State Management ---
 
-    #region // --- Command Handling ---
+    #region Simulator Configuration UI State & Properties
+
+    [ObservableProperty] private bool _isSimulatorConfigurationVisible = false;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(StartSimulatorCommand))]
+    [NotifyCanExecuteChangedFor(nameof(StopSimulatorCommand))]
+    [NotifyCanExecuteChangedFor(nameof(RestartSimulatorCommand))]
+    private bool _isSimulatorRunning = false;
+
+    [ObservableProperty]
+    private double _simulatorLPS = 10; // Use double for Slider binding
+
+    partial void OnSimulatorLPSChanged(double value)
+    {
+        // Update the running simulator's rate immediately via interface
+        _simulatorLogSource?.UpdateRate((int)Math.Round(value));
+    }
+
+    #endregion // Simulator Configuration UI State & Properties
+
+    #region Simulator Control Commands
+
+    [RelayCommand(CanExecute = nameof(CanStartSimulator))]
+    private void StartSimulator()
+    {
+        if (IsSimulatorRunning) return;
+
+        try
+        {
+            if (_currentActiveLogSource == _fileLogSource) _fileLogSource?.StopMonitoring();
+
+            // 2. Get Simulator Instance via Provider
+            _simulatorLogSource = _sourceProvider.CreateSimulatorLogSource(); // <<<< Returns ISimulatorLogSource
+            if (!_disposables.Contains((IDisposable)_simulatorLogSource)) _disposables.Add((IDisposable)_simulatorLogSource);
+            _simulatorLogSource.Stop(); // Call Stop via interface
+
+            // 3. Configure Simulator
+            _simulatorLogSource.LinesPerSecond = (int)Math.Round(SimulatorLPS); // Set property via interface
+
+            // 4. Switch Active Source and Recreate Processor
+            DisposeAndClearProcessor();
+            _currentActiveLogSource = _simulatorLogSource; // Assign ISimulatorLogSource (which is also ILogSource)
+            _logFilterProcessor = CreateProcessor(_currentActiveLogSource);
+            _disposables.Add(_logFilterProcessor);
+            SubscribeToProcessor();
+
+            // 5. Reset Document and UI State
+            ResetLogDocumentAndUIState();
+            CurrentLogFilePath = "[Simulation Active]";
+
+            // 6. Prepare and Start Simulator Source
+            _simulatorLogSource.PrepareAndGetInitialLinesAsync("Simulator", AddLineToLogDocument).Wait();
+            _simulatorLogSource.Start(); // Call Start via interface
+
+            IsSimulatorRunning = _simulatorLogSource.IsRunning; // Use IsRunning property via interface
+        }
+        catch (Exception ex)
+        {
+            HandleSimulatorError("Error starting simulator", ex);
+        }
+    }
+    private bool CanStartSimulator() => !IsSimulatorRunning;
+
+    [RelayCommand(CanExecute = nameof(CanStopSimulator))]
+    private void StopSimulator()
+    {
+        if (!IsSimulatorRunning) return;
+
+        try
+        {
+            _simulatorLogSource?.Stop(); // Call Stop via interface
+            IsSimulatorRunning = _simulatorLogSource?.IsRunning ?? false;
+            Debug.WriteLine("---> Simulator Stopped");
+            // Do not switch back to file source automatically here.
+            // Keep CurrentLogFilePath as "[Simulation Active]"? Or clear it?
+             // CurrentLogFilePath = "[Simulation Stopped]";
+        }
+        catch (Exception ex)
+        {
+            HandleSimulatorError("Error stopping simulator", ex);
+        }
+    }
+    private bool CanStopSimulator() => IsSimulatorRunning;
+
+    [RelayCommand(CanExecute = nameof(CanStopSimulator))] // Can only restart if running
+    private void RestartSimulator()
+    {
+        if (!IsSimulatorRunning) return; // Should be handled by CanExecute, but double-check
+
+        try
+        {
+            ResetLogDocumentAndUIState();
+            _simulatorLogSource?.Restart(); // Call Restart via interface
+            IsSimulatorRunning = _simulatorLogSource?.IsRunning ?? false;
+            Debug.WriteLine("---> Simulator Restarted");
+        }
+         catch (Exception ex)
+        {
+            HandleSimulatorError("Error restarting simulator", ex);
+        }
+    }
+
+    [RelayCommand]
+    private void ClearLog()
+    {
+        try
+        {
+            ResetLogDocumentAndUIState();
+            // If the simulator is running, it keeps running, just the view is cleared
+            if (IsSimulatorRunning)
+            {
+                // Optionally restart simulator counter? Depends on desired behavior.
+                // _simulatorLogSource?.Restart(); // Uncomment if restart desired on Clear
+            }
+            // Manually trigger a filter update on the now empty document
+             TriggerFilterUpdate();
+            Debug.WriteLine("---> Log Cleared");
+        }
+        catch (Exception ex)
+        {
+            // Handle potential errors during clearing (unlikely)
+             Debug.WriteLine($"!!! Error clearing log: {ex.Message}");
+             MessageBox.Show($"Error clearing log: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    // Helper to reset document and related UI state
+    private void ResetLogDocumentAndUIState()
+    {
+        // Reset Core State
+        _logFilterProcessor.Reset(); // Resets processor's internal index and total lines observable
+
+        // Clear Document and UI Collections/State
+        _uiContext.Post(_ => {
+            LogDoc.Clear();
+            FilteredLogLines.Clear();
+            OnPropertyChanged(nameof(FilteredLogLinesCount)); // Notify count changed
+            ScheduleLogTextUpdate(FilteredLogLines); // Clear editor
+            SearchMarkers.Clear();
+            _searchMatches.Clear();
+            _currentSearchIndex = -1;
+            OnPropertyChanged(nameof(SearchStatusText));
+            HighlightedFilteredLineIndex = -1;
+            HighlightedOriginalLineNumber = -1;
+            TargetOriginalLineNumberInput = string.Empty; // Clear jump input
+            JumpStatusMessage = string.Empty;
+            IsJumpTargetInvalid = false;
+            // TotalLogLines is reset by _logFilterProcessor.Reset() via its observable
+        }, null);
+    }
+
+    private void HandleSimulatorError(string context, Exception ex)
+    {
+        Debug.WriteLine($"!!! {context}: {ex.Message}");
+        MessageBox.Show($"{context}: {ex.Message}", "Simulator Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        // Optionally stop the simulator on error
+        if (IsSimulatorRunning)
+        {
+            StopSimulator();
+        }
+    }
+
+    #endregion // Simulator Control Commands
+
+    #region Command Handling
 
     // === Filter Node Manipulation Commands (Operate on Active Profile's Tree) ===
 
@@ -467,24 +653,19 @@ public partial class MainViewModel : ObservableObject, IDisposable
             SaveCurrentSettingsDelayed(); // Save potentially after EndEdit completes
         }
     }
+    
     private bool CanToggleEditNode() => SelectedFilterNode?.IsEditable ?? false;
-
     [RelayCommand] private async Task OpenLogFileAsync()
     {
-        if (_logSource is SimulatorLogSource)
+        // 1. Stop Simulator if running
+        if (IsSimulatorRunning)
         {
-            _logSource.StopMonitoring();
-            _logSource.Dispose(); // Dispose the old simulator
-            _logSource = new FileLogSource(); // Create the file source
-            // NOTE: The LogFilterProcessor holds a reference to the *old* source.
-            // Ideally, we'd re-create the processor or inject the new source into it.
-            // For minimal change now, we accept this limitation - reopening a file
-            // after using the simulator might require restarting the app if the processor isn't updated.
-            // A better approach involves an ILogSourceProvider or allowing source injection into the processor post-construction.
-            // For now, we'll proceed, but acknowledge this potential issue.
-            // Re-add the new source to disposables (though this might lead to double disposal if VM is disposed later)
-             // _disposables.Add(_logSource); // This is risky, manage source lifecycle carefully.
+            StopSimulator(); // Stop generation
+            // Dispose simulator instance? Or keep it? Let's keep it for now.
+             Debug.WriteLine("---> Stopped simulator before opening file.");
         }
+
+        // 2. Show File Dialog
         string? selectedFile = _fileDialogService.OpenFile("Select a log file", "Log Files|*.log;*.txt|All Files|*.*");
         if (string.IsNullOrEmpty(selectedFile)) return;
         Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} OpenLogFileAsync: '{selectedFile}'");
@@ -493,52 +674,47 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
         try
         {
-            // 1. Stop previous source monitoring (if any)
-             _logSource.StopMonitoring();
+            // 3. Ensure FileLogSource instance exists (reuse or create via provider)
+            _fileLogSource ??= _sourceProvider.CreateFileLogSource(); // Create if null
+            if (!_disposables.Contains(_fileLogSource)) _disposables.Add(_fileLogSource); // Add if new
 
-            // 2. Reset Processor State
-            _logFilterProcessor.Reset();
+            // ... rest of OpenLogFileAsync uses _fileLogSource ...
+             _fileLogSource.StopMonitoring();
 
-            // 3. Clear ViewModel/UI State
-            FilteredLogLines.Clear();
-            OnPropertyChanged(nameof(FilteredLogLinesCount));
-            ScheduleLogTextUpdate(FilteredLogLines); // Clear editor content
-            CurrentLogFilePath = selectedFile;
+            // 5. Switch Active Source and Recreate Processor
+            DisposeAndClearProcessor();
+            _currentActiveLogSource = _fileLogSource; // Set file source as active
+            _logFilterProcessor = CreateProcessor(_currentActiveLogSource);
+            _disposables.Add(_logFilterProcessor);
+            SubscribeToProcessor();
 
-            // 4. Prepare Log Source and Read Initial Lines (populates LogDoc)
-            LogDoc.Clear(); // Clear document before reading
-            long initialLines = await _logSource.PrepareAndGetInitialLinesAsync(selectedFile, AddLineToLogDocument).ConfigureAwait(true);
-
-            // 5. Update Total Lines Display immediately
-            _uiContext.Post(_ => TotalLogLines = initialLines, null);
-
-            // 6. Start Monitoring *New* Lines from Source
-             _logSource.StartMonitoring();
-
-            // 7. Trigger the First Filter Explicitly
-            _uiContext.Post(_ => CurrentBusyStates.Add(FilteringToken), null);
-            IFilter? firstFilter = ActiveFilterProfile?.Model?.RootFilter ?? new TrueFilter();
-            _logFilterProcessor.UpdateFilterSettings(firstFilter, ContextLines);
-            UpdateFilterSubstrings();
+            // ... rest of the method (ResetLogDocumentAndUIState, Prepare, Start, TriggerFilter) ...
+             ResetLogDocumentAndUIState();
+             CurrentLogFilePath = selectedFile;
+             long initialLines = await _fileLogSource.PrepareAndGetInitialLinesAsync(selectedFile, AddLineToLogDocument).ConfigureAwait(true);
+             _uiContext.Post(_ => TotalLogLines = initialLines, null);
+             _fileLogSource.StartMonitoring();
+             _uiContext.Post(_ => CurrentBusyStates.Add(FilteringToken), null);
+             IFilter? firstFilter = ActiveFilterProfile?.Model?.RootFilter ?? new TrueFilter();
+             _logFilterProcessor.UpdateFilterSettings(firstFilter, ContextLines);
+             UpdateFilterSubstrings();
 
             Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} OpenLogFileAsync: Prepare/Start completed ({initialLines} lines). First filter triggered.");
-            // LoadingToken removed by ApplyFilteredUpdate handling the *first* Replace.
-            // FilteringToken removed by ApplyFilteredUpdate.
         }
         catch (Exception ex)
         {
-            _uiContext.Post(_ => {
-                CurrentBusyStates.Remove(LoadingToken);
-                CurrentBusyStates.Remove(FilteringToken);
-                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} OpenLogFileAsync: Error opening file '{selectedFile}': {ex.Message}");
-                MessageBox.Show($"Error opening or reading log file '{selectedFile}':\n{ex.Message}", "File Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                CurrentLogFilePath = null;
-                FilteredLogLines.Clear();
-                OnPropertyChanged(nameof(FilteredLogLinesCount));
-                TotalLogLines = 0;
-                _logSource?.StopMonitoring();
-            }, null);
-            throw;
+             // Error Handling (Keep existing, ensure ResetLogDocumentAndUIState is called on failure path too)
+             _uiContext.Post(_ => {
+                 CurrentBusyStates.Remove(LoadingToken);
+                 CurrentBusyStates.Remove(FilteringToken);
+                 ResetLogDocumentAndUIState(); // Reset state on error
+                 Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} OpenLogFileAsync: Error opening file '{selectedFile}': {ex.Message}");
+                 MessageBox.Show($"Error opening or reading log file '{selectedFile}':\n{ex.Message}", "File Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                 CurrentLogFilePath = null;
+                 _fileLogSource?.StopMonitoring(); // Stop file source if it got started
+             }, null);
+            // Re-throw might not be needed if MessageBox is sufficient user feedback
+             // throw;
         }
     }
 
@@ -618,8 +794,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     #endregion // --- Command Handling ---
 
-    // ... (Orchestration & Updates section - most methods remain the same, check dependencies) ...
-    #region // --- Orchestration & Updates ---
+    #region Orchestration & Updates
 
     private void AddLineToLogDocument(string line) => LogDoc.AppendLine(line);
 
@@ -881,7 +1056,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     public void LoadLogFromText(string text)
     {
-        _logSource?.StopMonitoring(); // Stop current source
+        _currentActiveLogSource?.StopMonitoring(); // Stop current source
         _logFilterProcessor.Reset();
         LogDoc.Clear();
         FilteredLogLines.Clear();
@@ -941,6 +1116,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     }
 
     #endregion // --- Orchestration & Updates ---
+
     #region Jump To Line State
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(JumpToLineCommand))]
@@ -953,7 +1129,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private bool _isJumpTargetInvalid;
     #endregion
 
-    #region // --- Lifecycle Management ---
+    #region Lifecycle Management ---
     public void Dispose()
     {
         Dispose(true);
@@ -975,7 +1151,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         // 1. Clear the busy state collection (good practice)
         _uiContext.Post(_ => CurrentBusyStates.Clear(), null);
         SaveCurrentSettings();
-         _logSource?.StopMonitoring(); // Explicitly stop monitoring before disposing
+         _currentActiveLogSource?.StopMonitoring(); // Explicitly stop monitoring before disposing
         Dispose(); // Calls the main Dispose method which cleans everything else
     }
     #endregion // --- Lifecycle Management ---

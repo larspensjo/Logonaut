@@ -36,3 +36,9 @@ public interface ILogSource : IDisposable
     /// </summary>
     void StopMonitoring();
 }
+
+public interface ILogSourceProvider
+{
+    ILogSource CreateFileLogSource();
+    ISimulatorLogSource CreateSimulatorLogSource(); // Return concrete type for control
+}

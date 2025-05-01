@@ -92,8 +92,8 @@ namespace Logonaut.Core.Tests;
         Assert.AreEqual(initialLines.Count, linesRead, "MockLogSource did not report correct lines read.");
         Assert.AreEqual(initialLines.Count, _logDocument.Count, "LogDocument not populated correctly by Prepare callback.");
 
-        _mockLogSource.StartMonitoring(); // Start source monitoring
-        Assert.IsTrue(_mockLogSource.IsMonitoring, "MockLogSource should be monitoring after StartMonitoring.");
+        _mockLogSource.Start(); // Start source monitoring
+        Assert.IsTrue(_mockLogSource.IsRunning, "MockLogSource should be monitoring after StartMonitoring.");
 
         // Trigger the *first* filter application after preparation
         _processor.UpdateFilterSettings(initialFilter ?? new TrueFilter(), context);

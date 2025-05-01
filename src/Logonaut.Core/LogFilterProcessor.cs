@@ -54,6 +54,8 @@ public class LogFilterProcessor : ILogFilterProcessor
         _backgroundScheduler = backgroundScheduler ?? TaskPoolScheduler.Default;
         _addLineToDocumentCallback = addLineToDocumentCallback;
 
+        Debug.WriteLine($"---> LogFilterProcessor constructor {this.GetType().Name} constructed. Received LogSource: {logSource?.GetType().Name ?? "null"}");
+
         InitializePipelines();
 
         _disposables.Add(_filterChangeTriggerSubject); // Add trigger subject to disposables

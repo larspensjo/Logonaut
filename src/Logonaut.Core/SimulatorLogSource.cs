@@ -2,110 +2,133 @@ using System;
 using System.Diagnostics;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
-using System.Threading; // Required for Timer
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Logonaut.Core;
 
-/// <summary>
-/// An ILogSource implementation that simulates log generation in real-time.
-/// </summary>
-public class SimulatorLogSource : ILogSource
+public class SimulatorLogSource : ISimulatorLogSource
 {
     private readonly Subject<string> _logLinesSubject = new Subject<string>();
     private Timer? _timer;
-    private bool _isMonitoring = false;
+    private bool _isRunning = false;
     private bool _isDisposed = false;
     private long _lineCounter = 0;
-    private int _linesPerSecond = 10; // Default generation rate
     private readonly string[] _logLevels = { "INFO", "WARN", "ERROR", "DEBUG", "TRACE" };
-    private readonly Random _random = new Random();
-    private readonly object _lock = new object(); // Lock for timer/state management
+    private readonly Random _random = new();
+    private readonly object _lock = new object();
+
+    private int _linesPerSecond = 10;
+    public int LinesPerSecond
+    {
+        get => _linesPerSecond;
+        set => UpdateRate(value); // Use UpdateRate logic for consistency
+    }
+
+    public bool IsRunning => _isRunning; // Implement IsRunning
 
     public IObservable<string> LogLines => _logLinesSubject.AsObservable();
 
-    /// <summary>
-    /// Initializes a new instance of the SimulatorLogSource.
-    /// </summary>
-    /// <param name="linesPerSecond">Approximate number of lines to generate per second.</param>
-    public SimulatorLogSource(int linesPerSecond = 10)
-    {
-        if (linesPerSecond <= 0)
-            throw new ArgumentOutOfRangeException(nameof(linesPerSecond), "Lines per second must be positive.");
-        _linesPerSecond = linesPerSecond;
-    }
+    public SimulatorLogSource() { }
 
-    /// <summary>
-    /// Prepares the simulator. For the simulator, this does nothing significant
-    /// other than validating the identifier and returning 0 initial lines.
-    /// </summary>
     public Task<long> PrepareAndGetInitialLinesAsync(string sourceIdentifier, Action<string> addLineToDocumentCallback)
     {
-        if (_isDisposed) throw new ObjectDisposedException(nameof(SimulatorLogSource));
-        // sourceIdentifier could potentially be used to load different simulation profiles later
-        Debug.WriteLine($"---> SimulatorLogSource: Prepare called (Identifier: '{sourceIdentifier}'). No initial lines.");
-        // Simulate readiness for StartMonitoring
-        return Task.FromResult(0L);
+        lock(_lock)
+        {
+            if (_isDisposed) throw new ObjectDisposedException(nameof(SimulatorLogSource));
+            Debug.WriteLine($"---> SimulatorLogSource: Prepare called (Identifier: '{sourceIdentifier}').");
+            StopInternal(); // Ensure stopped before prepare
+            _lineCounter = 0;
+            // No initial lines to read for simulator
+            return Task.FromResult(0L);
+        }
     }
 
-    /// <summary>
-    /// Starts generating simulated log lines periodically.
-    /// </summary>
-    public void StartMonitoring()
+    // Explicitly implement ILogSource methods by calling ISimulatorLogSource methods
+    void ILogSource.StartMonitoring() => Start();
+    void ILogSource.StopMonitoring() => Stop();
+
+    #region ISimulatorLogSource Methods
+    public void Start()
     {
          lock (_lock)
          {
             if (_isDisposed) throw new ObjectDisposedException(nameof(SimulatorLogSource));
-            if (_isMonitoring)
-            {
-                Debug.WriteLine($"---> SimulatorLogSource: Already monitoring. StartMonitoring called again ignored.");
-                return; // Already monitoring
-            }
+            if (_isRunning) return; // Already running
 
-            Debug.WriteLine($"---> SimulatorLogSource: Starting monitoring (generating ~{_linesPerSecond} lines/sec).");
+            Debug.WriteLine($"---> SimulatorLogSource: Starting (Rate: {LinesPerSecond} LPS).");
+            if (_linesPerSecond <= 0) return; // Don't start if rate is non-positive
 
-            // Calculate interval: avoid division by zero and handle high rates
-            int intervalMs = Math.Max(1, 1000 / _linesPerSecond); // At least 1ms interval
-
-            // Create and start the timer
-            // Timer callback executes on a ThreadPool thread
+            int intervalMs = Math.Max(1, 1000 / _linesPerSecond);
+            _timer?.Dispose(); // Dispose old timer just in case
             _timer = new Timer(
                 GenerateLogLineCallback,
                 null,
-                TimeSpan.Zero, // Start immediately
-                TimeSpan.FromMilliseconds(intervalMs) // Repeat interval
+                TimeSpan.FromMilliseconds(intervalMs), // Start after first interval
+                TimeSpan.FromMilliseconds(intervalMs)  // Repeat interval
             );
-
-            _isMonitoring = true;
+            _isRunning = true;
          }
     }
 
-    /// <summary>
-    /// Stops generating simulated log lines.
-    /// </summary>
-    public void StopMonitoring()
+    public void Stop()
     {
          lock (_lock)
          {
-             StopMonitoringInternal();
+             StopInternal();
          }
     }
 
-    // Internal version without lock for reuse in Dispose
-    private void StopMonitoringInternal()
+    public void Restart()
     {
-        if (!_isMonitoring && _timer == null) return;
+        lock (_lock)
+        {
+            Debug.WriteLine("---> SimulatorLogSource: Restart requested.");
+            StopInternal();
+            _lineCounter = 0;
+            Start();
+        }
+    }
 
-        Debug.WriteLineIf(_isMonitoring || _timer != null, $"---> SimulatorLogSource: StopMonitoring called.");
-        _timer?.Dispose(); // Stop and release the timer
+    public void UpdateRate(int newLinesPerSecond)
+    {
+        lock (_lock)
+        {
+            if (_isDisposed) return;
+            int newRate = Math.Max(0, newLinesPerSecond); // Clamp rate >= 0
+            if (newRate == _linesPerSecond) return; // No change needed
+
+            _linesPerSecond = newRate;
+            Debug.WriteLine($"---> SimulatorLogSource: Rate updated to {LinesPerSecond} LPS.");
+
+            if (_isRunning) // If currently running, adjust the timer
+            {
+                StopInternal(); // Stop existing timer
+                if (_linesPerSecond > 0) // Restart only if rate > 0
+                {
+                    Start();
+                } else {
+                     Debug.WriteLine($"---> SimulatorLogSource: Rate set to 0, simulation paused.");
+                     // _isRunning is already false from StopInternal
+                }
+            }
+            // If not running, the new rate is just stored for the next Start()
+        }
+    }
+    #endregion // --- End ISimulatorLogSource Methods ---
+    #region Internal & Private Methods
+    private void StopInternal()
+    {
+        if (!_isRunning && _timer == null) return;
+        Debug.WriteLineIf(_isRunning || _timer != null, $"---> SimulatorLogSource: Stopping timer.");
+        _timer?.Dispose();
         _timer = null;
-        _isMonitoring = false;
+        _isRunning = false;
     }
 
     private void GenerateLogLineCallback(object? state)
     {
-         // Prevent generating lines if stopped/disposed between timer tick and execution
-         if (!_isMonitoring || _isDisposed || _timer == null) return;
+        if (!_isRunning || _isDisposed || _timer == null) return; // Recheck state inside callback
 
         try
         {
@@ -113,18 +136,15 @@ public class SimulatorLogSource : ILogSource
             string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
             string level = _logLevels[_random.Next(_logLevels.Length)];
             string message = GenerateRandomMessage(currentLine);
-
             string logLine = $"{timestamp} [{level}] {message}";
-
-            // Push to the subject (thread-safe)
             _logLinesSubject.OnNext(logLine);
         }
-        catch (Exception ex) // Catch potential errors during generation/emission
+        catch (Exception ex)
         {
              Debug.WriteLine($"!!! SimulatorLogSource: Error in generation callback: {ex.Message}");
-             // Optionally push error to subject? Depends if generation errors should stop the stream.
-             // _logLinesSubject.OnError(ex);
-             // StopMonitoring(); // Stop simulation on error?
+             // Consider stopping on error?
+             // Stop();
+             // _logLinesSubject.OnError(ex); // Propagate?
         }
     }
 
@@ -134,17 +154,19 @@ public class SimulatorLogSource : ILogSource
         return choice switch
         {
             0 => $"Processing request {lineNumber % 1000}",
-            1 => $"User {(_random.Next(900) + 100)} logged in successfully.",
-            2 => $"Database query took {_random.Next(5, 150)}ms.",
-            3 => $"Cache hit for key: data_block_{lineNumber % 50}",
-            4 => $"Cache miss for key: user_prefs_{_random.Next(100)}",
+            1 => $"User {(_random.Next(900) + 100)} logged in.",
+            2 => $"DB query took {_random.Next(5, 150)}ms.",
+            3 => $"Cache hit: data_block_{lineNumber % 50}",
+            4 => $"Cache miss: user_prefs_{_random.Next(100)}",
             5 => "System health check OK.",
-            6 => $"WARN: High CPU usage detected: {_random.Next(85, 99)}%",
-            7 => $"ERROR: Failed to connect to external service API. Attempt {lineNumber % 3 + 1}.",
-            8 => "Configuration reloaded.",
-            _ => $"Performing background task {lineNumber}.",
+            6 => $"WARN: High CPU: {_random.Next(85, 99)}%",
+            7 => $"ERROR: Service API fail. Attempt {lineNumber % 3 + 1}.",
+            8 => "Config reloaded.",
+            _ => $"Background task {lineNumber}.",
         };
     }
+
+    #endregion // Internal & Private Methods
 
     public void Dispose()
     {
@@ -153,8 +175,8 @@ public class SimulatorLogSource : ILogSource
             if (_isDisposed) return;
             Debug.WriteLine($"---> SimulatorLogSource: Dispose called.");
             _isDisposed = true;
-            StopMonitoringInternal(); // Stop timer
-            _logLinesSubject?.OnCompleted(); // Complete the subject
+            StopInternal();
+            _logLinesSubject?.OnCompleted();
             _logLinesSubject?.Dispose();
          }
         GC.SuppressFinalize(this);

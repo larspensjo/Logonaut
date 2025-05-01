@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Reactive; // For Unit
 using System.Reactive.Subjects;
 using System.Reactive.Linq;
+using System.Diagnostics; // Added for Debug
 using Logonaut.Common;
 using Logonaut.Core;
 using Logonaut.Filters;
@@ -100,6 +101,7 @@ namespace Logonaut.TestUtils
             if (_isDisposed) throw new ObjectDisposedException(nameof(MockLogFilterProcessor));
             UpdateFilterSettingsCallCount++;
             LastFilterSettings = (newFilter, contextLines);
+            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> MockLogFilterProcessor: UpdateFilterSettings called. Triggering full re-filter.");
         }
 
         /// <summary>
