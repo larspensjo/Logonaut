@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <!-- Required elements -->
+    <id>logonaut</id> <!-- Lowercase ID -->
+    <version>1.0.0</version>
+    <title>Logonaut</title>
+    <authors>Lars Pensjö</authors>
+    <owners>Lars Pensjö</owners>
+
+    <!-- Optional elements -->
+    <projectUrl>https://github.com/larspensjo/Logonaut</projectUrl>
+    <!-- Find a raw icon URL (e.g., via raw.githack.com or jsDelivr from GitHub) -->
+    <iconUrl>https://rawcdn.githack.com/larspensjo/Logonaut/COMMIT_HASH_OR_TAG/src/Logonaut.UI/Assets/Logonaut.ico</iconUrl> <!-- Replace COMMIT_HASH_OR_TAG -->
+    <licenseUrl>https://github.com/larspensjo/Logonaut/blob/main/LICENSE</licenseUrl> <!-- Assuming LICENSE is at root -->
+    <requireLicenseAcceptance>false</requireLicenseAcceptance> <!-- MIT usually doesn't require explicit acceptance -->
+    <projectSourceUrl>https://github.com/larspensjo/Logonaut</projectSourceUrl>
+    <!-- <docsUrl>Optional URL to documentation</docsUrl> -->
+    <!-- <mailingListUrl>Optional mailing list URL</mailingListUrl> -->
+    <!-- <bugTrackerUrl>Optional bug tracker URL</bugTrackerUrl> -->
+    <tags>log log-viewer tail filter</tags> <!-- Keywords for search -->
+    <summary>Modern, modular log viewer with live tailing, advanced filtering, and custom highlighting.</summary>
+    <description>
+Logonaut is a modern, modular log viewer application for Windows built with C# and WPF. It provides real-time log tailing, advanced filtering capabilities, customizable syntax highlighting, and a clean, responsive user interface with theme support.
+
+**Key Features:**
+
+*   Live Log Tailing
+*   Flexible Input (File or Paste)
+*   Advanced Filtering (Profiles, Substring, Regex, AND/OR/NOR)
+*   Custom Highlighting (Timestamps, Levels, Filter Matches)
+*   Original Line Numbers
+*   Light & Dark Themes
+*   Persistence of settings and filter profiles
+    </description>
+    <releaseNotes>https://github.com/larspensjo/Logonaut/releases</releaseNotes>
+    <dependencies>
+      <!-- Logonaut requires .NET 8 Desktop Runtime. -->
+      <!-- This dependency tells Chocolatey to ensure it's installed. -->
+      <!-- Using the generic package ID is usually best -->
+      <dependency id="dotnet-desktopruntime" version="[8.0.0,9.0.0)" />
+      <!-- Specify x64 architecture if strictly required, although the runtime package often handles this -->
+      <!-- <dependency id="dotnet-8.0-desktopruntime" version="[8.0.0,9.0.0)" /> -->
+    </dependencies>
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+  </files>
+</package>
