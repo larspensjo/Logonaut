@@ -53,6 +53,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     #endregion // --- Fields ---
 
+    #region Simulator Configuration UI State
+
+    [ObservableProperty] private bool _isSimulatorConfigurationVisible = false;
+
+    #endregion // Simulator Configuration UI State
+
     #region // --- Stats Properties ---
 
     [ObservableProperty]
@@ -77,7 +83,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _uiContext = uiContext ?? SynchronizationContext.Current ??
                         throw new InvalidOperationException("Could not capture or receive a valid SynchronizationContext.");
 
-        bool useSimulator = true; // Hard coded override for testing
+        bool useSimulator = false; // Hard coded override for testing
         if (initialLogSource != null)
             _logSource = initialLogSource; // Allow injection for tests to override
         else if (useSimulator) {

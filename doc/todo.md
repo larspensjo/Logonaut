@@ -18,7 +18,7 @@
 * When opening a new log, the dialog should remember last folder.
 
 * **SimulatorLogSource UI overlay**
-*   1. Implement the key combination trigger and the overlay UI placement over the filter tree. Secret key to toggle overlay: Ctrl+Alt+Shift+S.
+*   1. Implement the key combination trigger and the overlay UI placement over the filter tree. Secret key to toggle overlay: Ctrl+Alt+Shift+S. (DONE)
 *   2. Add basic controls: Lines Per Second slider, Start/Stop/Restart buttons, Clear Log button.
 *   3. Start/Stop/Restart buttons within the simulator UI. Controls the Timer in SimulatorLogSource. Needs to be independent of file opening.
 *   4. Add an "Error Rate %" slider and an "Inject ERROR Now" button.

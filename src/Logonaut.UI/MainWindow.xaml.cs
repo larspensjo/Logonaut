@@ -20,6 +20,25 @@ namespace Logonaut.UI;
 // by the ViewModel (RequestTextUpdate) for performance reasons.
 public partial class MainWindow : Window, IDisposable
 {
+    public static readonly RoutedUICommand ToggleSimulatorConfigCommand = new RoutedUICommand(
+        "Toggle Simulator Configuration Panel", "ToggleSimulatorConfigCommand", typeof(MainWindow)
+    );
+
+    private void ToggleSimulatorConfig_CanExecute(object sender, CanExecuteRoutedEventArgs e)
+    {
+        // Can always execute if the ViewModel exists
+        e.CanExecute = DataContext is MainViewModel;
+    }
+
+    private void ToggleSimulatorConfig_Executed(object sender, ExecutedRoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel viewModel)
+        {
+            // Toggle the boolean property on the ViewModel
+            viewModel.IsSimulatorConfigurationVisible = !viewModel.IsSimulatorConfigurationVisible;
+        }
+    }
+
     // Define a command for focusing the Go To Line box
     public static readonly RoutedUICommand GoToLineBoxFocusCommand = new RoutedUICommand(
         "Focus Go To Line Box", "GoToLineBoxFocusCommand", typeof(MainWindow)
