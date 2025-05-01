@@ -25,7 +25,7 @@ namespace Logonaut.Core.Tests; // File-scoped namespace
 
         // Act: Emit error *after* initial load
         _mockLogSource.EmitError(expectedException); // Use MockLogSource method
-        _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(1).Ticks); // Allow error to propagate
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(1).Ticks); // Allow error to propagate
 
         // Assert
         Assert.IsNotNull(_receivedError, "Error should have been received.");
@@ -37,7 +37,7 @@ namespace Logonaut.Core.Tests; // File-scoped namespace
 
         // Act: Try emitting after error
         _mockLogSource.EmitLine("After Error"); // Use MockLogSource method
-        _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(150).Ticks);
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(150).Ticks);
 
         // Assert: No more updates after error
         Assert.AreEqual(updateCountBeforeError, _receivedUpdates.Count);
@@ -49,7 +49,7 @@ namespace Logonaut.Core.Tests; // File-scoped namespace
         // Arrange: Setup initial load and process an emit
         await SetupInitialFileLoad(new List<string> { "Initial" });
         _mockLogSource.EmitLine("Append 1");
-        _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Allow emit to be processed
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Allow emit to be processed
         Assert.AreEqual(1, _receivedUpdates.Count, "Arrange failure: Emit was not processed.");
         _receivedUpdates.Clear(); // Clear updates before disposal
 
@@ -60,7 +60,7 @@ namespace Logonaut.Core.Tests; // File-scoped namespace
         _mockLogSource.EmitLine("Append 2 (after processor dispose)"); // Call is valid on mock source
 
         // Advance scheduler to see if any processing happens (it shouldn't)
-        _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(150).Ticks);
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(150).Ticks);
 
         // Assert
         Assert.AreEqual(0, _receivedUpdates.Count, "No updates should be received after Processor Dispose.");
@@ -78,7 +78,7 @@ namespace Logonaut.Core.Tests; // File-scoped namespace
 
         // Act: Trigger a full refilter with the throwing filter
         _processor.UpdateFilterSettings(new ThrowingFilter(), 0);
-        _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Allow throttle and Select to execute
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Allow throttle and Select to execute
 
         // Assert
         Assert.IsNotNull(_receivedError, "Error should have been received from filter update.");
@@ -89,7 +89,7 @@ namespace Logonaut.Core.Tests; // File-scoped namespace
 
         // Act: Try emitting after error
         _mockLogSource.EmitLine("After Error");
-        _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(150).Ticks);
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(150).Ticks);
 
         // Assert: No more updates after error
         Assert.AreEqual(updateCountBeforeError, _receivedUpdates.Count);
@@ -106,14 +106,14 @@ namespace Logonaut.Core.Tests; // File-scoped namespace
         // Arrange: Need a way to make ApplyFilterToSubset throw. Could use a special filter
         // or modify the test setup if FilterEngine was injectable. Let's use a throwing filter.
         _processor.UpdateFilterSettings(new ThrowingFilter(), 0); // Use the same filter
-        _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Process this setting change
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Process this setting change
         _receivedUpdates.Clear(); // Clear the error from the settings change itself
         _receivedError = null;
 
         // Act: Emit a line that triggers the *incremental* path (after Step 4)
         _mockLogSource.EmitLine("Trigger Incremental");
          // Advance scheduler enough for the incremental pipeline (including buffer)
-        _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(500).Ticks);
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(500).Ticks);
 
         // Assert
         Assert.IsNotNull(_receivedError, "Error should have been received from incremental update.");
@@ -123,7 +123,7 @@ namespace Logonaut.Core.Tests; // File-scoped namespace
         int updateCountBeforeError = _receivedUpdates.Count;
         // Try emitting after error
         _mockLogSource.EmitLine("After Error 2");
-        _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(150).Ticks);
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(150).Ticks);
         Assert.AreEqual(updateCountBeforeError, _receivedUpdates.Count); // No more updates
     }
 

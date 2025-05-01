@@ -26,6 +26,7 @@ namespace Logonaut.UI.Tests.ViewModels;
 
         // Act
         await _viewModel.OpenLogFileCommand.ExecuteAsync(null);
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks);
         _testContext.Send(_ => { }, null); // Process UI queue posts
 
         // Assert LogSource Interaction
@@ -52,6 +53,7 @@ namespace Logonaut.UI.Tests.ViewModels;
 
         // Act
         GetActiveMockSource().EmitLine("Line 2 Appended");
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks);
         _testContext.Send(_ => { }, null); // Process UI queue posts
 
         // Assert
@@ -69,6 +71,7 @@ namespace Logonaut.UI.Tests.ViewModels;
 
         // Act
         GetActiveMockSource().EmitLine("Line 2 Appended");
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks);
         _testContext.Send(_ => { }, null); // Process UI queue posts
 
         // Assert
@@ -88,6 +91,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         // Act
         _viewModel.ActiveFilterProfile?.SetModelRootFilter(new Filters.SubstringFilter("FilterMe"));
         _testContext.Send(_ => { }, null); // Process UI queue posts
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks);
 
         // Assert
         Assert.IsFalse(_requestScrollToEndEventFired, "Event should NOT fire for replace updates.");
@@ -105,6 +109,7 @@ namespace Logonaut.UI.Tests.ViewModels;
 
         // Act
         _viewModel.ActiveFilterProfile?.SetModelRootFilter(new Filters.SubstringFilter("FilterMe"));
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks);
         _testContext.Send(_ => { }, null); // Process UI queue posts
 
         // Assert
@@ -120,6 +125,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         await SetupWithInitialLines(new List<string> { "File Line" });
         _viewModel.StartSimulatorCommand.Execute(null);
         _testContext.Send(_ => { }, null);
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks);
         Assert.IsTrue(_mockSimulatorSource.IsRunning, "Arrange failure: Simulator source not monitoring.");
 
         _mockSettings.ResetSettings();
@@ -129,6 +135,7 @@ namespace Logonaut.UI.Tests.ViewModels;
 
         // Act
         _viewModel.Cleanup();
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks);
         _testContext.Send(_ => { }, null);
 
         // Assert
@@ -150,6 +157,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         _mockFileDialog.FileToReturn = "C:\\test_setup.log";
 
         await _viewModel.OpenLogFileCommand.ExecuteAsync(null);
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks);
         _testContext.Send(_ => { }, null);
     }
 }

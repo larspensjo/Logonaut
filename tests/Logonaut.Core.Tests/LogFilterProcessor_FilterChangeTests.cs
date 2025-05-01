@@ -26,7 +26,7 @@ namespace Logonaut.Core.Tests; // File-scoped namespace
         // Act: Update filter settings to something specific
         var newFilter = new SubstringFilter("MATCH");
         _processor.UpdateFilterSettings(newFilter, 0);
-        _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Allow Throttle
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Allow Throttle
 
         // Assert: Should receive one *new* Replace update
         Assert.AreEqual(1, _receivedUpdates.Count);
@@ -48,17 +48,17 @@ namespace Logonaut.Core.Tests; // File-scoped namespace
 
         // Act: Call UpdateFilterSettings rapidly
         _processor.UpdateFilterSettings(filterA, 0);
-        _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(5).Ticks);
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(5).Ticks);
         _processor.UpdateFilterSettings(new TrueFilter(), 0);
-        _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(5).Ticks);
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(5).Ticks);
         _processor.UpdateFilterSettings(filterB, 0); // Final filter
-        _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(5).Ticks);
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(5).Ticks);
 
         // Assert: No updates yet
         Assert.AreEqual(0, _receivedUpdates.Count);
 
         // Act: Advance time *past* the throttle window
-        _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks);
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks);
 
         // Assert: Only ONE update received, using the LAST filter settings (filterB)
         Assert.AreEqual(1, _receivedUpdates.Count);
@@ -84,7 +84,7 @@ namespace Logonaut.Core.Tests; // File-scoped namespace
 
         // Act: Update filter *once* with context lines
         _processor.UpdateFilterSettings(new SubstringFilter("MATCH"), 1); // 1 context line
-        _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Allow Throttle
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Allow Throttle
 
         // Assert
         Assert.AreEqual(1, _receivedUpdates.Count);

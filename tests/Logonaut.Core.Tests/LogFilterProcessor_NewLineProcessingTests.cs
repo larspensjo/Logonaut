@@ -32,7 +32,7 @@ namespace Logonaut.Core.Tests; // File-scoped namespace
         Assert.AreEqual(0, _receivedUpdates.Count);
 
         // Act: Advance scheduler *past* buffer/throttle time
-        _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Ensure buffer flushes
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Ensure buffer flushes
 
         // Assert: LogDocument contains all lines
         Assert.AreEqual(4, _logDocument.Count);
@@ -59,7 +59,7 @@ namespace Logonaut.Core.Tests; // File-scoped namespace
         // Arrange: Set specific filter *after* initial load
         var filter = new SubstringFilter("MATCH");
         _processor.UpdateFilterSettings(filter, 0);
-        _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Allow Throttle for filter change (Replace)
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Allow Throttle for filter change (Replace)
         Assert.AreEqual(1, _receivedUpdates.Count); // One Replace update from filter change
         Assert.AreEqual(0, _receivedUpdates.Last().Lines.Count); // Should be empty
         _receivedUpdates.Clear(); // Clear this update
@@ -71,7 +71,7 @@ namespace Logonaut.Core.Tests; // File-scoped namespace
         _mockLogSource.EmitLine("MATCH 4"); // Should match
 
         // Advance scheduler *past* buffer/throttle time for the new lines
-        _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks);
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks);
 
         // Assert: LogDocument contains all lines
         Assert.AreEqual(5, _logDocument.Count);
@@ -97,7 +97,7 @@ namespace Logonaut.Core.Tests; // File-scoped namespace
         // Act: Emit new lines
         _mockLogSource.EmitLine("Line A"); // Overall 3rd line
         _mockLogSource.EmitLine("Line B"); // Overall 4th line
-        _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Past buffer/throttle window
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Past buffer/throttle window
 
         // Assert: LogDocument contains all lines
         Assert.AreEqual(4, _logDocument.Count);
@@ -132,11 +132,11 @@ namespace Logonaut.Core.Tests; // File-scoped namespace
             expectedAppendedLines.Add(line);
             _mockLogSource.EmitLine(line);
             // Advance time slightly, enough to potentially trigger time buffer if count not reached
-            _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(10).Ticks);
+            _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(10).Ticks);
         }
 
         // Advance scheduler enough to ensure ALL append processing finishes
-        _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(500).Ticks); // Generous time
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(500).Ticks); // Generous time
 
         // Assert: Check received updates
         Assert.IsTrue(_receivedUpdates.Count > 0, "Expected at least one incremental update."); // Could be 1 or more depending on buffer timing
@@ -178,7 +178,7 @@ namespace Logonaut.Core.Tests; // File-scoped namespace
         // Arrange: Now set the filter that *will* match the new line
         var filter = new SubstringFilter("MATCH");
         _processor.UpdateFilterSettings(filter, 1); // Keep Context = 1
-        _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Allow Throttle for this settings change (Replace)
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Allow Throttle for this settings change (Replace)
         Assert.AreEqual(1, _receivedUpdates.Count); // Replace update (empty)
         Assert.AreEqual(0, _receivedUpdates[0].Lines.Count);
         _receivedUpdates.Clear(); // Clear this update
@@ -186,7 +186,7 @@ namespace Logonaut.Core.Tests; // File-scoped namespace
         // Act: Emit a line that matches the filter AFTER initial load/filter setup
         _mockLogSource.EmitLine("Here is the MATCH line"); // LogDoc index 3, OrigNum 4
         // Advance scheduler enough for the *incremental* pipeline buffer/throttle
-        _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks);
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks);
 
         // Assert: Expect an APPEND update triggered by the incremental match
         Assert.AreEqual(1, _receivedUpdates.Count);

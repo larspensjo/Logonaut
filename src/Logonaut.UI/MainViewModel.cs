@@ -28,6 +28,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     #region Fields
 
     // --- Services & Context ---
+    private readonly IScheduler? _backgroundScheduler; // Make it possible to inject your own background scheduler
     private readonly ILogSourceProvider _sourceProvider;
     public static readonly object LoadingToken = new();
     public static readonly object FilteringToken = new();
@@ -68,13 +69,14 @@ public partial class MainViewModel : ObservableObject, IDisposable
         ISettingsService settingsService,
         ILogSourceProvider sourceProvider,
         IFileDialogService? fileDialogService = null,
-        // Processor and Source are now managed internally based on mode
-        SynchronizationContext? uiContext = null)
+        SynchronizationContext? uiContext = null,
+        IScheduler? backgroundScheduler = null)
     {
         _settingsService = settingsService;
         _sourceProvider = sourceProvider;
         _fileDialogService = fileDialogService ?? new FileDialogService();
         _uiContext = uiContext ?? SynchronizationContext.Current ?? throw new InvalidOperationException("Could not capture or receive a valid SynchronizationContext.");
+        _backgroundScheduler = backgroundScheduler;
 
         // Initialize with FileLogSource as the default
         _fileLogSource = _sourceProvider.CreateFileLogSource();
@@ -102,7 +104,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
             source,
             LogDoc,
             _uiContext,
-            AddLineToLogDocument);
+            AddLineToLogDocument,
+            _backgroundScheduler);
     }
 
     private void SubscribeToProcessor()

@@ -1,5 +1,3 @@
-// ===== File: tests\Logonaut.Core.Tests\LogFilterProcessorTestBase.cs =====
-
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Collections.Generic;
@@ -23,7 +21,7 @@ namespace Logonaut.Core.Tests;
 {
     // --- Shared Mocks & Context ---
     // Use protected so derived classes can access them if needed
-    protected TestScheduler _scheduler = null!;
+    protected TestScheduler _backgroundScheduler = null!;
     protected MockLogSource _mockLogSource = null!;
     protected LogDocument _logDocument = null!;
     protected LogFilterProcessor _processor = null!;
@@ -36,7 +34,7 @@ namespace Logonaut.Core.Tests;
     // --- Per-Test Setup ---
     [TestInitialize] public virtual void TestInitialize() // Make virtual if needed, though unlikely
     {
-        _scheduler = new TestScheduler();
+        _backgroundScheduler = new TestScheduler();
         _mockLogSource = new MockLogSource();
         _logDocument = new LogDocument();
         _receivedUpdates = new List<FilteredUpdateBase>(); // Use base type
@@ -49,7 +47,7 @@ namespace Logonaut.Core.Tests;
             _logDocument,
             _testContext, // Use the mock context
             AddLineToLogDocument,
-            _scheduler // Use the TestScheduler
+            _backgroundScheduler // Use the TestScheduler
         );
 
         _subscription = _processor.FilteredUpdates.Subscribe(
@@ -99,7 +97,7 @@ namespace Logonaut.Core.Tests;
         _processor.UpdateFilterSettings(initialFilter ?? new TrueFilter(), context);
 
         // Advance scheduler past throttle/debounce time FOR THE INITIAL LOAD
-        _scheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Adjust time if needed
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Adjust time if needed
 
         // Clear updates received *during this setup* so tests assert on subsequent updates
         _receivedUpdates.Clear();

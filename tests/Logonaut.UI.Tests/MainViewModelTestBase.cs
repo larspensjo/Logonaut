@@ -13,6 +13,8 @@ using Logonaut.TestUtils;
 using System.Threading;
 using System;
 using System.Linq;
+using System.Reactive.Concurrency;
+using Microsoft.Reactive.Testing; // Essential for TestScheduler
 
 namespace Logonaut.UI.Tests.ViewModels;
 
@@ -27,6 +29,7 @@ namespace Logonaut.UI.Tests.ViewModels;
     protected MockLogSource _mockSimulatorSource = null!;
     protected SynchronizationContext _testContext = null!;
     protected MainViewModel _viewModel = null!;
+    protected TestScheduler _backgroundScheduler = null!;
 
     // --- Test State ---
     protected bool _requestScrollToEndEventFired = false;
@@ -70,7 +73,8 @@ namespace Logonaut.UI.Tests.ViewModels;
         _mockFileLogSource = _mockSourceProvider.MockFileSource;
         _mockSimulatorSource = _mockSourceProvider.MockSimulatorSource;
         _mockFileDialog = new MockFileDialogService();
-        _testContext = new ImmediateSynchronizationContext();
+        _testContext = new ImmediateSynchronizationContext(); // Use the mock context for background tasks
+        _backgroundScheduler = new TestScheduler(); // Use Rx.NET Immediate scheduler for background tasks. For more advanced scenarios, consider using TestScheduler.
 
         _mockSettings.SettingsToReturn = MockSettingsService.CreateDefaultTestSettings();
 
@@ -79,7 +83,8 @@ namespace Logonaut.UI.Tests.ViewModels;
             _mockSettings,
             _mockSourceProvider,
             _mockFileDialog,
-            _testContext
+            _testContext,
+            _backgroundScheduler
         );
 
         // Reset test state variables
