@@ -16,8 +16,9 @@
 
 ### Prerequisites
 
-*   .NET 8 SDK
-*   Visual Studio or another compatible IDE/editor
+*   .NET 8 SDK (for building)
+*   .NET 8 Desktop Runtime (for running the compiled application)
+*   Visual Studio or another compatible IDE/editor (optional, for development)
 
 ### Building & Running
 
@@ -25,7 +26,35 @@
 2.  Build the solution: `dotnet build Logonaut.sln`
 3.  Run the UI project: `dotnet run --project src/Logonaut.UI/Logonaut.UI.csproj`
 
-### More Information
+## Dependencies and Tools
+
+Logonaut utilizes several external libraries and tools:
+
+*   **Core Framework & Libraries:**
+    *   **.NET 8 & WPF:** The primary application framework.
+    *   **AvalonEdit:** The core text editor control used for log display.
+    *   **CommunityToolkit.Mvvm:** Provides helpers for implementing the MVVM pattern.
+    *   **System.Reactive (Rx.NET):** Used for reactive programming, particularly in the log filtering pipeline.
+    *   **Newtonsoft.Json:** Used for serializing and deserializing settings (like filter profiles) to JSON.
+    *   **Microsoft.Xaml.Behaviors.Wpf:** Used for attaching behaviors to UI elements in XAML.
+
+*   **Development & Build Tools:**
+    *   **Visual Studio Code / Visual Studio:** Recommended IDEs for development.
+    *   **Git:** For version control.
+    *   **dotnet CLI:** Used for building, running, and cleaning the solution.
+
+*   **Testing:**
+    *   **MSTest (`MSTest.TestAdapter`, `MSTest.TestFramework`):** The unit testing framework.
+    *   **Microsoft.NET.Test.Sdk:** Provides MSBuild targets and infrastructure for testing.
+    *   **Microsoft.Reactive.Testing:** Provides tools for testing Rx.NET observables (`TestScheduler`).
+
+*   **Installation:**
+    *   **Inno Setup:** Used to create the Windows installer package (`LogonautInstaller.iss`, compiled with `iscc`).
+
+*   **Runtime Dependency:**
+    *   **.NET 8 Desktop Runtime:** Required on the end-user's machine to run the application if installed via the Inno Setup installer (which doesn't bundle the runtime).
+
+## More Information
 
 *   For detailed user features and requirements, see [UserRequirements.md](doc/UserRequirements.md).
 *   For technical design and architecture details, see [ArchitectureAndDesign.md](doc/ArchitectureAndDesign.md).

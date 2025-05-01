@@ -2,15 +2,16 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "Clean Build",
+            "label": "Clean Logonaut Solution",
             "command": "dotnet",
-            "args": ["clean", "${workspaceFolder}/Logonaut.sln"],
+            "args": [
+                "clean",
+                "${workspaceFolder}/Logonaut.sln"            ],
+            "type": "shell",
             "problemMatcher": [],
-            "group": {
-              "kind": "build",
-              "isDefault": false
-            }
+            "group": "build"
         },
+
         {
             "label": "build",
             "command": "dotnet",
@@ -18,8 +19,83 @@
             "args": [
                 "build",
                 "${workspaceFolder}/Logonaut.sln"
+                // Defaults to Debug configuration unless specified otherwise
             ],
-            "problemMatcher": "$msCompile"
+            "problemMatcher": "$msCompile",
+            "group": {
+                "kind": "build",
+                "isDefault": true // Make the standard Debug build the default Ctrl+Shift+B action
+            }
+        },
+
+        {
+            // Task specifically for building the Release configuration.
+            // Depends on cleaning first.
+            "label": "Build Logonaut (Release)",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "build",
+                "${workspaceFolder}/Logonaut.sln",
+                "--configuration",
+                "Release"
+            ],
+            "problemMatcher": "$msCompile",
+            "group": "build" // Add to build group
+        },
+
+        {
+            // Compiles the installer script.
+            "label": "Compile Logonaut Installer (Inno Setup)",
+            "type": "shell",
+            "command": "iscc",
+            "args": [
+                "\"${workspaceFolder}/LogonautInstaller.iss\""
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": false
+            },
+            "problemMatcher": [
+                // Basic matcher to catch Inno Setup errors/warnings
+                {
+                    "owner": "inno-setup",
+                    "fileLocation": ["relative", "${workspaceFolder}"],
+                    "pattern": {
+                        // Example: "Error on line 12 in C:\Path\Script.iss: Unknown directive "AppIDs""
+                        // Adjust regex based on actual ISCC output format if needed
+                        "regexp": "^(Error|Warning) on line (\\d+) in (.+):\\s+(.*)$",
+                        "severity": 1, // Error=1, Warning=2
+                        "line": 2,
+                        "file": 3,
+                        "message": 4
+                    }
+                }
+            ],
+            "group": "build",
+            "dependsOn": "Build Logonaut (Release)"
+        },
+
+        // --- COMPOSITE TASK (Optional but Recommended) ---
+        {
+            // This task runs the full sequence: Clean -> Build Release -> Compile Installer
+            "label": "Rebuild Logonaut Installer (Release)",
+            "dependsOn": [
+                // List the labels of tasks to run IN ORDER
+                "Clean Logonaut Solution",
+                "Build Logonaut (Release)",
+                "Compile Logonaut Installer (Inno Setup)"
+            ],
+            "dependsOrder": "sequence", // Ensures tasks run sequentially
+            "group": {
+                "kind": "build",
+                "isDefault": false // Don't make this the absolute default build action
+            },
+            "problemMatcher": [] // Composite task doesn't produce its own problems
         }
     ]
 }
