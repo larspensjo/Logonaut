@@ -16,3 +16,13 @@
 * The Auto Scroll option could be better visualized with a picture of an anchor. But it need to be placed at a proper place.
 * Implement deployment using Inno
 * When opening a new log, the dialog should remember last folder.
+
+* **SimulatorLogSource UI overlay**
+*   1. Implement the key combination trigger and the overlay UI placement over the filter tree. Secret key to toggle overlay: Ctrl+Alt+Shift+S.
+*   2. Add basic controls: Lines Per Second slider, Start/Stop/Restart buttons, Clear Log button.
+*   3. Start/Stop/Restart buttons within the simulator UI. Controls the Timer in SimulatorLogSource. Needs to be independent of file opening.
+*   4. Add an "Error Rate %" slider and an "Inject ERROR Now" button.
+*   5. Refactor SimulatorLogSource to accept and use these basic parameters.
+*   6. Sliders or percentage inputs for INFO, WARN, ERROR, DEBUG, TRACE (could enforce sum=100%).
+*   7. TextBox for keywords (comma-separated?), Checkbox "Inject Keywords Randomly". Slider for injection probability. Randomly inserts specified keywords into generated messages. Useful for testing filters.
+*   8. Burst mode. Numeric inputs for "Lines per Burst", "Burst Interval (ms)", "Pause Between Bursts (ms)". Button "Enable Burst Mode". Generate lines rapidly in bursts, followed by pauses.
