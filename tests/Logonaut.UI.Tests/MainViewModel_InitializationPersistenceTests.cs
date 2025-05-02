@@ -205,25 +205,41 @@ public class MainViewModel_InitializationPersistenceTests : MainViewModelTestBas
     }
 
     // Verifies: [ReqPersistSettingSearchCasev1], [ReqSearchCaseSensitiveOptionv1]
-    [TestMethod] public void IsCaseSensitiveSearch_Set_SavesSettings_UpdatesSearch()
+    [TestMethod] public async Task IsCaseSensitiveSearch_Set_SavesSettings_UpdatesSearch() // Keep async Task
     {
         // Arrange
-        // Use the active mock source provided by the test base
         var activeSource = GetActiveMockSource();
-        activeSource.LinesForInitialRead = new List<string> { "Test test" }; // Set initial lines
-        // Simulate opening a file to populate LogDoc and initial editor text (via callbacks)
-        _viewModel.OpenLogFileCommand.ExecuteAsync(null).Wait(); // Run synchronously for test
-        _testContext.Send(_ => { }, null); // Flush context queue
+        activeSource.LinesForInitialRead = new List<string> { "Test test" };
 
+        // 1. Open File
+        await _viewModel.OpenLogFileCommand.ExecuteAsync(null); // Await the command
+
+        // 2. Advance background scheduler to allow filtering pipeline to run
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Adjust time if needed
+
+        // 3. Process UI queue to handle the ApplyFilteredUpdate posted by the filter pipeline
+        _testContext.Send(_ => { }, null);
+
+        // --- ASSERTION POINT: Verify FilteredLogLines is populated ---
+        Assert.AreEqual(1, _viewModel.FilteredLogLines.Count, "FilteredLogLines not populated after file open and UI update.");
+        Assert.AreEqual("Test test", _viewModel.FilteredLogLines[0].Text, "FilteredLogLines content mismatch.");
+
+        // 4. NOW perform the initial search
         _viewModel.SearchText = "Test";
-        _viewModel.IsCaseSensitiveSearch = false; // Start as case-insensitive
-        _testContext.Send(_ => { }, null); // Allow UpdateSearchMatches to run
-        Assert.AreEqual(2, _viewModel.SearchMarkers.Count, "Initial case-insensitive search failed.");
-        _mockSettings.ResetSettings(); // Clear save state
+        _viewModel.IsCaseSensitiveSearch = false;
+
+        // 5. Process UI queue for the UpdateSearchMatches call (likely synchronous here, but good practice)
+        _testContext.Send(_ => { }, null);
+
+        // 6. Assert initial search results
+        Assert.AreEqual(2, _viewModel.SearchMarkers.Count, "Initial case-insensitive search failed."); // Should pass now
+        _mockSettings.ResetSettings(); // Clear save state AFTER initial search setup
 
         // Act
         _viewModel.IsCaseSensitiveSearch = true; // Change to case-sensitive
-        _testContext.Send(_ => { }, null); // Allow UpdateSearchMatches and save to run
+
+        // Process UI queue for UpdateSearchMatches AND the SaveCurrentSettings post
+        _testContext.Send(_ => { }, null);
 
         // Assert
         Assert.IsTrue(_viewModel.IsCaseSensitiveSearch);
