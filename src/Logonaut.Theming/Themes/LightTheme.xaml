@@ -77,6 +77,56 @@
     <DropShadowEffect x:Key="PanelShadowEffect" Color="#FF000000" ShadowDepth="3" BlurRadius="8" Opacity="0.4"/>
     <DropShadowEffect x:Key="InnerShadowEffect" Color="#AA000000" ShadowDepth="1" BlurRadius="2" Opacity="0.5"/>
 
+    <Style x:Key="OverlayCloseButtonStyle" TargetType="Button">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}"/> <!-- Use a less prominent color -->
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="Width" Value="20"/>
+        <Setter Property="Height" Value="20"/>
+        <Setter Property="HorizontalAlignment" Value="Right"/>
+        <Setter Property="VerticalAlignment" Value="Top"/>
+        <Setter Property="Margin" Value="0,0,0,0"/> <!-- Adjust as needed for spacing from edge -->
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="ToolTip" Value="Close Simulator Controls"/>
+        <Setter Property="Focusable" Value="False"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <!-- Use Ellipse for circular background on hover/press -->
+                    <Grid>
+                        <Ellipse x:Name="BackgroundEllipse" Fill="{TemplateBinding Background}" Opacity="0.0"/>
+                        <TextBlock Text="✕"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Foreground="{TemplateBinding Foreground}"
+                                    FontSize="{TemplateBinding FontSize}"
+                                    FontWeight="{TemplateBinding FontWeight}"
+                                    Margin="0,0,0,1"/> <!-- Small adjustment for centering 'X' -->
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <!-- Maybe use BorderBrush or a slightly darker grey for hover background -->
+                            <Setter TargetName="BackgroundEllipse" Property="Fill" Value="{DynamicResource BorderBrush}"/>
+                            <Setter TargetName="BackgroundEllipse" Property="Opacity" Value="0.5"/> <!-- Adjust opacity if needed -->
+                            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/> <!-- Use Accent color for the 'X' on hover -->
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <!-- Use Accent color with transparency for pressed state -->
+                            <Setter TargetName="BackgroundEllipse" Property="Fill" Value="{DynamicResource AccentBrush}"/>
+                            <Setter TargetName="BackgroundEllipse" Property="Opacity" Value="0.5"/>
+                            <Setter Property="Foreground" Value="{DynamicResource WindowBackgroundBrush}"/> <!-- Contrast against accent -->
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- Light Theme ToolTip Style -->
     <Style TargetType="ToolTip">
         <!-- Setters for properties directly on ToolTip or used by TemplateBinding -->

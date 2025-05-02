@@ -297,41 +297,48 @@
                         Padding="10" Margin="5"
                         Visibility="{Binding IsSimulatorConfigurationVisible, Converter={StaticResource BoolToVis}}">
                     <!-- SIMULATOR CONTROLS HERE *** -->
-                    <StackPanel>
-                        <TextBlock Text="Log Simulator Controls" FontSize="14" FontWeight="SemiBold" Foreground="White" HorizontalAlignment="Center" Margin="0,0,0,15"/>
+                    <Grid>
+                        <!-- Close Button - Placed first so it's visually behind stackpanel if needed,
+                             but aligned top-right makes it effectively on top corner. -->
+                        <Button Style="{StaticResource OverlayCloseButtonStyle}"
+                                Command="{Binding HideSimulatorConfigCommand}"
+                                VerticalAlignment="Top" HorizontalAlignment="Right"
+                                Margin="0,-2,-2,0" Panel.ZIndex="1"/> <!-- Adjust margin slightly to tuck into corner, ZIndex ensures it's clickable -->
 
-                        <!-- Lines Per Second Slider -->
-                        <TextBlock Text="Lines Per Second:" Foreground="White" Margin="0,0,0,2"/>
-                        <Slider Name="LpsSlider"
-                                Minimum="0" Maximum="100" SmallChange="1" LargeChange="5"
-                                IsSnapToTickEnabled="True" TickFrequency="1"
-                                Value="{Binding SimulatorLPS, Mode=TwoWay, Converter={StaticResource ExponentialConverter}}"
-                                Margin="0,0,0,2">
-                        </Slider>
+                        <!-- Original StackPanel with Controls - Now inside the Grid -->
+                        <StackPanel Margin="0,15,0,0"> <!-- Add top margin to avoid overlap with button -->
+                            <TextBlock Text="Log Simulator Controls" FontSize="14" FontWeight="SemiBold" Foreground="White" HorizontalAlignment="Center" Margin="0,0,0,15"/>
 
-                        <TextBlock Text="{Binding SimulatorLPS, StringFormat='{}{0:F0} LPS'}"
-                                   Foreground="White"
-                                   HorizontalAlignment="Center"
-                                   Margin="0,0,0,10"/>
+                            <!-- Lines Per Second Slider -->
+                            <TextBlock Text="Lines Per Second:" Foreground="White" Margin="0,0,0,2"/>
+                            <Slider Name="LpsSlider"
+                                    Minimum="0" Maximum="100" SmallChange="1" LargeChange="5"
+                                    IsSnapToTickEnabled="True" TickFrequency="1"
+                                    Value="{Binding SimulatorLPS, Mode=TwoWay, Converter={StaticResource ExponentialConverter}}"
+                                    Margin="0,0,0,2">
+                                <Slider.ToolTip>
+                                    <ToolTip Content="{Binding DataContext.SimulatorLPS, RelativeSource={RelativeSource AncestorType=Window}, StringFormat='{}{0:F0} LPS'}"/>
+                                </Slider.ToolTip>
+                            </Slider>
+                            <TextBlock Text="{Binding SimulatorLPS, StringFormat='{}{0:F0} LPS'}"
+                                       Foreground="White" HorizontalAlignment="Center" Margin="0,0,0,10"/>
 
-                        <!-- Control Buttons -->
-                        <WrapPanel HorizontalAlignment="Center" Margin="0,10,0,10">
-                            <Button Content="Start" Width="70" Margin="5"
-                                    Command="{Binding StartSimulatorCommand}"
-                                    IsEnabled="{Binding IsSimulatorRunning, Converter={StaticResource InverseBoolToVis}}"/>
-                             <Button Content="Stop" Width="70" Margin="5"
-                                    Command="{Binding StopSimulatorCommand}"
-                                    IsEnabled="{Binding IsSimulatorRunning}"/>
-                             <Button Content="Restart" Width="70" Margin="5"
-                                    Command="{Binding RestartSimulatorCommand}"
-                                    IsEnabled="{Binding IsSimulatorRunning}"/>
-                        </WrapPanel>
+                            <!-- Control Buttons -->
+                            <WrapPanel HorizontalAlignment="Center" Margin="0,10,0,10">
+                                <Button Content="Start" Width="70" Margin="5"
+                                        Command="{Binding StartSimulatorCommand}"/>
+                                <Button Content="Stop" Width="70" Margin="5"
+                                        Command="{Binding StopSimulatorCommand}"/>
+                                <Button Content="Restart" Width="70" Margin="5"
+                                        Command="{Binding RestartSimulatorCommand}"/>
+                            </WrapPanel>
 
-                        <!-- Clear Log Button -->
-                        <Button Content="Clear Displayed Log" HorizontalAlignment="Center" Margin="0,15,0,0"
-                                Command="{Binding ClearLogCommand}"/>
+                            <!-- Clear Log Button -->
+                            <Button Content="Clear Displayed Log" HorizontalAlignment="Center" Margin="0,15,0,0"
+                                    Command="{Binding ClearLogCommand}"/>
 
-                    </StackPanel>
+                        </StackPanel>
+                    </Grid>
                 </Border>
             </Grid>
 

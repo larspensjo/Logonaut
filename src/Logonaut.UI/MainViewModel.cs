@@ -420,6 +420,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
     #region Simulator Configuration UI State & Properties
 
     [ObservableProperty] private bool _isSimulatorConfigurationVisible = false;
+    [RelayCommand] private void HideSimulatorConfig()
+    {
+        IsSimulatorConfigurationVisible = false;
+    }
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(StartSimulatorCommand))]
