@@ -10,6 +10,7 @@ using ICSharpCode.AvalonEdit.Rendering;
 using ICSharpCode.AvalonEdit.Document; // Required for DocumentLine
 using Logonaut.UI.Helpers;
 using Logonaut.UI.ViewModels;
+using System.Diagnostics;
 
 namespace Logonaut.UI;
 
@@ -116,6 +117,7 @@ public partial class MainWindow : Window, IDisposable
         
         _viewModel.PropertyChanged += ViewModel_PropertyChanged; // Subscribe to model updates to update chunk separators
         _viewModel.RequestScrollToEnd += ViewModel_RequestScrollToEnd;
+        _viewModel.RequestScrollToLineIndex += ViewModel_RequestScrollToLineIndex;
 
         // Apply dark title bar if supported
         if (IsWindows10OrGreater())
@@ -152,6 +154,15 @@ public partial class MainWindow : Window, IDisposable
         Closing += MainWindow_Closing;
     }
 
+    private void ViewModel_RequestScrollToLineIndex(object? sender, int lineIndex)
+    {
+        // Ensure this runs on the UI thread if there's any doubt
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            ScrollToSelectedLine(lineIndex);
+        }));
+    }
+
     private void MainWindow_Closing(object? sender, CancelEventArgs e)
     {
         Dispose();
@@ -167,6 +178,7 @@ public partial class MainWindow : Window, IDisposable
             if (_viewModel != null) {
                 _viewModel.PropertyChanged -= ViewModel_PropertyChanged;
                 _viewModel.RequestScrollToEnd -= ViewModel_RequestScrollToEnd;
+                _viewModel.RequestScrollToLineIndex -= ViewModel_RequestScrollToLineIndex;
                 // Dispose ViewModel
                 _viewModel.Cleanup(); // Use existing cleanup which includes Dispose
             }
@@ -191,20 +203,20 @@ public partial class MainWindow : Window, IDisposable
 
                 // Get the brush from the TextView's Tag property (where we stored the resource)
                 var highlightBrush = _logOutputEditor.TextArea.TextView.Tag as Brush;
+                Debug.WriteLine($"ViewModel_PropertyChanged: Updating transformer. Line={newLineNumberInFilteredDoc}, Brush={(highlightBrush?.ToString() ?? "null")}");
 
                 // Update the transformer state (this method handles redraw)
                 _selectedIndexTransformer.UpdateState(newLineNumberInFilteredDoc, highlightBrush, _logOutputEditor.TextArea.TextView);
 
-                // Scroll only if a valid line index was set
-                if (_viewModel.HighlightedFilteredLineIndex >= 0)
+                // Disable AutoScroll whenever a line is selected (by either method)
+                if (_viewModel.HighlightedFilteredLineIndex >= 0 && _viewModel.IsAutoScrollEnabled)
                 {
-                    if (_viewModel.IsAutoScrollEnabled) // Check before setting to avoid redundant updates/saves
-                        _viewModel.IsAutoScrollEnabled = false; // Disable Auto-Scroll when a line is selected
-                    ScrollToSelectedLine(_viewModel.HighlightedFilteredLineIndex);
+                    _viewModel.IsAutoScrollEnabled = false;
                 }
             }
         }
 
+        Debug.WriteLine($"ViewModel_PropertyChanged: {e.PropertyName} _viewModel.JumpStatusMessage: {_viewModel.JumpStatusMessage} _viewModel.HighlightedOriginalLineNumber: {_viewModel.HighlightedOriginalLineNumber} _viewModel.TargetOriginalLineNumberInput: {_viewModel.TargetOriginalLineNumberInput}");
         // Clear Status Message on Successful Jump ---
         // Optional: Could also be done via a timer in the ViewModel
         if (e.PropertyName == nameof(MainViewModel.HighlightedOriginalLineNumber) &&
@@ -295,9 +307,14 @@ public partial class MainWindow : Window, IDisposable
         // Get TextView *once*
         TextView textView = _logOutputEditor.TextArea.TextView;
         if (textView == null)
-            throw new InvalidOperationException("TextView not found within LogOutputEditor.");
+                throw new InvalidOperationException("TextView not found within LogOutputEditor.");
 
-        // ... (SelectedIndexTransformer setup code) ...
+        _selectedIndexTransformer = new SelectedIndexHighlightTransformer();
+        // Get the initial brush from the resource dictionary via the Tag proxy
+        textView.SetResourceReference(TextView.TagProperty, "PersistedHighlightBrush");
+        _selectedIndexTransformer.HighlightBrush = textView.Tag as Brush;
+        // Add transformer to the text view
+        textView.LineTransformers.Add(_selectedIndexTransformer);
 
         // --- Chunk Separator Setup ---
         _chunkSeparator = new ChunkSeparatorRenderer(textView);

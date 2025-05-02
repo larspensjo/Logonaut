@@ -53,6 +53,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty] private ObservableCollection<SearchResult> _searchMarkers = new();
     [ObservableProperty] private bool _isAutoScrollEnabled = true;
     public event EventHandler? RequestScrollToEnd; // Triggered when Auto Scroll is enabled
+    public event EventHandler<int>? RequestScrollToLineIndex; // Event passes the 0-based index to scroll to
 
     #endregion // --- Fields ---
 
@@ -224,9 +225,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
         if (foundLine != null)
         {
             // Found the line in the filtered view!
-            // Set the highlighted index. This will trigger PropertyChanged.
-            // The MainWindow code-behind will observe this change and trigger the scroll.
+
+            // 1. Set the highlighted index (for the visual highlight)
             HighlightedFilteredLineIndex = foundLine.Index;
+
+            // 2. Explicitly request the View to scroll to this index
+            RequestScrollToLineIndex?.Invoke(this, foundLine.Index); // <<< ADD THIS
         }
         else
         {
@@ -235,6 +239,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             // (We can't easily distinguish without checking LogDoc count, which might be large)
             JumpStatusMessage = $"Line {targetLineNumber} not found in filtered view.";
             await TriggerInvalidInputFeedback();
+            // No need to change HighlightedFilteredLineIndex if not found
         }
     }
 
