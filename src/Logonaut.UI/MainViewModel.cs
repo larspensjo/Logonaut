@@ -708,7 +708,6 @@ public partial class MainViewModel : ObservableObject, IDisposable
             _fileLogSource ??= _sourceProvider.CreateFileLogSource(); // Create if null
             if (!_disposables.Contains(_fileLogSource)) _disposables.Add(_fileLogSource); // Add if new
 
-            // ... rest of OpenLogFileAsync uses _fileLogSource ...
              _fileLogSource.StopMonitoring();
 
             // 5. Switch Active Source and Recreate Processor
@@ -718,14 +717,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
             _disposables.Add(_reactiveFilteredLogStream);
             SubscribeToFilteredStream();
 
-            // ... rest of the method (ResetLogDocumentAndUIState, Prepare, Start, TriggerFilter) ...
              ResetLogDocumentAndUIState();
              CurrentLogFilePath = selectedFile;
-             long initialLines = await _fileLogSource.PrepareAndGetInitialLinesAsync(selectedFile, AddLineToLogDocument).ConfigureAwait(true);
+            long initialLines = await _fileLogSource.PrepareAndGetInitialLinesAsync(selectedFile, AddLineToLogDocument).ConfigureAwait(true);
              _uiContext.Post(_ => TotalLogLines = initialLines, null);
              _fileLogSource.StartMonitoring();
              _uiContext.Post(_ => CurrentBusyStates.Add(FilteringToken), null);
-             IFilter? firstFilter = ActiveFilterProfile?.Model?.RootFilter ?? new TrueFilter();
+            IFilter? firstFilter = ActiveFilterProfile?.Model?.RootFilter ?? new TrueFilter();
              _reactiveFilteredLogStream.UpdateFilterSettings(firstFilter, ContextLines);
              UpdateFilterSubstrings();
 
@@ -947,7 +945,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
             // Attempt to append to editor if available
             if (_logEditorInstance?.Document != null)
-            AppendLogTextInternal(lines);
+                AppendLogTextInternal(lines);
 
             // Update search matches *after* FilteredLogLines is updated (which happens before this Post)
             // and regardless of whether editor append happened. This can haååen when running from unit tests.
@@ -1033,13 +1031,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
             var lines = (List<FilteredLogLine>)state!; // Cast state first
 
             // Attempt to update editor if available
-            if (_logEditorInstance?.Document != null)
-            ReplaceLogTextInternal(lines);
-
-            // Update search matches *after* FilteredLogLines is updated (which happens before this Post)
-            // and regardless of whether editor replace happened. This can happen when running from unit tests.
-            UpdateSearchMatches(); // <<< Moved outside the editor check
-
+            if (_logEditorInstance?.Document != null) {
+                ReplaceLogTextInternal(lines);
+            }
         }, linesSnapshot);
     }
 

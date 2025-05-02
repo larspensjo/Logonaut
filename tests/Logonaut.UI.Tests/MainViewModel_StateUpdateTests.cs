@@ -37,8 +37,7 @@ namespace Logonaut.UI.Tests.ViewModels;
     }
 
     // Verifies: [ReqDisplayRealTimeUpdatev1], [ReqStatusBarFilteredLinesv1], [ReqSearchHighlightResultsv1] (Reset)
-    [TestMethod]
-    public async Task FilterChange_TriggersReplace_ClearsAndAddsLines_ResetsSearch_ClearsFilteringToken()
+    [TestMethod] public async Task FilterChange_TriggersReplace_ClearsAndAddsLines_ResetsSearch_ClearsFilteringToken()
     {
         // Arrange: Setup with initial lines and search state
         await SetupWithInitialLines(new List<string> { "Old Line 1", "Match Me" });
@@ -70,8 +69,7 @@ namespace Logonaut.UI.Tests.ViewModels;
     }
 
     // Verifies: [ReqHighlightSelectedLinev1], [ReqStatusBarSelectedLinev1]
-    [TestMethod]
-    public async Task FilterChange_TriggersReplace_RestoresHighlightBasedOnOriginalLineNumber()
+    [TestMethod] public async Task FilterChange_TriggersReplace_RestoresHighlightBasedOnOriginalLineNumber()
     {
         // Arrange: Setup with specific lines
         await SetupWithInitialLines(new List<string> {
