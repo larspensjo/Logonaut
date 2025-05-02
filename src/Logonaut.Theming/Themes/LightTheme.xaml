@@ -82,15 +82,17 @@
     <DropShadowEffect x:Key="InnerShadowEffect" Color="#AA000000" ShadowDepth="1" BlurRadius="2" Opacity="0.5"/>
 
     <Style x:Key="OverlayCloseButtonStyle" TargetType="Button">
+        <!-- Basic properties remain mostly the same -->
         <Setter Property="Background" Value="Transparent"/>
-        <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}"/> <!-- Use a less prominent color -->
-        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/> <!-- Use border for hover effect -->
+        <Setter Property="BorderBrush" Value="Transparent"/> <!-- Keep border transparent initially -->
         <Setter Property="Padding" Value="0"/>
         <Setter Property="Width" Value="20"/>
         <Setter Property="Height" Value="20"/>
         <Setter Property="HorizontalAlignment" Value="Right"/>
         <Setter Property="VerticalAlignment" Value="Top"/>
-        <Setter Property="Margin" Value="0,0,0,0"/> <!-- Adjust as needed for spacing from edge -->
+        <Setter Property="Margin" Value="0,0,0,0"/>
         <Setter Property="FontWeight" Value="Bold"/>
         <Setter Property="FontSize" Value="12"/>
         <Setter Property="ToolTip" Value="Close Simulator Controls"/>
@@ -98,33 +100,51 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <!-- Use Ellipse for circular background on hover/press -->
-                    <Grid>
-                        <Ellipse x:Name="BackgroundEllipse" Fill="{TemplateBinding Background}" Opacity="0.0"/>
+                    <!-- Use a Border as the main container -->
+                    <Border x:Name="ButtonBorder"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="10"
+                            SnapsToDevicePixels="True">
                         <TextBlock Text="✕"
-                                    HorizontalAlignment="Center"
-                                    VerticalAlignment="Center"
-                                    Foreground="{TemplateBinding Foreground}"
-                                    FontSize="{TemplateBinding FontSize}"
-                                    FontWeight="{TemplateBinding FontWeight}"
-                                    Margin="0,0,0,1"/> <!-- Small adjustment for centering 'X' -->
-                    </Grid>
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   Foreground="{TemplateBinding Foreground}"
+                                   FontSize="{TemplateBinding FontSize}"
+                                   FontWeight="{TemplateBinding FontWeight}"
+                                   Margin="0,0,0,1"/>
+                    </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <!-- Maybe use BorderBrush or a slightly darker grey for hover background -->
-                            <Setter TargetName="BackgroundEllipse" Property="Fill" Value="{DynamicResource BorderBrush}"/>
-                            <Setter TargetName="BackgroundEllipse" Property="Opacity" Value="0.5"/> <!-- Adjust opacity if needed -->
-                            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/> <!-- Use Accent color for the 'X' on hover -->
+                            <!-- Change BorderBrush to AccentColor on hover -->
+                            <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                             <!-- Make 'X' use AccentColor too -->
+                             <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+                             <!-- Optional: Slight background change on hover -->
+                             <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource ButtonHoverBackgroundBrush}"/>
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
-                            <!-- Use Accent color with transparency for pressed state -->
-                            <Setter TargetName="BackgroundEllipse" Property="Fill" Value="{DynamicResource AccentBrush}"/>
-                            <Setter TargetName="BackgroundEllipse" Property="Opacity" Value="0.5"/>
-                            <Setter Property="Foreground" Value="{DynamicResource WindowBackgroundBrush}"/> <!-- Contrast against accent -->
+                            <!-- Use AccentBrush for background when pressed -->
+                            <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource AccentBrush}"/>
+                            <!-- Change 'X' color for contrast -->
+                            <Setter Property="Foreground" Value="{DynamicResource WindowBackgroundBrush}"/>
+                            <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.5"/>
+                            <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="{DynamicResource BorderBrush}"/> <!-- Show standard border when disabled -->
                         </Trigger>
+                        <!-- Ensure border is transparent when not hovered/pressed -->
+                         <MultiTrigger>
+                             <MultiTrigger.Conditions>
+                                 <Condition Property="IsMouseOver" Value="False"/>
+                                 <Condition Property="IsPressed" Value="False"/>
+                                 <Condition Property="IsEnabled" Value="True"/>
+                             </MultiTrigger.Conditions>
+                             <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="Transparent"/>
+                             <Setter TargetName="ButtonBorder" Property="Background" Value="Transparent"/>
+                         </MultiTrigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
