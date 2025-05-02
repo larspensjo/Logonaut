@@ -294,33 +294,34 @@ public partial class MainWindow : Window, IDisposable
 
         // Get TextView *once*
         TextView textView = _logOutputEditor.TextArea.TextView;
-        if (textView == null) // Add null check for safety
-                throw new InvalidOperationException("TextView not found within LogOutputEditor.");
+        if (textView == null)
+            throw new InvalidOperationException("TextView not found within LogOutputEditor.");
 
-        _selectedIndexTransformer = new SelectedIndexHighlightTransformer();
-        // Get the initial brush from the resource dictionary via the Tag proxy
-        textView.SetResourceReference(TextView.TagProperty, "PersistedHighlightBrush");
-        _selectedIndexTransformer.HighlightBrush = textView.Tag as Brush;
-        // Add transformer to the text view
-        textView.LineTransformers.Add(_selectedIndexTransformer);
+        // ... (SelectedIndexTransformer setup code) ...
 
         // --- Chunk Separator Setup ---
         _chunkSeparator = new ChunkSeparatorRenderer(textView);
 
-        // Chunk Separator Brush Binding (using TextView.ToolTip as proxy)
-        textView.SetResourceReference(TextView.ToolTipProperty, "ChunkSeparatorBrush"); // Use ToolTipProperty
+        // 1. Temporarily use ToolTip to resolve the resource against the TextView's context
+        textView.SetResourceReference(TextView.ToolTipProperty, "ChunkSeparatorBrush");
 
-        var chunkBrushBinding = new Binding("ToolTip")
-        {
-            Source = textView,
-            Mode = BindingMode.OneWay
-        };
-        BindingOperations.SetBinding(
-            _chunkSeparator,
-            ChunkSeparatorRenderer.SeparatorBrushProperty,
-            chunkBrushBinding // Use the correct binding variable
-        );
+        // 2. Get the resolved brush directly from the ToolTip property NOW
+        Brush? separatorBrush = textView.ToolTip as Brush;
+
+        // 3. Set the brush directly on the renderer's DP.
+        //    The renderer's OnSeparatorBrushChanged callback will handle creating the pen.
+        //    Provide a fallback default brush if the resource wasn't found or is somehow null.
+        _chunkSeparator.SeparatorBrush = separatorBrush ?? Brushes.Gray; // Use fallback Gray if needed
+
+        // 4. Clear the ToolTip property on the TextView *immediately* after getting the value.
+        //    This removes the unwanted tooltip from the editor.
+        textView.ClearValue(TextView.ToolTipProperty);
+
+        // 5. Add the renderer to the TextView.
+        //    NO BINDING IS NEEDED HERE ANYMORE.
         textView.BackgroundRenderers.Add(_chunkSeparator);
+
+        // 6. Perform the initial update based on current ViewModel state.
         _chunkSeparator.UpdateChunks(_viewModel.FilteredLogLines, _viewModel.ContextLines);
 
         // --- Final Cleanup Subscription ---
