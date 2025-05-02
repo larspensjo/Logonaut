@@ -22,6 +22,10 @@
     <Color x:Key="ButtonPressedInnerShadowColor">#FFBEBEBE</Color>
     <Color x:Key="ButtonPressedInnerHighlightColor">#FFFFFFFF</Color>
 
+    <!-- Brushes for Simulator Overlay -->
+    <SolidColorBrush x:Key="Overlay.BackgroundBrush" Color="#E0F9F9F9"/> <!-- Semi-transparent off-white/light grey -->
+    <SolidColorBrush x:Key="Overlay.ForegroundBrush" Color="#FF1C1C1E"/> <!-- Near Black Text (matches PrimaryForegroundColor) -->
+
     <!-- NEON: Define Brushes -->
     <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource NeonAccentColor}"/>
     <SolidColorBrush x:Key="WindowBackgroundBrush" Color="{StaticResource BaseBackgroundColor}"/>

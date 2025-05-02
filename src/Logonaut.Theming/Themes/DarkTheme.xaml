@@ -19,6 +19,10 @@
     <Color x:Key="HighlightFilterBackgroundColor">#FF808000</Color> <!-- Dark Yellow/Olive -->
     <Color x:Key="HighlightSearchBackgroundColor">#FF008B8B</Color> <!-- Dark Cyan -->
 
+    <!-- Brushes for Simulator Overlay -->
+    <SolidColorBrush x:Key="Overlay.BackgroundBrush" Color="#D0333333"/> <!-- Semi-transparent dark grey -->
+    <SolidColorBrush x:Key="Overlay.ForegroundBrush" Color="#FFFFFFFF"/> <!-- White Text -->
+
     <!-- NEON: Define Brushes -->
     <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource NeonAccentColor}"/>
     <SolidColorBrush x:Key="WindowBackgroundBrush" Color="{StaticResource BaseBackgroundColor}"/>
