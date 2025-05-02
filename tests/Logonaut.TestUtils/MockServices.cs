@@ -63,7 +63,7 @@ namespace Logonaut.TestUtils
     }
 
     // --- Log Filter Processor Mock ---
-    public class MockLogFilterProcessor : ILogFilterProcessor
+    public class MockReactiveFilteredLogStream : IReactiveFilteredLogStream
     {
         private readonly Subject<FilteredUpdateBase> _filteredUpdatesSubject = new Subject<FilteredUpdateBase>();
         private readonly BehaviorSubject<long> _totalLinesSubject = new BehaviorSubject<long>(0); // <<< ADDED
@@ -81,7 +81,7 @@ namespace Logonaut.TestUtils
 
         public void Reset()
         {
-            if (_isDisposed) throw new ObjectDisposedException(nameof(MockLogFilterProcessor));
+            if (_isDisposed) throw new ObjectDisposedException(nameof(MockReactiveFilteredLogStream));
             ResetCallCount++;
             _totalLinesSubject.OnNext(0); // Reset total lines count
             // Optionally simulate the empty Replace update if tests rely on it
@@ -98,7 +98,7 @@ namespace Logonaut.TestUtils
 
         public void UpdateFilterSettings(IFilter newFilter, int contextLines)
         {
-            if (_isDisposed) throw new ObjectDisposedException(nameof(MockLogFilterProcessor));
+            if (_isDisposed) throw new ObjectDisposedException(nameof(MockReactiveFilteredLogStream));
             UpdateFilterSettingsCallCount++;
             LastFilterSettings = (newFilter, contextLines);
             Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> MockLogFilterProcessor: UpdateFilterSettings called. Triggering full re-filter.");
@@ -111,7 +111,7 @@ namespace Logonaut.TestUtils
         /// <param name="lines">The complete list of lines for the replacement.</param>
         public void SimulateReplaceUpdate(List<FilteredLogLine> lines)
         {
-            if (_isDisposed) throw new ObjectDisposedException(nameof(MockLogFilterProcessor));
+            if (_isDisposed) throw new ObjectDisposedException(nameof(MockReactiveFilteredLogStream));
             var update = new ReplaceFilteredUpdate(lines); // Create specific type
             _filteredUpdatesSubject.OnNext(update);        // Emit
         }
@@ -123,7 +123,7 @@ namespace Logonaut.TestUtils
         /// <param name="linesToAppend">The list of new/context lines to append.</param>
         public void SimulateAppendUpdate(List<FilteredLogLine> linesToAppend)
         {
-            if (_isDisposed) throw new ObjectDisposedException(nameof(MockLogFilterProcessor));
+            if (_isDisposed) throw new ObjectDisposedException(nameof(MockReactiveFilteredLogStream));
             var update = new AppendFilteredUpdate(linesToAppend); // Create specific type
             _filteredUpdatesSubject.OnNext(update);           // Emit
         }

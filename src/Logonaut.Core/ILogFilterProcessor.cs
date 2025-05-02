@@ -36,7 +36,7 @@ namespace Logonaut.Core;
 * Implementations manage filter state and potentially background processing,
 * releasing resources via IDisposable.
 */
-public interface ILogFilterProcessor : IDisposable
+public interface IReactiveFilteredLogStream : IDisposable
 {
     /// <summary>
     /// Gets an observable sequence of updates for the filtered log view.

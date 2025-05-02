@@ -58,7 +58,7 @@ namespace Logonaut.Core.Tests; // File-scoped namespace
 
         // Arrange: Set specific filter *after* initial load
         var filter = new SubstringFilter("MATCH");
-        _processor.UpdateFilterSettings(filter, 0);
+        _filteredStream.UpdateFilterSettings(filter, 0);
         _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Allow Throttle for filter change (Replace)
         Assert.AreEqual(1, _receivedUpdates.Count); // One Replace update from filter change
         Assert.AreEqual(0, _receivedUpdates.Last().Lines.Count); // Should be empty
@@ -177,7 +177,7 @@ namespace Logonaut.Core.Tests; // File-scoped namespace
 
         // Arrange: Now set the filter that *will* match the new line
         var filter = new SubstringFilter("MATCH");
-        _processor.UpdateFilterSettings(filter, 1); // Keep Context = 1
+        _filteredStream.UpdateFilterSettings(filter, 1); // Keep Context = 1
         _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Allow Throttle for this settings change (Replace)
         Assert.AreEqual(1, _receivedUpdates.Count); // Replace update (empty)
         Assert.AreEqual(0, _receivedUpdates[0].Lines.Count);

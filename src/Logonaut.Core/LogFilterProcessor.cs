@@ -12,7 +12,7 @@ using Logonaut.Filters;
 
 namespace Logonaut.Core;
 
-public class LogFilterProcessor : ILogFilterProcessor
+public class ReactiveFilteredLogStream : IReactiveFilteredLogStream
 {
     private readonly LogDocument _logDocument;
     private readonly ILogSource _logSource;
@@ -41,7 +41,7 @@ public class LogFilterProcessor : ILogFilterProcessor
     public IObservable<FilteredUpdateBase> FilteredUpdates => _filteredUpdatesSubject.AsObservable();
     public IObservable<long> TotalLinesProcessed => _totalLinesSubject.AsObservable();
 
-    public LogFilterProcessor(
+    public ReactiveFilteredLogStream(
         ILogSource logSource,
         LogDocument logDocument,
         SynchronizationContext uiContext,

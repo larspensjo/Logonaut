@@ -25,7 +25,7 @@ namespace Logonaut.Core.Tests; // File-scoped namespace
 
         // Act: Update filter settings to something specific
         var newFilter = new SubstringFilter("MATCH");
-        _processor.UpdateFilterSettings(newFilter, 0);
+        _filteredStream.UpdateFilterSettings(newFilter, 0);
         _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Allow Throttle
 
         // Assert: Should receive one *new* Replace update
@@ -47,11 +47,11 @@ namespace Logonaut.Core.Tests; // File-scoped namespace
         var filterB = new SubstringFilter("B");
 
         // Act: Call UpdateFilterSettings rapidly
-        _processor.UpdateFilterSettings(filterA, 0);
+        _filteredStream.UpdateFilterSettings(filterA, 0);
         _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(5).Ticks);
-        _processor.UpdateFilterSettings(new TrueFilter(), 0);
+        _filteredStream.UpdateFilterSettings(new TrueFilter(), 0);
         _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(5).Ticks);
-        _processor.UpdateFilterSettings(filterB, 0); // Final filter
+        _filteredStream.UpdateFilterSettings(filterB, 0); // Final filter
         _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(5).Ticks);
 
         // Assert: No updates yet
@@ -83,7 +83,7 @@ namespace Logonaut.Core.Tests; // File-scoped namespace
         await SetupInitialFileLoad(initialLines); // Loads with TrueFilter, clears updates
 
         // Act: Update filter *once* with context lines
-        _processor.UpdateFilterSettings(new SubstringFilter("MATCH"), 1); // 1 context line
+        _filteredStream.UpdateFilterSettings(new SubstringFilter("MATCH"), 1); // 1 context line
         _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Allow Throttle
 
         // Assert

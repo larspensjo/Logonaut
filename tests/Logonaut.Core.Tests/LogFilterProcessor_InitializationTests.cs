@@ -22,11 +22,11 @@ namespace Logonaut.Core.Tests; // File-scoped namespace
         // Arrange (Processor created in base TestInitialize)
 
         // Assert
-        Assert.IsNotNull(_processor.FilteredUpdates, "FilteredUpdates observable should not be null.");
-        Assert.IsNotNull(_processor.TotalLinesProcessed, "TotalLinesProcessed observable should not be null.");
+        Assert.IsNotNull(_filteredStream.FilteredUpdates, "FilteredUpdates observable should not be null.");
+        Assert.IsNotNull(_filteredStream.TotalLinesProcessed, "TotalLinesProcessed observable should not be null.");
         // Check initial state of BehaviorSubjects if necessary (though tested indirectly elsewhere)
         long initialTotal = 0;
-        var totalSub = _processor.TotalLinesProcessed.Subscribe(l => initialTotal = l); // Subscribe to get current value
+        var totalSub = _filteredStream.TotalLinesProcessed.Subscribe(l => initialTotal = l); // Subscribe to get current value
         Assert.AreEqual(0, initialTotal, "Initial TotalLinesProcessed should be 0.");
         totalSub.Dispose();
     }
@@ -57,17 +57,17 @@ namespace Logonaut.Core.Tests; // File-scoped namespace
         await SetupInitialFileLoad(new List<string> { "Old Line 1" });
         Assert.AreEqual(1, _logDocument.Count); // Verify initial state
         long initialTotalLines = 0;
-        var totalSub = _processor.TotalLinesProcessed.Subscribe(l => initialTotalLines = l);
+        var totalSub = _filteredStream.TotalLinesProcessed.Subscribe(l => initialTotalLines = l);
         Assert.AreEqual(1, initialTotalLines, "Total lines should be 1 after first load.");
         totalSub.Dispose();
 
         // Act: Reset
-        _processor.Reset();
+        _filteredStream.Reset();
 
         // Assert: Processor index reset, LogDocument *NOT* cleared by processor anymore
         Assert.AreEqual(1, _logDocument.Count, "LogDocument should NOT be cleared by processor Reset.");
         // Assert total lines observable reset
-        totalSub = _processor.TotalLinesProcessed.Subscribe(l => initialTotalLines = l);
+        totalSub = _filteredStream.TotalLinesProcessed.Subscribe(l => initialTotalLines = l);
         Assert.AreEqual(0, initialTotalLines, "Total lines should reset to 0 after Reset().");
         totalSub.Dispose();
 
@@ -79,7 +79,7 @@ namespace Logonaut.Core.Tests; // File-scoped namespace
         Assert.AreEqual(1, _logDocument.Count);
         Assert.AreEqual("New Line A", _logDocument[0]);
         // Assert total lines updated by new load's ApplyFullFilter
-        totalSub = _processor.TotalLinesProcessed.Subscribe(l => initialTotalLines = l);
+        totalSub = _filteredStream.TotalLinesProcessed.Subscribe(l => initialTotalLines = l);
         Assert.AreEqual(1, initialTotalLines, "Total lines should be 1 after second load.");
         totalSub.Dispose();
     }

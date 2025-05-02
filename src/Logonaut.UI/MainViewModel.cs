@@ -58,7 +58,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private readonly ISettingsService _settingsService;
     private ILogSource _currentActiveLogSource;
     private readonly SynchronizationContext _uiContext;
-    private ILogFilterProcessor _logFilterProcessor; // This will be recreated when switching sources
+    private IReactiveFilteredLogStream _reactiveFilteredLogStream; // This will be recreated when switching sources
 
     // --- Simulator Specific Fields ---
     private ISimulatorLogSource? _simulatorLogSource; // Keep a dedicated instance
@@ -107,9 +107,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _disposables.Add(_fileLogSource); // Add file source to disposables
 
         // Create the initial processor with the file source
-        _logFilterProcessor = CreateProcessor(_currentActiveLogSource);
-        _disposables.Add(_logFilterProcessor); // Add processor to disposables
-        SubscribeToProcessor(); // Subscribe to the initial processor
+        _reactiveFilteredLogStream = CreateFilteredStream(_currentActiveLogSource);
+        _disposables.Add(_reactiveFilteredLogStream); // Add processor to disposables
+        SubscribeToFilteredStream(); // Subscribe to the initial processor
 
         CurrentBusyStates.CollectionChanged += CurrentBusyStates_CollectionChanged;
         _disposables.Add(Disposable.Create(() => {
@@ -120,10 +120,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
         LoadPersistedSettings(); // Loads basic settings, not files yet
     }
 
-    private ILogFilterProcessor CreateProcessor(ILogSource source)
+    private IReactiveFilteredLogStream CreateFilteredStream(ILogSource source)
     {
-        Debug.WriteLine($"---> Creating LogFilterProcessor with source: {source.GetType().Name}");
-        return new LogFilterProcessor(
+        Debug.WriteLine($"---> Creating ReactiveFilteredLogStream with source: {source.GetType().Name}");
+        return new ReactiveFilteredLogStream(
             source,
             LogDoc,
             _uiContext,
@@ -131,15 +131,15 @@ public partial class MainViewModel : ObservableObject, IDisposable
             _backgroundScheduler);
     }
 
-    private void SubscribeToProcessor()
+    private void SubscribeToFilteredStream()
     {
         // Dispose previous subscriptions if they exist
         _filterSubscription?.Dispose();
         _totalLinesSubscription?.Dispose();
 
-        Debug.WriteLine($"---> Subscribing to processor: {_logFilterProcessor.GetType().Name}");
+        Debug.WriteLine($"---> Subscribing to processor: {_reactiveFilteredLogStream.GetType().Name}");
 
-        _filterSubscription = _logFilterProcessor.FilteredUpdates
+        _filterSubscription = _reactiveFilteredLogStream.FilteredUpdates
             .ObserveOn(_uiContext) // Ensure UI thread for updates
             .Subscribe(
                 update => ApplyFilteredUpdate(update),
@@ -147,7 +147,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             );
 
         var samplingScheduler = Scheduler.Default;
-        _totalLinesSubscription = _logFilterProcessor.TotalLinesProcessed
+        _totalLinesSubscription = _reactiveFilteredLogStream.TotalLinesProcessed
             .Sample(TimeSpan.FromMilliseconds(200), samplingScheduler)
             .ObserveOn(_uiContext) // Ensure UI thread for updates
             .Subscribe(
@@ -160,7 +160,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     }
 
     // Dispose processor and its subscriptions
-    private void DisposeAndClearProcessor()
+    private void DisposeAndClearFilteredStream()
     {
         Debug.WriteLine($"---> Disposing processor and subscriptions.");
         _filterSubscription?.Dispose();
@@ -169,10 +169,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _totalLinesSubscription = null;
 
         // Assuming processor was added to _disposables when created
-        if (_logFilterProcessor != null)
+        if (_reactiveFilteredLogStream != null)
         {
-            _disposables.Remove(_logFilterProcessor); // Remove from main collection before disposing
-            _logFilterProcessor.Dispose();
+            _disposables.Remove(_reactiveFilteredLogStream); // Remove from main collection before disposing
+            _reactiveFilteredLogStream.Dispose();
         }
     }
 
@@ -458,11 +458,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
             _simulatorLogSource.LinesPerSecond = (int)Math.Round(SimulatorLPS); // Set property via interface
 
             // 4. Switch Active Source and Recreate Processor
-            DisposeAndClearProcessor();
+            DisposeAndClearFilteredStream();
             _currentActiveLogSource = _simulatorLogSource; // Assign ISimulatorLogSource (which is also ILogSource)
-            _logFilterProcessor = CreateProcessor(_currentActiveLogSource);
-            _disposables.Add(_logFilterProcessor);
-            SubscribeToProcessor();
+            _reactiveFilteredLogStream = CreateFilteredStream(_currentActiveLogSource);
+            _disposables.Add(_reactiveFilteredLogStream);
+            SubscribeToFilteredStream();
 
             // 5. Reset Document and UI State
             ResetLogDocumentAndUIState();
@@ -548,7 +548,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private void ResetLogDocumentAndUIState()
     {
         // Reset Core State
-        _logFilterProcessor.Reset(); // Resets processor's internal index and total lines observable
+        _reactiveFilteredLogStream.Reset(); // Resets processor's internal index and total lines observable
 
         // Clear Document and UI Collections/State
         _uiContext.Post(_ => {
@@ -712,11 +712,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
              _fileLogSource.StopMonitoring();
 
             // 5. Switch Active Source and Recreate Processor
-            DisposeAndClearProcessor();
+            DisposeAndClearFilteredStream();
             _currentActiveLogSource = _fileLogSource; // Set file source as active
-            _logFilterProcessor = CreateProcessor(_currentActiveLogSource);
-            _disposables.Add(_logFilterProcessor);
-            SubscribeToProcessor();
+            _reactiveFilteredLogStream = CreateFilteredStream(_currentActiveLogSource);
+            _disposables.Add(_reactiveFilteredLogStream);
+            SubscribeToFilteredStream();
 
             // ... rest of the method (ResetLogDocumentAndUIState, Prepare, Start, TriggerFilter) ...
              ResetLogDocumentAndUIState();
@@ -726,7 +726,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
              _fileLogSource.StartMonitoring();
              _uiContext.Post(_ => CurrentBusyStates.Add(FilteringToken), null);
              IFilter? firstFilter = ActiveFilterProfile?.Model?.RootFilter ?? new TrueFilter();
-             _logFilterProcessor.UpdateFilterSettings(firstFilter, ContextLines);
+             _reactiveFilteredLogStream.UpdateFilterSettings(firstFilter, ContextLines);
              UpdateFilterSubstrings();
 
             Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} OpenLogFileAsync: Prepare/Start completed ({initialLines} lines). First filter triggered.");
@@ -842,7 +842,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _uiContext.Post(_ => { if (!CurrentBusyStates.Contains(FilteringToken)) CurrentBusyStates.Add(FilteringToken); }, null);
         _uiContext.Post(_ => {
             IFilter? filterToApply = ActiveFilterProfile?.Model?.RootFilter ?? new TrueFilter();
-            _logFilterProcessor.UpdateFilterSettings(filterToApply, ContextLines);
+            _reactiveFilteredLogStream.UpdateFilterSettings(filterToApply, ContextLines);
             UpdateFilterSubstrings();
         }, null);
     }
@@ -1087,7 +1087,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     public void LoadLogFromText(string text)
     {
         _currentActiveLogSource?.StopMonitoring(); // Stop current source
-        _logFilterProcessor.Reset();
+        _reactiveFilteredLogStream.Reset();
         LogDoc.Clear();
         FilteredLogLines.Clear();
         OnPropertyChanged(nameof(FilteredLogLinesCount));

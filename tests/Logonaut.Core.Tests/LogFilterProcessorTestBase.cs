@@ -24,7 +24,7 @@ namespace Logonaut.Core.Tests;
     protected TestScheduler _backgroundScheduler = null!;
     protected MockLogSource _mockLogSource = null!;
     protected LogDocument _logDocument = null!;
-    protected LogFilterProcessor _processor = null!;
+    protected ReactiveFilteredLogStream _filteredStream = null!;
     protected List<FilteredUpdateBase> _receivedUpdates = null!; // Use the base type now
     protected Exception? _receivedError = null;
     protected bool _isCompleted = false;
@@ -42,7 +42,7 @@ namespace Logonaut.Core.Tests;
         _isCompleted = false;
         _testContext = new ImmediateSynchronizationContext(); // Create mock context
 
-        _processor = new LogFilterProcessor(
+        _filteredStream = new ReactiveFilteredLogStream(
             _mockLogSource,
             _logDocument,
             _testContext, // Use the mock context
@@ -50,7 +50,7 @@ namespace Logonaut.Core.Tests;
             _backgroundScheduler // Use the TestScheduler
         );
 
-        _subscription = _processor.FilteredUpdates.Subscribe(
+        _subscription = _filteredStream.FilteredUpdates.Subscribe(
             update => _receivedUpdates.Add(update),
             ex => _receivedError = ex,
             () => _isCompleted = true
@@ -61,7 +61,7 @@ namespace Logonaut.Core.Tests;
     [TestCleanup] public virtual void TestCleanup() // Make virtual if needed
     {
         _subscription?.Dispose();
-        _processor?.Dispose(); // Dispose processor first
+        _filteredStream?.Dispose(); // Dispose processor first
         _mockLogSource?.Dispose(); // Then dispose the source mock
     }
 
@@ -81,7 +81,7 @@ namespace Logonaut.Core.Tests;
     /// </summary>
     protected async Task SetupInitialFileLoad(List<string> initialLines, IFilter? initialFilter = null, int context = 0)
     {
-        _processor.Reset(); // Reset processor state
+        _filteredStream.Reset(); // Reset processor state
 
         _mockLogSource.LinesForInitialRead = initialLines; // Set lines for mock source
 
@@ -94,7 +94,7 @@ namespace Logonaut.Core.Tests;
         Assert.IsTrue(_mockLogSource.IsRunning, "MockLogSource should be monitoring after StartMonitoring.");
 
         // Trigger the *first* filter application after preparation
-        _processor.UpdateFilterSettings(initialFilter ?? new TrueFilter(), context);
+        _filteredStream.UpdateFilterSettings(initialFilter ?? new TrueFilter(), context);
 
         // Advance scheduler past throttle/debounce time FOR THE INITIAL LOAD
         _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Adjust time if needed

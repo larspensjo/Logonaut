@@ -54,7 +54,7 @@ namespace Logonaut.Core.Tests; // File-scoped namespace
         _receivedUpdates.Clear(); // Clear updates before disposal
 
         // Act
-        _processor.Dispose(); // Dispose the processor
+        _filteredStream.Dispose(); // Dispose the processor
 
         // Try emitting after processor disposal.
         _mockLogSource.EmitLine("Append 2 (after processor dispose)"); // Call is valid on mock source
@@ -77,7 +77,7 @@ namespace Logonaut.Core.Tests; // File-scoped namespace
         var expectedException = new InvalidOperationException("Error during ApplyFilterToAll simulation");
 
         // Act: Trigger a full refilter with the throwing filter
-        _processor.UpdateFilterSettings(new ThrowingFilter(), 0);
+        _filteredStream.UpdateFilterSettings(new ThrowingFilter(), 0);
         _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Allow throttle and Select to execute
 
         // Assert
@@ -105,7 +105,7 @@ namespace Logonaut.Core.Tests; // File-scoped namespace
 
         // Arrange: Need a way to make ApplyFilterToSubset throw. Could use a special filter
         // or modify the test setup if FilterEngine was injectable. Let's use a throwing filter.
-        _processor.UpdateFilterSettings(new ThrowingFilter(), 0); // Use the same filter
+        _filteredStream.UpdateFilterSettings(new ThrowingFilter(), 0); // Use the same filter
         _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Process this setting change
         _receivedUpdates.Clear(); // Clear the error from the settings change itself
         _receivedError = null;
