@@ -14,11 +14,37 @@ using System.Diagnostics;
 
 namespace Logonaut.UI;
 
-// Deviation: Contains significant code-behind beyond forwarding commands.
-// Justification: Handles complex UI interactions (template parts like OverviewRuler,
-// focus management, scrolling), custom margin setup, direct event handling
-// (PreviewKeyDown/MouseDown), and efficiently applies editor updates signaled
-// by the ViewModel (RequestTextUpdate) for performance reasons.
+/*
+ * Implements the code-behind for Logonaut's main application window.
+ *
+ * Purpose:
+ * Defines the primary user interface structure (from MainWindow.xaml) and handles
+ * direct UI interactions, event wiring, and view-specific logic that complements
+ * the MainViewModel.
+ *
+ * Role & Responsibilities:
+ * - Hosts the UI elements defined in XAML.
+ * - Sets the DataContext to an instance of MainViewModel, enabling data binding.
+ * - Handles window lifecycle events (Loaded, Closing, SourceInitialized) for setup and cleanup.
+ * - Manages UI-specific components like AvalonEdit custom margins (line numbers, separators),
+ *   the overview ruler, and highlighting transformers.
+ * - Responds to events from the ViewModel (e.g., RequestScrollToLineIndex, RequestScrollToEnd)
+ *   to manipulate UI controls directly, often for performance or because the action is
+ *   inherently view-related (scrolling, focus).
+ * - Handles some direct user input events (e.g., PreviewMouseDown on editor for selection,
+ *   PreviewKeyDown for paste/search, input event filtering for auto-scroll disabling)
+ *   that are more easily managed in code-behind.
+ * - Wires up UI command bindings (e.g., for focusing specific text boxes).
+ * - Contains necessary platform interop code (e.g., for dark title bar).
+ *
+ * Deviations:
+ * Contains more code-behind than a strict MVVM pattern might suggest, primarily for
+ * performance optimizations with AvalonEdit, complex UI interactions involving custom
+ * renderers/margins, and focus management.
+ *
+ * Manages its UI-related resources and subscriptions, coordinating cleanup via IDisposable
+ * and the Closing event.
+ */
 public partial class MainWindow : Window, IDisposable
 {
     public static readonly RoutedUICommand ToggleSimulatorConfigCommand = new RoutedUICommand(

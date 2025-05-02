@@ -18,11 +18,33 @@ using System.ComponentModel; // For PropertyChangedEventArgs
 
 namespace Logonaut.UI.ViewModels;
 
-// NOTICE: Signals MainWindow code-behind (via RequestTextUpdate event) for direct
-// TextEditor.Document updates instead of pure data binding.
-// Justification: Performance optimization for large log data; direct document
-// manipulation is significantly faster than string binding for AvalonEdit.
-// Also holds state tightly coupled to View for features like search navigation.
+/*
+ * Implements the primary ViewModel for Logonaut's main window.
+ *
+ * Purpose:
+ * Orchestrates the application's core functionality, acting as the central hub
+ * connecting services (settings, log sources, file dialogs) with the UI (MainWindow).
+ * It manages application state and exposes data and commands for data binding.
+ *
+ * Role & Responsibilities:
+ * - Owns and manages the overall application state (current log file, filter profiles,
+ *   UI settings like line numbers/timestamps, search state, busy indicators).
+ * - Coordinates the log processing pipeline by interacting with ILogSource and ILogFilterProcessor.
+ * - Holds the canonical LogDocument and the derived FilteredLogLines collection for UI display.
+ * - Manages the active filter profile and its associated filter tree ViewModel.
+ * - Exposes commands for user actions (opening files, managing filters, searching, etc.).
+ * - Loads and saves application settings via ISettingsService.
+ * - Mediates communication between the View (MainWindow) and the Core/Service layers,
+ *   adhering to the MVVM pattern.
+ *
+ * Benefits:
+ * - Centralizes application logic and state management.
+ * - Decouples the View (MainWindow) from the Core services and models.
+ * - Enhances testability by allowing the UI logic to be tested independently.
+ *
+ * It utilizes the CommunityToolkit.Mvvm for observable properties and commands and manages
+ * its lifecycle and resources via IDisposable.
+ */
 public partial class MainViewModel : ObservableObject, IDisposable
 {
     #region Fields
