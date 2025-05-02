@@ -80,6 +80,38 @@
         <GradientStop Color="#FF333333" Offset="1.0"/> <!-- Target resting color at bottom -->
     </LinearGradientBrush>
 
+    <!-- Dark Theme ToolTip Style -->
+    <Style TargetType="ToolTip">
+        <!-- Setters for properties directly on ToolTip or used by TemplateBinding -->
+        <Setter Property="Background" Value="{DynamicResource PanelBackgroundBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextForegroundBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="5,3"/>
+        <!-- Define the custom template -->
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToolTip">
+                    <!-- The Border IS the visual root now -->
+                    <Border Name="RootBorder"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="3"
+                            Padding="{TemplateBinding Padding}"
+                            SnapsToDevicePixels="True">
+                        <!-- ContentPresenter displays the ToolTip's content -->
+                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                        VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                        SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                    </Border>
+                    <!-- Optional: Add triggers if needed for states like IsOpen -->
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Setter Property="Effect" Value="{StaticResource PanelShadowEffect}"/>
+    </Style>
+
     <!-- NEON: Global Styles -->
     <Style TargetType="Window">
         <Setter Property="Background" Value="{DynamicResource WindowBackgroundBrush}"/>
