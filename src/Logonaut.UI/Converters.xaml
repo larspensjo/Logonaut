@@ -1,4 +1,4 @@
-<!-- Logonaut.UI/Converters.xaml -->
+<!-- Converters defined here can't be used in the theme files, as they are loaded separately -->
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:converters="clr-namespace:Logonaut.UI.Converters">
@@ -7,6 +7,6 @@
     <converters:BoolToVisibilityConverter x:Key="BoolToVis"/>
     <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVis"/>
     <converters:FilterTypeToIconConverter x:Key="FilterTypeToIconConverter" />
-    <!-- Add other shared converters here if desired -->
+    <converters:ExponentialValueConverter x:Key="ExponentialConverter"/>
 
 </ResourceDictionary>

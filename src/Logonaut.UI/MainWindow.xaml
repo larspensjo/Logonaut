@@ -303,16 +303,10 @@
                         <!-- Lines Per Second Slider -->
                         <TextBlock Text="Lines Per Second:" Foreground="White" Margin="0,0,0,2"/>
                         <Slider Name="LpsSlider"
-                                Minimum="0" Maximum="200" SmallChange="1" LargeChange="10"
+                                Minimum="0" Maximum="100" SmallChange="1" LargeChange="5"
                                 IsSnapToTickEnabled="True" TickFrequency="1"
-                                Value="{Binding SimulatorLPS, Mode=TwoWay}" Margin="0,0,0,10">
-                            <Slider.ToolTip>
-                                <ToolTip Content="{Binding Path=PlacementTarget.Value,
-                                                        RelativeSource={RelativeSource Self},
-                                                        StringFormat='{}{0:F0} LPS'}"/>
-                                <!-- Alternative using ElementName if you named the Slider -->
-                                <!-- <ToolTip Content="{Binding Path=Value, ElementName=LpsSlider, StringFormat='{}{0:F0} LPS'}"/> -->
-                            </Slider.ToolTip>
+                                Value="{Binding SimulatorLPS, Mode=TwoWay, Converter={StaticResource ExponentialConverter}}"
+                                Margin="0,0,0,2">
                         </Slider>
 
                         <TextBlock Text="{Binding SimulatorLPS, StringFormat='{}{0:F0} LPS'}"
