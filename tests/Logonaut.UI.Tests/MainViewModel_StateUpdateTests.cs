@@ -23,6 +23,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         _mockFileDialog.FileToReturn = "C:\\test_state.log"; // Provide a dummy path
 
         await _viewModel.OpenLogFileCommand.ExecuteAsync(null);
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Simulate time for async processing
         _testContext.Send(_ => { }, null); // Ensure initial load processing completes
 
         // Optionally apply a specific filter *after* the initial load if needed
@@ -30,6 +31,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         {
             Assert.IsNotNull(_viewModel.ActiveFilterProfile, "ActiveFilterProfile should not be null.");
             _viewModel.ActiveFilterProfile.SetModelRootFilter(initialFilter);
+            _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Simulate time for async processing
             _testContext.Send(_ => { }, null); // Process filter change
         }
     }
@@ -51,6 +53,7 @@ namespace Logonaut.UI.Tests.ViewModels;
 
         // Act: Change the filter (e.g., by changing context lines, which is simple)
         _viewModel.ContextLines = 1; // This triggers internal processor UpdateFilterSettings
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Simulate time for async processing
         _testContext.Send(_ => { }, null); // Process ApplyFilteredUpdate resulting from filter change
 
         // Assert: ViewModel state updated (expecting ALL lines now due to TrueFilter + context=1)
@@ -128,6 +131,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         var source = GetActiveMockSource();
         source.EmitLine("Line 3 New Append");
         source.EmitLine("Line 4 Old Context"); // This line contains "Old"
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Simulate time for async processing
         _testContext.Send(_ => { }, null); // Process ApplyFilteredUpdate (Append) and Search Update
 
         // Assert: ViewModel state updated by appending
@@ -147,30 +151,54 @@ namespace Logonaut.UI.Tests.ViewModels;
     }
 
     // Verifies: [ReqGeneralBusyIndicatorv1], [ReqLoadingOverlayIndicatorv1]
-    [TestMethod]
     public async Task BusyStates_ManagedCorrectly_DuringInitialLoad()
     {
         // Arrange
         _mockFileDialog.FileToReturn = "C:\\good\\log.txt";
-        GetActiveMockSource().LinesForInitialRead = new List<string> { "Line 1" }; // Setup source before command
-        _viewModel.CurrentBusyStates.Clear(); // Ensure clean state
+        GetActiveMockSource().LinesForInitialRead = new List<string> { "Line 1" };
+        _viewModel.CurrentBusyStates.Clear();
+        System.Diagnostics.Debug.WriteLine($"TEST Arrange: Initial BusyStates Count = {_viewModel.CurrentBusyStates.Count}");
 
-        // Act 1: Execute the command - this posts state changes
+        // Act 1: Start the command
+        System.Diagnostics.Debug.WriteLine($"TEST Act 1: Starting OpenLogFileCommand.");
         var openTask = _viewModel.OpenLogFileCommand.ExecuteAsync(null);
-        // Run pending UI tasks immediately (like adding Loading/Filtering tokens)
-        _testContext.Send(_ => { }, null);
 
-        // Assert 1: Check state *during* load (before processor finishes)
-        Assert.AreEqual(2, _viewModel.CurrentBusyStates.Count, "Busy state count during load mismatch.");
+        // Act 2: Process ONLY the first synchronous posts from OpenLogFileAsync (adds LoadingToken)
+        System.Diagnostics.Debug.WriteLine($"TEST Act 2: Calling _testContext.Send #1 (for LoadingToken).");
+        _testContext.Send(_ => { }, null);
+        System.Diagnostics.Debug.WriteLine($"TEST Act 2: AFTER _testContext.Send #1. BusyStates Count = {_viewModel.CurrentBusyStates.Count}");
+
+        // Assert 1: Check for LoadingToken immediately
+        Assert.AreEqual(1, _viewModel.CurrentBusyStates.Count, "LoadingToken count mismatch early.");
+        CollectionAssert.Contains(_viewModel.CurrentBusyStates, MainViewModel.LoadingToken, "LoadingToken missing early.");
+
+        // Act 3: Allow Prepare to finish and FilteringToken to be posted
+        System.Diagnostics.Debug.WriteLine($"TEST Act 3: Simulating Prepare completion and FilteringToken post (Delay + Send).");
+        await Task.Delay(50); // Simulate time for async Prepare potentially
+        _testContext.Send(_ => { }, null); // Process the post that adds FilteringToken
+        System.Diagnostics.Debug.WriteLine($"TEST Act 3: AFTER _testContext.Send #2. BusyStates Count = {_viewModel.CurrentBusyStates.Count}");
+
+        // Assert 2: Check state *during* load (BOTH tokens should be present now)
+        Assert.AreEqual(2, _viewModel.CurrentBusyStates.Count, "Busy state count during load mismatch (Expected Loading+Filtering).");
         CollectionAssert.Contains(_viewModel.CurrentBusyStates, MainViewModel.LoadingToken, "LoadingToken missing during load.");
         CollectionAssert.Contains(_viewModel.CurrentBusyStates, MainViewModel.FilteringToken, "FilteringToken missing during load.");
 
-        // Act 2: Allow the async file reading and subsequent filter processing to complete.
-        // The internal processor will eventually call ApplyFilteredUpdate via the test context.
-        await openTask; // Wait for the command's async parts to finish
-        _testContext.Send(_ => { }, null); // Ensure the final ApplyFilteredUpdate is processed
+        // Act 4: NOW advance the background scheduler to allow filtering pipeline to run AND post back
+        System.Diagnostics.Debug.WriteLine($"TEST Act 4: Advancing background scheduler for filtering.");
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks);
 
-        // Assert 2: Check state *after* load and initial filter completes
+        // Act 5: Process the ApplyFilteredUpdate from the filter pipeline (removes tokens)
+        System.Diagnostics.Debug.WriteLine($"TEST Act 5: Calling _testContext.Send #3 (for ApplyFilteredUpdate).");
+        _testContext.Send(_ => { }, null);
+        System.Diagnostics.Debug.WriteLine($"TEST Act 5: AFTER _testContext.Send #3. BusyStates Count = {_viewModel.CurrentBusyStates.Count}");
+
+        // Act 6: Wait for the command task itself to complete (should be fast now)
+        System.Diagnostics.Debug.WriteLine($"TEST Act 6: Awaiting openTask.");
+        await openTask;
+        System.Diagnostics.Debug.WriteLine($"TEST Act 6: openTask completed.");
+
+
+        // Assert 3: Check final state *after* everything completes
         Assert.AreEqual(0, _viewModel.CurrentBusyStates.Count, "Busy state count after load mismatch.");
         CollectionAssert.DoesNotContain(_viewModel.CurrentBusyStates, MainViewModel.LoadingToken, "LoadingToken not cleared after load.");
         CollectionAssert.DoesNotContain(_viewModel.CurrentBusyStates, MainViewModel.FilteringToken, "FilteringToken not cleared after load.");
@@ -189,6 +217,7 @@ namespace Logonaut.UI.Tests.ViewModels;
 
         // Act: Emit a new line
         GetActiveMockSource().EmitLine("Appended Line");
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Simulate time for async processing
         _testContext.Send(_ => { }, null); // Process the Append update
 
         // Assert

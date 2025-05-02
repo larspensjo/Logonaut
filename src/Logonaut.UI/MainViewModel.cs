@@ -859,9 +859,17 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             var sb = new System.Text.StringBuilder();
             bool first = true;
-            foreach (var line in FilteredLogLines) { if (!first) sb.Append(Environment.NewLine); sb.Append(line.Text); first = false; }
-            return sb.ToString();
+            foreach (var line in FilteredLogLines) {
+                if (!first) sb.Append(Environment.NewLine);
+                sb.Append(line.Text);
+                first = false;
+                Debug.WriteLine($"GetCurrentDocumentText (Fallback): Appended '{line.Text}'");
+            }
+            string result = sb.ToString();
+            Debug.WriteLine($"GetCurrentDocumentText (Fallback): Returning '{result}'");
+            return result;
         }
+        Debug.WriteLine($"GetCurrentDocumentText (Fallback): Returning Empty String.");
         return string.Empty;
     }
 
@@ -935,14 +943,16 @@ public partial class MainViewModel : ObservableObject, IDisposable
         // Ensure we work with a copy in case the original list changes
         var linesSnapshot = linesToAppend.ToList();
         _uiContext.Post(state => {
-            if (_logEditorInstance?.Document == null) {
-                Debug.WriteLine("WARN: ScheduleLogTextAppend skipped - editor instance or document is null.");
-                return; // Skip if editor isn't set or document isn't ready
-            }
-            var lines = (List<FilteredLogLine>)state!;
+            var lines = (List<FilteredLogLine>)state!; // Cast state first
+
+            // Attempt to append to editor if available
+            if (_logEditorInstance?.Document != null)
             AppendLogTextInternal(lines);
-            // Update search matches *after* appending text
-            UpdateSearchMatches();
+
+            // Update search matches *after* FilteredLogLines is updated (which happens before this Post)
+            // and regardless of whether editor append happened. This can haååen when running from unit tests.
+            UpdateSearchMatches(); // <<< Moved outside the editor check
+
         }, linesSnapshot);
     }
 
@@ -1020,13 +1030,16 @@ public partial class MainViewModel : ObservableObject, IDisposable
         // ObservableCollection snapshot for Replace is safe. List passed for Append is safe.
         var linesSnapshot = relevantLines.ToList(); // Create shallow copy for safety
         _uiContext.Post(state => {
-            if (_logEditorInstance?.Document == null) {
-                Debug.WriteLine("WARN: ScheduleLogTextUpdate skipped - editor instance or document is null.");
-                return; // Skip if editor isn't set or document isn't ready
-            }
-            var lines = (List<FilteredLogLine>)state!;
+            var lines = (List<FilteredLogLine>)state!; // Cast state first
+
+            // Attempt to update editor if available
+            if (_logEditorInstance?.Document != null)
             ReplaceLogTextInternal(lines);
-            UpdateSearchMatches();
+
+            // Update search matches *after* FilteredLogLines is updated (which happens before this Post)
+            // and regardless of whether editor replace happened. This can happen when running from unit tests.
+            UpdateSearchMatches(); // <<< Moved outside the editor check
+
         }, linesSnapshot);
     }
 
