@@ -314,6 +314,12 @@
                                 <!-- <ToolTip Content="{Binding Path=Value, ElementName=LpsSlider, StringFormat='{}{0:F0} LPS'}"/> -->
                             </Slider.ToolTip>
                         </Slider>
+
+                        <TextBlock Text="{Binding SimulatorLPS, StringFormat='{}{0:F0} LPS'}"
+                                   Foreground="White"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,0,0,10"/>
+
                         <!-- Control Buttons -->
                         <WrapPanel HorizontalAlignment="Center" Margin="0,10,0,10">
                             <Button Content="Start" Width="70" Margin="5"
