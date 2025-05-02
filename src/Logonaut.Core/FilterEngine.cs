@@ -5,9 +5,26 @@ using System.Diagnostics;
 
 namespace Logonaut.Core;
 
-// FilterEngine processes the entire log off the UI thread, applying filters and context,
-// and produces a complete, updated filtered list. This ensures responsiveness and atomic UI updates,
-// even when handling large log files.
+/*
+ * Provides stateless, static methods for applying filter logic to log data.
+ *
+ * Purpose:
+ * Encapsulates the core algorithms for evaluating log lines against a filter hierarchy (IFilter)
+ * and determining which lines (including context) should be included in a filtered result set.
+ *
+ * Role:
+ * Acts as a utility class containing the fundamental filtering calculations. It operates on
+ * provided data (LogDocument snapshots or line subsets) and filter rules, returning the results
+ * directly. It does *not* manage state, track changes over time, or handle reactivity; that is
+ * the responsibility of components like ILiveLogFilter (formerly ILogFilterProcessor).
+ *
+ * Benefits:
+ * - Isolates the core matching and context logic into pure functions.
+ * - Makes the fundamental filtering algorithms easily testable in isolation.
+ * - Allows reuse of the filtering logic by different components.
+ *
+ * This class is purely computational and does not hold state between calls.
+ */
 public static class FilterEngine
 {
     // Applies the filter to the log document and returns a filtered list
