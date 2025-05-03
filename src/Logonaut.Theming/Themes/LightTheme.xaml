@@ -82,15 +82,45 @@
     <DropShadowEffect x:Key="InnerShadowEffect" Color="#AA000000" ShadowDepth="1" BlurRadius="2" Opacity="0.5"/>
 
     <Style x:Key="SimulatorToggleButtonStyle" TargetType="ToggleButton">
-        <!-- Set default visual properties using DynamicResource -->
-        <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}"/>
-        <Setter Property="Foreground" Value="{DynamicResource TextForegroundBrush}"/>
+        <!-- Set default visual properties using DynamicResource - MIMIC BUTTON -->
+        <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}"/> <!-- Light theme default bg -->
+        <Setter Property="Foreground" Value="{DynamicResource TextForegroundBrush}"/> <!-- Light theme default (dark) text -->
         <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
-        <Setter Property="BorderThickness" Value="1"/> <!-- Or theme default -->
+        <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="Padding" Value="10,5"/>
         <Setter Property="HorizontalContentAlignment" Value="Center"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
-        <!-- Optional: Reference a default Button ControlTemplate if needed -->
+        <!-- No default Effect in light theme -->
+
+        <!-- *** ControlTemplate (Adapted for Light Theme - No Default Effect) *** -->
+        <Setter Property="Template">
+            <Setter.Value>
+            <ControlTemplate TargetType="ToggleButton">
+                <Border x:Name="templateRoot"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="4"
+                        SnapsToDevicePixels="True">
+                    <!-- REMOVED Default Effect for Light Theme -->
+                    <!-- <Border.Effect> ... </Border.Effect> -->
+                    <ContentPresenter x:Name="contentPresenter"
+                                        ContentSource="Content"
+                                        HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                        VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                        RecognizesAccessKey="True">
+                        <ContentPresenter.Resources>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="{Binding Path=(TextElement.Foreground), RelativeSource={RelativeSource AncestorType=ToggleButton}}" />
+                                <Setter Property="FontSize" Value="{Binding Path=FontSize, RelativeSource={RelativeSource AncestorType=ToggleButton}}"/>
+                                <Setter Property="VerticalAlignment" Value="Center"/>
+                            </Style>
+                        </ContentPresenter.Resources>
+                    </ContentPresenter>
+                </Border>
+            </ControlTemplate>
+            </Setter.Value>
+        </Setter>
 
         <!-- Default Content/ToolTip (Start state) -->
         <Setter Property="Content" Value="Start"/>
@@ -101,41 +131,90 @@
             <Trigger Property="IsChecked" Value="True">
                 <Setter Property="Content" Value="Stop"/>
                 <Setter Property="ToolTip" Value="Stop the log simulator"/>
-                <Setter Property="Background" Value="{DynamicResource ErrorBrush}"/>
-                <Setter Property="Foreground" Value="{DynamicResource WindowBackgroundBrush}"/> <!-- Contrast for light ErrorBrush - might need adjustment -->
-                <Setter Property="BorderBrush" Value="{DynamicResource ErrorBrush}"/>
+                <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                <!-- Use DARK Foreground for contrast on light Accent -->
+                <Setter Property="Foreground" Value="{DynamicResource TextForegroundBrush}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                <!-- No Effect -->
+                <Setter Property="Effect" Value="{x:Null}"/>
             </Trigger>
 
-            <!-- Hover Trigger (when NOT checked) -->
+            <!-- Hover Trigger (when NOT checked) - Mimic Light Button Hover -->
             <MultiTrigger>
                 <MultiTrigger.Conditions>
                     <Condition Property="IsMouseOver" Value="True"/>
                     <Condition Property="IsChecked" Value="False"/>
                 </MultiTrigger.Conditions>
-                <Setter Property="Background" Value="{DynamicResource ButtonHoverBackgroundBrush}"/>
                 <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
-                <!-- Light Theme doesn't typically use Glow, rely on background/border -->
+                <!-- Use Light theme hover background -->
+                <Setter Property="Background" Value="{DynamicResource ButtonHoverBackgroundBrush}"/>
+                <!-- No Effect -->
+                <Setter Property="Effect" Value="{x:Null}"/>
             </MultiTrigger>
 
-            <!-- Pressed Trigger (when NOT checked) -->
+            <!-- Pressed Trigger (when NOT checked) - Mimic Light Button Press -->
             <MultiTrigger>
                 <MultiTrigger.Conditions>
                     <Condition Property="IsPressed" Value="True"/>
                     <Condition Property="IsChecked" Value="False"/>
                 </MultiTrigger.Conditions>
+                <!-- Use Light theme pressed background -->
                 <Setter Property="Background" Value="{DynamicResource ButtonPressedBackgroundBrush}" />
-                <!-- Add Light Theme Pressed effects matching Button style (e.g., inner shadows) -->
+                <!-- No Effect -->
+                <Setter Property="Effect" Value="{x:Null}" />
+                <!-- Optional: Add light theme inner shadows if needed -->
+            </MultiTrigger>
+
+            <!-- Hover/Pressed triggers WHEN CHECKED (Optional Refinements) -->
+            <MultiTrigger>
+                <MultiTrigger.Conditions>
+                    <Condition Property="IsMouseOver" Value="True"/>
+                    <Condition Property="IsChecked" Value="True"/>
+                </MultiTrigger.Conditions>
+                <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                <Setter Property="Foreground" Value="{DynamicResource TextForegroundBrush}"/> <!-- Keep dark text -->
+                <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                <!-- No Effect -->
+                <Setter Property="Effect" Value="{x:Null}"/>
+                <Setter Property="Opacity" Value="0.9" />
+            </MultiTrigger>
+
+            <MultiTrigger>
+                <MultiTrigger.Conditions>
+                    <Condition Property="IsPressed" Value="True"/>
+                    <Condition Property="IsChecked" Value="True"/>
+                </MultiTrigger.Conditions>
+                <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                <Setter Property="Foreground" Value="{DynamicResource TextForegroundBrush}"/> <!-- Keep dark text -->
+                <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                <!-- No Effect -->
+                <Setter Property="Effect" Value="{x:Null}"/>
+                <Setter Property="Opacity" Value="0.8"/>
             </MultiTrigger>
 
             <!-- Disabled State -->
             <Trigger Property="IsEnabled" Value="False">
                 <Setter Property="Opacity" Value="0.5" />
                 <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}"/>
-                <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}"/>
+                <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}"/> <!-- Use dimmer text -->
                 <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+                <Setter Property="Effect" Value="{x:Null}" />
             </Trigger>
 
-            <!-- Add other triggers as needed -->
+            <!-- Ensure resting state is correct when NOT hovered/pressed/checked -->
+            <MultiTrigger>
+                <MultiTrigger.Conditions>
+                    <Condition Property="IsMouseOver" Value="False"/>
+                    <Condition Property="IsPressed" Value="False"/>
+                    <Condition Property="IsChecked" Value="False"/>
+                    <Condition Property="IsEnabled" Value="True"/>
+                </MultiTrigger.Conditions>
+                <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}"/> <!-- Light theme default -->
+                <Setter Property="Foreground" Value="{DynamicResource TextForegroundBrush}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+                <Setter Property="Effect" Value="{x:Null}"/> <!-- No resting effect -->
+                <Setter Property="Opacity" Value="1.0"/>
+            </MultiTrigger>
 
         </Style.Triggers>
     </Style>

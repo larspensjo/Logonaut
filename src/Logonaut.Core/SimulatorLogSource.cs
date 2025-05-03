@@ -115,7 +115,50 @@ public class SimulatorLogSource : ISimulatorLogSource
             // If not running, the new rate is just stored for the next Start()
         }
     }
+
+    public Task GenerateBurstAsync(int lineCount)
+    {
+        if (_isDisposed) throw new ObjectDisposedException(nameof(SimulatorLogSource));
+        if (lineCount <= 0) return Task.CompletedTask;
+
+        Debug.WriteLine($"---> SimulatorLogSource: Starting burst of {lineCount} lines.");
+
+        // Run the generation potentially off the main thread if it's very large,
+        // but pushing to the subject should be okay from any thread.
+        // Task.Run is simple for background execution.
+        return Task.Run(() =>
+        {
+            try
+            {
+                // Use a local counter for the burst itself for clarity in messages
+                for (int i = 0; i < lineCount; i++)
+                {
+                    // Check for disposal periodically if very large bursts are expected
+                    if (_isDisposed) break;
+
+                    long globalLineNum = Interlocked.Increment(ref _lineCounter); // Still use global counter
+                    string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
+                    string level = _logLevels[_random.Next(_logLevels.Length)];
+                    // Pass the burst index 'i' or the global line number to the message generator
+                    string message = GenerateRandomMessage(globalLineNum);
+                    string logLine = $"{timestamp} [{level}] {message}";
+
+                    // Push to the subject - the ReactiveFilteredLogStream will buffer this
+                    _logLinesSubject.OnNext(logLine);
+                }
+                Debug.WriteLine($"---> SimulatorLogSource: Finished burst of {lineCount} lines.");
+            }
+            catch (Exception ex)
+            {
+                 Debug.WriteLine($"!!! SimulatorLogSource: Error during burst generation: {ex.Message}");
+                 _logLinesSubject.OnError(ex); // Propagate error
+                 // Re-throw or handle as appropriate
+                 throw;
+            }
+        });
+    }
     #endregion // --- End ISimulatorLogSource Methods ---
+
     #region Internal & Private Methods
     private void StopInternal()
     {

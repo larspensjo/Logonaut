@@ -151,6 +151,11 @@ public class MockLogSource : ISimulatorLogSource
         // StopMonitoring();
     }
 
+    public Task GenerateBurstAsync(int lineCount)
+    {
+        throw new NotImplementedException("Burst generation not implemented in MockLogSource.");
+    }
+
     // --- IDisposable ---
 
     public void Dispose()

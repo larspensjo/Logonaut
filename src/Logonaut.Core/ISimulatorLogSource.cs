@@ -57,4 +57,11 @@ public interface ISimulatorLogSource : ILogSource
     /// </summary>
     /// <param name="newLinesPerSecond">The new rate.</param>
     void UpdateRate(int newLinesPerSecond);
+
+    /// <summary>
+    /// Generates a specified number of log lines in a single burst.
+    /// </summary>
+    /// <param name="lineCount">The number of lines to generate.</param>
+    /// <returns>A task that completes when the burst generation is finished.</returns>
+    Task GenerateBurstAsync(int lineCount);
 }

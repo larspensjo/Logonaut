@@ -437,9 +437,56 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _simulatorLogSource?.UpdateRate((int)Math.Round(value));
     }
 
+    [ObservableProperty] private double _simulatorBurstSize = 1000; // Default burst size (will be bound to slider)
+
     #endregion // Simulator Configuration UI State & Properties
 
     #region Simulator Control Commands
+
+    [RelayCommand(CanExecute = nameof(CanGenerateBurst))]
+    private async Task GenerateBurst()
+    {
+        if (_simulatorLogSource == null)
+        {
+            // Optionally: Show a message telling the user to start the simulator first
+            // Or implicitly start it? Let's require it to be "active" (started at least once).
+            Debug.WriteLine("WARN: GenerateBurst called but _simulatorLogSource is null.");
+            MessageBox.Show("Please start the simulator at least once before generating a burst.", "Simulator Not Active", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        int burstCount = (int)Math.Round(SimulatorBurstSize); // Get size from property
+        if (burstCount <= 0) return;
+
+        // Add busy indicator token
+        object burstToken = new(); // Unique token for this operation
+        _uiContext.Post(_ => CurrentBusyStates.Add(burstToken), null);
+        Debug.WriteLine($"---> GenerateBurst: Starting burst of {burstCount} lines.");
+
+        try
+        {
+            // Call the simulator's burst method
+            await _simulatorLogSource.GenerateBurstAsync(burstCount);
+            Debug.WriteLine($"---> GenerateBurst: Burst generation task completed for {burstCount} lines.");
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"!!! GenerateBurst: Error during burst: {ex.Message}");
+            // Show error to user
+            MessageBox.Show($"Error generating burst: {ex.Message}", "Burst Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            // Ensure busy indicator token is removed
+            _uiContext.Post(_ => CurrentBusyStates.Remove(burstToken), null);
+        }
+    }
+
+    private bool CanGenerateBurst()
+    {
+        // Can generate burst if the simulator source has been created (even if currently stopped)
+        return _simulatorLogSource != null;
+    }
 
     private void ExecuteStartSimulatorLogic()
     {

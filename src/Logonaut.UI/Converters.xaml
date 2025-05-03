@@ -9,4 +9,18 @@
     <converters:FilterTypeToIconConverter x:Key="FilterTypeToIconConverter" />
     <converters:ExponentialValueConverter x:Key="ExponentialConverter"/>
 
+    <!-- Assuming the default desired range was 1-200 LPS for the Lines Per Second slider -->
+    <converters:ExponentialValueConverter x:Key="LpsConverter"
+                                          MinTargetValue="1"
+                                          MaxTargetValue="200"
+                                          MinSliderValue="0"
+                                          MaxSliderValue="100"/>
+
+    <!-- Converter specifically for the Burst Size Slider -->
+    <converters:ExponentialValueConverter x:Key="BurstSizeConverter"
+                                          MinTargetValue="1"
+                                          MaxTargetValue="1000000"
+                                          MinSliderValue="0"
+                                          MaxSliderValue="100"/>
+
 </ResourceDictionary>
