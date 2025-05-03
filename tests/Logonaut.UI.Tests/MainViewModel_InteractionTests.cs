@@ -123,7 +123,7 @@ namespace Logonaut.UI.Tests.ViewModels;
     {
         // Arrange
         await SetupWithInitialLines(new List<string> { "File Line" });
-        _viewModel.StartSimulatorCommand.Execute(null);
+        _viewModel.ToggleSimulatorCommand.Execute(null);
         _testContext.Send(_ => { }, null);
         _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks);
         Assert.IsTrue(_mockSimulatorSource.IsRunning, "Arrange failure: Simulator source not monitoring.");

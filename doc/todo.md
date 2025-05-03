@@ -18,6 +18,8 @@
 * When opening a new log, the dialog should remember last folder.
 * Opening a new log file will not honor the Auto Scroll.
 * The nice moving waves when opening a new file are no longer visible.
+* When the simluator is enabled, rather than a file log, I want a special busy token.
+    * When a simulator token is active, use a special animation.
 
 * **SimulatorLogSource UI overlay**
 *   1. Implement the key combination trigger and the overlay UI placement over the filter tree. Secret key to toggle overlay: Ctrl+Alt+Shift+S. (DONE)
