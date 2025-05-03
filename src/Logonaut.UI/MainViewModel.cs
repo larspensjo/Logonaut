@@ -447,26 +447,24 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
         try
         {
-            // --- Stop existing source ---
-            if (_currentActiveLogSource == _fileLogSource)
+            bool wasPreviouslyFileSource = (_currentActiveLogSource == _fileLogSource);
+
+            // --- Stop existing source monitoring (File or previous Simulator) ---
+            if (wasPreviouslyFileSource)
             {
                 _fileLogSource?.StopMonitoring();
                 Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> StartSimulatorLogic: Stopped FileLogSource monitoring.");
             }
-            if (_simulatorLogSource != null && _simulatorLogSource.IsRunning)
-            {
-                _simulatorLogSource?.Stop();
-                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> StartSimulatorLogic: Stopped previous SimulatorLogSource.");
-            }
+            _simulatorLogSource?.Stop(); // Stop previous simulator instance if any
+
 
             // --- Setup Simulator ---
-            _simulatorLogSource ??= _sourceProvider.CreateSimulatorLogSource(); // Create if null
+            _simulatorLogSource ??= _sourceProvider.CreateSimulatorLogSource();
             if (!_disposables.Contains((IDisposable)_simulatorLogSource))
             {
                 _disposables.Add((IDisposable)_simulatorLogSource);
                 Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> StartSimulatorLogic: Added new SimulatorLogSource to disposables.");
             }
-            _simulatorLogSource.Stop(); // Ensure stopped before configure
 
             _simulatorLogSource.LinesPerSecond = (int)Math.Round(SimulatorLPS);
             Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> StartSimulatorLogic: Configured Simulator LPS to {SimulatorLPS}.");
@@ -478,14 +476,23 @@ public partial class MainViewModel : ObservableObject, IDisposable
             _disposables.Add(_reactiveFilteredLogStream);
             SubscribeToFilteredStream();
 
-            // --- Reset State ---
-            ResetLogDocumentAndUIState();
+            // --- Reset State CONDITIONALLY ---
+            if (wasPreviouslyFileSource)
+            {
+                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> StartSimulatorLogic: Clearing log because previous source was FileLogSource.");
+                ResetLogDocumentAndUIState(); // CLEAR LOG ONLY IF SWITCHING FROM FILE
+            }
+            else
+            {
+                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> StartSimulatorLogic: NOT clearing log (previous source was not FileLogSource or null). Resetting processor only.");
+                _reactiveFilteredLogStream.Reset(); // ONLY RESET PROCESSOR STATE if not clearing doc
+            }
+
             CurrentLogFilePath = "[Simulation Active]";
 
             // --- Prepare Simulator (NO initial lines) ---
             _simulatorLogSource.PrepareAndGetInitialLinesAsync("Simulator", AddLineToLogDocument)
                             .ContinueWith(t => { /* Error handling */ }, TaskScheduler.Default);
-
 
             // --- **** EXPLICITLY TRIGGER INITIAL FILTER **** ---
             // This call is CRUCIAL. It ensures the fullRefilterPipeline runs once,
