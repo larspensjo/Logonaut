@@ -32,7 +32,7 @@ public interface ISimulatorLogSource : ILogSource
     /// <summary>
     /// Gets a value indicating whether the simulator is currently generating lines.
     /// </summary>
-    bool IsRunning { get; } // Renamed from IsMonitoring for clarity
+    bool IsRunning { get; }
 
     /// <summary>
     /// Starts or resumes generating simulated log lines using the current configuration.

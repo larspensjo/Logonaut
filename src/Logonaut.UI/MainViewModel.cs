@@ -484,8 +484,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private bool CanGenerateBurst()
     {
-        // Can generate burst if the simulator source has been created (even if currently stopped)
-        return _simulatorLogSource != null;
+        // Enable Burst if the simulator source has been instantiated
+        // AND is the currently selected source type.
+        // This allows bursting even if the continuous rate (timer) is 0.
+        return _simulatorLogSource != null && _currentActiveLogSource == _simulatorLogSource;
     }
 
     private void ExecuteStartSimulatorLogic()
@@ -550,11 +552,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
             _simulatorLogSource.Start(); // NOW start the timer
 
             IsSimulatorRunning = _simulatorLogSource.IsRunning; // Update state
+            GenerateBurstCommand.NotifyCanExecuteChanged(); // Burst might become enabled now
         }
         catch (Exception ex)
         {
             HandleSimulatorError("Error starting simulator", ex);
             IsSimulatorRunning = false; // Ensure state is correct on error
+            GenerateBurstCommand.NotifyCanExecuteChanged(); // Burst might become disabled now
         }
     }
 
@@ -811,7 +815,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             _fileLogSource ??= _sourceProvider.CreateFileLogSource(); // Create if null
             if (!_disposables.Contains(_fileLogSource)) _disposables.Add(_fileLogSource); // Add if new
 
-             _fileLogSource.StopMonitoring();
+            _fileLogSource.StopMonitoring();
 
             // 5. Switch Active Source and Recreate Processor
             DisposeAndClearFilteredStream();
@@ -820,30 +824,34 @@ public partial class MainViewModel : ObservableObject, IDisposable
             _disposables.Add(_reactiveFilteredLogStream);
             SubscribeToFilteredStream();
 
-             ResetLogDocumentAndUIState();
-             CurrentLogFilePath = selectedFile;
+            ResetLogDocumentAndUIState();
+            CurrentLogFilePath = selectedFile;
             long initialLines = await _fileLogSource.PrepareAndGetInitialLinesAsync(selectedFile, AddLineToLogDocument).ConfigureAwait(true);
-             _uiContext.Post(_ => TotalLogLines = initialLines, null);
-             _fileLogSource.StartMonitoring();
-             _uiContext.Post(_ => CurrentBusyStates.Add(FilteringToken), null);
+            _uiContext.Post(_ => TotalLogLines = initialLines, null);
+            _fileLogSource.StartMonitoring();
+            _uiContext.Post(_ => CurrentBusyStates.Add(FilteringToken), null);
             IFilter? firstFilter = ActiveFilterProfile?.Model?.RootFilter ?? new TrueFilter();
-             _reactiveFilteredLogStream.UpdateFilterSettings(firstFilter, ContextLines);
-             UpdateFilterSubstrings();
+            _reactiveFilteredLogStream.UpdateFilterSettings(firstFilter, ContextLines);
+            UpdateFilterSubstrings();
+
+            // !!! Notify CanExecute after switching source !!!
+            GenerateBurstCommand.NotifyCanExecuteChanged();
 
             Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} OpenLogFileAsync: Prepare/Start completed ({initialLines} lines). First filter triggered.");
         }
         catch (Exception ex)
         {
-             // Error Handling (Keep existing, ensure ResetLogDocumentAndUIState is called on failure path too)
-             _uiContext.Post(_ => {
-                 CurrentBusyStates.Remove(LoadingToken);
-                 CurrentBusyStates.Remove(FilteringToken);
-                 ResetLogDocumentAndUIState(); // Reset state on error
-                 Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} OpenLogFileAsync: Error opening file '{selectedFile}': {ex.Message}");
-                 MessageBox.Show($"Error opening or reading log file '{selectedFile}':\n{ex.Message}", "File Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                 CurrentLogFilePath = null;
-                 _fileLogSource?.StopMonitoring(); // Stop file source if it got started
-             }, null);
+            // Error Handling (Keep existing, ensure ResetLogDocumentAndUIState is called on failure path too)
+            _uiContext.Post(_ => {
+                CurrentBusyStates.Remove(LoadingToken);
+                CurrentBusyStates.Remove(FilteringToken);
+                ResetLogDocumentAndUIState(); // Reset state on error
+                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} OpenLogFileAsync: Error opening file '{selectedFile}': {ex.Message}");
+                MessageBox.Show($"Error opening or reading log file '{selectedFile}':\n{ex.Message}", "File Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                CurrentLogFilePath = null;
+                _fileLogSource?.StopMonitoring(); // Stop file source if it got started
+                GenerateBurstCommand.NotifyCanExecuteChanged();
+            }, null);
             // Re-throw might not be needed if MessageBox is sufficient user feedback
              // throw;
         }

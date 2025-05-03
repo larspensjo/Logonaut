@@ -95,24 +95,30 @@ public class SimulatorLogSource : ISimulatorLogSource
         lock (_lock)
         {
             if (_isDisposed) return;
-            int newRate = Math.Max(0, newLinesPerSecond); // Clamp rate >= 0
+            int newRate = Math.Max(0, newLinesPerSecond);
             if (newRate == _linesPerSecond) return; // No change needed
 
-            _linesPerSecond = newRate;
+            bool wasRunning = _isRunning; // Capture state *before* changing anything
+            _linesPerSecond = newRate; // Update the internal rate field
             Debug.WriteLine($"---> SimulatorLogSource: Rate updated to {LinesPerSecond} LPS.");
 
-            if (_isRunning) // If currently running, adjust the timer
+            // --- New Decision Logic ---
+            if (_linesPerSecond > 0) // Target state is "running" (rate > 0)
             {
-                StopInternal(); // Stop existing timer
-                if (_linesPerSecond > 0) // Restart only if rate > 0
-                {
-                    Start();
-                } else {
-                     Debug.WriteLine($"---> SimulatorLogSource: Rate set to 0, simulation paused.");
-                     // _isRunning is already false from StopInternal
+                if (wasRunning) {
+                    StopInternal(); // Stop timer, sets _isRunning = false temporarily
+                    Start(); // Start timer with new _linesPerSecond, sets _isRunning = true
+                    Debug.WriteLine($"---> SimulatorLogSource: Adjusted running timer interval.");
+                } else { // wasRunning was false
+                    Start(); // Start timer, sets _isRunning = true
+                    Debug.WriteLine($"---> SimulatorLogSource: Starting timer as rate increased from 0.");
                 }
+            } else { // Target state is "stopped" (rate is 0)
+                if (wasRunning) {
+                    StopInternal(); // Stop timer, sets _isRunning = false
+                    Debug.WriteLine($"---> SimulatorLogSource: Rate set to 0, simulation paused (timer stopped).");
+                } // else: // wasRunning was false - already stopped, do nothing.
             }
-            // If not running, the new rate is just stored for the next Start()
         }
     }
 

@@ -11,7 +11,7 @@
 
     <!-- Assuming the default desired range was 1-200 LPS for the Lines Per Second slider -->
     <converters:ExponentialValueConverter x:Key="LpsConverter"
-                                          MinTargetValue="1"
+                                          MinTargetValue="0"
                                           MaxTargetValue="200"
                                           MinSliderValue="0"
                                           MaxSliderValue="100"/>
