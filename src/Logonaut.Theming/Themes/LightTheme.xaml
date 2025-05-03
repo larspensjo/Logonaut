@@ -81,6 +81,65 @@
     <DropShadowEffect x:Key="PanelShadowEffect" Color="#FF000000" ShadowDepth="3" BlurRadius="8" Opacity="0.4"/>
     <DropShadowEffect x:Key="InnerShadowEffect" Color="#AA000000" ShadowDepth="1" BlurRadius="2" Opacity="0.5"/>
 
+    <Style x:Key="SimulatorToggleButtonStyle" TargetType="ToggleButton">
+        <!-- Set default visual properties using DynamicResource -->
+        <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextForegroundBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/> <!-- Or theme default -->
+        <Setter Property="Padding" Value="10,5"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <!-- Optional: Reference a default Button ControlTemplate if needed -->
+
+        <!-- Default Content/ToolTip (Start state) -->
+        <Setter Property="Content" Value="Start"/>
+        <Setter Property="ToolTip" Value="Start the log simulator"/>
+
+        <Style.Triggers>
+            <!-- Trigger for the "Stop" state (IsChecked=True) -->
+            <Trigger Property="IsChecked" Value="True">
+                <Setter Property="Content" Value="Stop"/>
+                <Setter Property="ToolTip" Value="Stop the log simulator"/>
+                <Setter Property="Background" Value="{DynamicResource ErrorBrush}"/>
+                <Setter Property="Foreground" Value="{DynamicResource WindowBackgroundBrush}"/> <!-- Contrast for light ErrorBrush - might need adjustment -->
+                <Setter Property="BorderBrush" Value="{DynamicResource ErrorBrush}"/>
+            </Trigger>
+
+            <!-- Hover Trigger (when NOT checked) -->
+            <MultiTrigger>
+                <MultiTrigger.Conditions>
+                    <Condition Property="IsMouseOver" Value="True"/>
+                    <Condition Property="IsChecked" Value="False"/>
+                </MultiTrigger.Conditions>
+                <Setter Property="Background" Value="{DynamicResource ButtonHoverBackgroundBrush}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                <!-- Light Theme doesn't typically use Glow, rely on background/border -->
+            </MultiTrigger>
+
+            <!-- Pressed Trigger (when NOT checked) -->
+            <MultiTrigger>
+                <MultiTrigger.Conditions>
+                    <Condition Property="IsPressed" Value="True"/>
+                    <Condition Property="IsChecked" Value="False"/>
+                </MultiTrigger.Conditions>
+                <Setter Property="Background" Value="{DynamicResource ButtonPressedBackgroundBrush}" />
+                <!-- Add Light Theme Pressed effects matching Button style (e.g., inner shadows) -->
+            </MultiTrigger>
+
+            <!-- Disabled State -->
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.5" />
+                <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}"/>
+                <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            </Trigger>
+
+            <!-- Add other triggers as needed -->
+
+        </Style.Triggers>
+    </Style>
+
     <Style x:Key="OverlayCloseButtonStyle" TargetType="Button">
         <!-- Basic properties remain mostly the same -->
         <Setter Property="Background" Value="Transparent"/>

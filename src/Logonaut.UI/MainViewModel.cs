@@ -425,14 +425,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
         IsSimulatorConfigurationVisible = false;
     }
 
-    [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(StartSimulatorCommand))]
-    [NotifyCanExecuteChangedFor(nameof(StopSimulatorCommand))]
-    [NotifyCanExecuteChangedFor(nameof(RestartSimulatorCommand))]
-    private bool _isSimulatorRunning = false;
+    [NotifyCanExecuteChangedFor(nameof(RestartSimulatorCommand))] // Add this notification
+    [NotifyCanExecuteChangedFor(nameof(ToggleSimulatorCommand))] // Can always toggle? Or add specific CanExecute? Let's assume always for now.
+    [ObservableProperty] private bool _isSimulatorRunning = false;
 
-    [ObservableProperty]
-    private double _simulatorLPS = 10; // Use double for Slider binding
+    [ObservableProperty] private double _simulatorLPS = 10; // Use double for Slider binding
 
     partial void OnSimulatorLPSChanged(double value)
     {
@@ -444,68 +441,50 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     #region Simulator Control Commands
 
-    [RelayCommand(CanExecute = nameof(CanStartSimulator))]
-    private void StartSimulator()
+    private void ExecuteStartSimulatorLogic()
     {
-        if (IsSimulatorRunning) return;
+        if (IsSimulatorRunning) return; // Guard against accidental multiple starts
 
         try
         {
             // --- Stop existing source ---
             if (_currentActiveLogSource == _fileLogSource)
             {
-                 _fileLogSource?.StopMonitoring();
-                 Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> StartSimulator: Stopped FileLogSource monitoring.");
+                _fileLogSource?.StopMonitoring();
+                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> StartSimulatorLogic: Stopped FileLogSource monitoring.");
             }
-            // If simulator was already running somehow, ensure it's stopped.
             if (_simulatorLogSource != null && _simulatorLogSource.IsRunning)
             {
-                 _simulatorLogSource?.Stop();
-                 Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> StartSimulator: Stopped previous SimulatorLogSource.");
+                _simulatorLogSource?.Stop();
+                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> StartSimulatorLogic: Stopped previous SimulatorLogSource.");
             }
-
 
             // --- Setup Simulator ---
-            // Get Simulator Instance via Provider
-            _simulatorLogSource = _sourceProvider.CreateSimulatorLogSource(); // Returns ISimulatorLogSource
+            _simulatorLogSource ??= _sourceProvider.CreateSimulatorLogSource(); // Create if null
             if (!_disposables.Contains((IDisposable)_simulatorLogSource))
             {
-                 _disposables.Add((IDisposable)_simulatorLogSource);
-                 Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> StartSimulator: Created and added new SimulatorLogSource to disposables.");
+                _disposables.Add((IDisposable)_simulatorLogSource);
+                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> StartSimulatorLogic: Added new SimulatorLogSource to disposables.");
             }
-             // Ensure it's stopped before configuration (redundant if just created, but safe)
-            _simulatorLogSource.Stop();
+            _simulatorLogSource.Stop(); // Ensure stopped before configure
 
-            // Configure Simulator
-            _simulatorLogSource.LinesPerSecond = (int)Math.Round(SimulatorLPS); // Set property via interface
-            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> StartSimulator: Configured Simulator LPS to {SimulatorLPS}.");
-
+            _simulatorLogSource.LinesPerSecond = (int)Math.Round(SimulatorLPS);
+            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> StartSimulatorLogic: Configured Simulator LPS to {SimulatorLPS}.");
 
             // --- Switch Active Source & Processor ---
-            DisposeAndClearFilteredStream(); // Dispose OLD stream first
-            _currentActiveLogSource = _simulatorLogSource; // Assign ISimulatorLogSource (which is also ILogSource)
-            _reactiveFilteredLogStream = CreateFilteredStream(_currentActiveLogSource); // Create NEW stream
-            _disposables.Add(_reactiveFilteredLogStream); // Add NEW stream to disposables
-            SubscribeToFilteredStream(); // Subscribe to NEW stream
-
+            DisposeAndClearFilteredStream();
+            _currentActiveLogSource = _simulatorLogSource;
+            _reactiveFilteredLogStream = CreateFilteredStream(_currentActiveLogSource);
+            _disposables.Add(_reactiveFilteredLogStream);
+            SubscribeToFilteredStream();
 
             // --- Reset State ---
-            ResetLogDocumentAndUIState(); // Calls processor.Reset(), sets _isInitialLoadInProgress=true
+            ResetLogDocumentAndUIState();
             CurrentLogFilePath = "[Simulation Active]";
 
-
             // --- Prepare Simulator (NO initial lines) ---
-            // PrepareAndGetInitialLinesAsync MUST be called, even if it does nothing for the simulator.
-            // We don't need to wait for the result since it's always 0.
-             _simulatorLogSource.PrepareAndGetInitialLinesAsync("Simulator", AddLineToLogDocument)
-                                .ContinueWith(t => {
-                                    if (t.IsFaulted) {
-                                        Debug.WriteLine($"!!! StartSimulator: Error during simulator PrepareAndGetInitialLinesAsync: {t.Exception?.InnerExceptions.FirstOrDefault()?.Message}");
-                                        // Optionally handle the error, e.g., show message box
-                                    } else {
-                                         Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> StartSimulator: Simulator PrepareAndGetInitialLinesAsync completed.");
-                                    }
-                                }, TaskScheduler.Default);
+            _simulatorLogSource.PrepareAndGetInitialLinesAsync("Simulator", AddLineToLogDocument)
+                            .ContinueWith(t => { /* Error handling */ }, TaskScheduler.Default);
 
 
             // --- **** EXPLICITLY TRIGGER INITIAL FILTER **** ---
@@ -516,39 +495,50 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
             _simulatorLogSource.Start(); // NOW start the timer
 
-
-            IsSimulatorRunning = _simulatorLogSource.IsRunning; // Use IsRunning property via interface
+            IsSimulatorRunning = _simulatorLogSource.IsRunning; // Update state
         }
         catch (Exception ex)
         {
             HandleSimulatorError("Error starting simulator", ex);
+            IsSimulatorRunning = false; // Ensure state is correct on error
         }
     }
 
-    private bool CanStartSimulator() => !IsSimulatorRunning;
-
-    [RelayCommand(CanExecute = nameof(CanStopSimulator))]
-    private void StopSimulator()
+    private void ExecuteStopSimulatorLogic()
     {
-        if (!IsSimulatorRunning) return;
+        if (!IsSimulatorRunning) return; // Guard
 
         try
         {
-            _simulatorLogSource?.Stop(); // Call Stop via interface
-            IsSimulatorRunning = _simulatorLogSource?.IsRunning ?? false;
+            _simulatorLogSource?.Stop();
+            IsSimulatorRunning = _simulatorLogSource?.IsRunning ?? false; // Update state
             Debug.WriteLine("---> Simulator Stopped");
-            // Do not switch back to file source automatically here.
-            // Keep CurrentLogFilePath as "[Simulation Active]"? Or clear it?
-             // CurrentLogFilePath = "[Simulation Stopped]";
+            // CurrentLogFilePath = "[Simulation Stopped]"; // Optional
         }
         catch (Exception ex)
         {
             HandleSimulatorError("Error stopping simulator", ex);
+            // Optionally try to force IsSimulatorRunning to false
+            IsSimulatorRunning = false;
         }
     }
-    private bool CanStopSimulator() => IsSimulatorRunning;
 
-    [RelayCommand(CanExecute = nameof(CanStopSimulator))] // Can only restart if running
+    [RelayCommand] private void ToggleSimulator()
+    {
+        if (IsSimulatorRunning)
+        {
+            ExecuteStopSimulatorLogic();
+        }
+        else
+        {
+            ExecuteStartSimulatorLogic();
+        }
+        // Notify CanExecute changed for Restart command as its state depends on IsSimulatorRunning
+        RestartSimulatorCommand.NotifyCanExecuteChanged();
+    }
+
+    private bool CanRestartSimulator() => IsSimulatorRunning && _simulatorLogSource != null;
+    [RelayCommand(CanExecute = nameof(CanRestartSimulator))]
     private void RestartSimulator()
     {
         if (!IsSimulatorRunning || _simulatorLogSource == null) return; // Check source exists too
@@ -635,7 +625,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         // Optionally stop the simulator on error
         if (IsSimulatorRunning)
         {
-            StopSimulator();
+            ExecuteStopSimulatorLogic();
         }
     }
 
@@ -749,7 +739,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         // 1. Stop Simulator if running
         if (IsSimulatorRunning)
         {
-            StopSimulator(); // Stop generation
+            ExecuteStopSimulatorLogic(); // Stop generation
             // Dispose simulator instance? Or keep it? Let's keep it for now.
              Debug.WriteLine("---> Stopped simulator before opening file.");
         }

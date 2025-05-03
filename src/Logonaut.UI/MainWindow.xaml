@@ -320,9 +320,6 @@
                                     IsSnapToTickEnabled="True" TickFrequency="1"
                                     Value="{Binding SimulatorLPS, Mode=TwoWay, Converter={StaticResource ExponentialConverter}}"
                                     Margin="0,0,0,2">
-                                <Slider.ToolTip>
-                                    <ToolTip Content="{Binding DataContext.SimulatorLPS, RelativeSource={RelativeSource AncestorType=Window}, StringFormat='{}{0:F0} LPS'}"/>
-                                </Slider.ToolTip>
                             </Slider>
                             <TextBlock Text="{Binding SimulatorLPS, StringFormat='{}{0:F0} LPS'}"
                                        Foreground="{DynamicResource Overlay.ForegroundBrush}"
@@ -330,10 +327,10 @@
 
                             <!-- Control Buttons -->
                             <WrapPanel HorizontalAlignment="Center" Margin="0,10,0,10">
-                                <Button Content="Start" Width="70" Margin="5"
-                                        Command="{Binding StartSimulatorCommand}"/>
-                                <Button Content="Stop" Width="70" Margin="5"
-                                        Command="{Binding StopSimulatorCommand}"/>
+                                <ToggleButton Width="70" Margin="5"
+                                        Command="{Binding ToggleSimulatorCommand}"
+                                        IsChecked="{Binding IsSimulatorRunning, Mode=OneWay}"
+                                        Style="{DynamicResource SimulatorToggleButtonStyle}"/>
                                 <Button Content="Restart" Width="70" Margin="5"
                                         Command="{Binding RestartSimulatorCommand}"/>
                             </WrapPanel>
