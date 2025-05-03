@@ -2,18 +2,19 @@
 
 This document outlines the functional requirements for the Logonaut application from a user's perspective.
 
-The reuqirement ID is a unique ID that can be referenced from the source code and other documents. The version number is incremented when a requirement is updated.
+The requirement ID is a unique ID that can be referenced from the source code and other documents. The version number is incremented when a requirement is updated.
 
 ## 1. Core Log Viewing
 
 *   [ReqFileMonitorLiveUpdatev1] **File Monitoring:** The application must allow the user to select a log file via a menu (`File > Open Log File` or `Ctrl+O`) and then continuously monitor that file for changes, updating the display in real-time as new lines are added.
 *   [ReqFilterEfficientRealTimev1] Filtering must efficiently handle real-time updates from monitored files or pasted content, applying filters to new data incrementally where possible to maintain UI responsiveness even with large log sources.
-*   [ReqPasteFromClipboardv1] **Paste Input:** The user must be able to paste log content directly from the clipboard (using `Ctrl+V`) to view it without saving it to a file first.
+*   [ReqPasteFromClipboardv2] **Paste Input:** The user must be able to paste log content directly from the clipboard (using `Ctrl+V` when the log view has focus) to view it without saving it to a file first. Pasting should replace the current view content.
 *   [ReqLargeFileResponsivev1] **Large File Handling:** The application must remain responsive and usable even when viewing very large log files. Background processing should be used for filtering and loading.
 *   [ReqStandardScrollingv1] **Scrolling:** Standard vertical scrolling must be supported (mouse wheel, keyboard: PgUp/PgDn, Arrows, Home/End).
 *   [ReqOverviewScrollbarMapv1] **Overview Scrollbar:** A custom overview scrollbar must provide visual document mapping and scroll control.
 *   [ReqFileResetHandlingv1] **File Reset Handling:** If the monitored log file is reset (e.g., truncated), the application should ideally detect this, potentially clear the display, and continue monitoring from the beginning of the reset file. *(Current implementation might require reopening)*.
 *   [ReqFileUnavailableHandlingv1] **File Unavailability:** If the log file becomes unavailable (e.g., deleted, network drive disconnects), the application should handle this gracefully (e.g., stop tailing, display a message) without crashing.
+*   [ReqRememberLastFolderV1] **Remember Last Folder:** The "Open Log File" dialog should remember the folder from the last opened file and open there by default.
 
 ## 2. Display and Appearance
 
@@ -40,7 +41,7 @@ The reuqirement ID is a unique ID that can be referenced from the source code an
 *   **Filter Profiles:**
     *   [ReqCreateMultipleFilterProfilesv1] The user must be able to create multiple, distinct filter configurations, referred to as "Filter Profiles".
     *   [ReqFilterProfileNamingv1] Each profile must have a user-defined name.
-    *   [ReqFilterProfileRenameInlinev1] Profile renaming must be possible **inline** within the profile selection area.
+    *   [ReqFilterProfileRenameInlinev2] Profile renaming must be possible **inline** within the profile selection area (e.g., by clicking a Rename button that makes the name editable).
     *   [ReqFilterProfileSelectActivev1] The user must be able to select which profile is currently **active** using a `ComboBox`.
     *   [ReqFilterProfileManageCRUDv1] The application must provide controls (`New`, `Rename`, `Delete` buttons) to manage filter profiles.
 *   **Filter Rules (within a profile):**
@@ -49,7 +50,8 @@ The reuqirement ID is a unique ID that can be referenced from the source code an
     *   [ReqFilterRuleCombineLogicalv1] The user must be able to combine these rules using logical **AND**, **OR**, and **NOR** operators.
     *   [ReqFilterRuleTreeStructurev1] These rules must be manageable in a **hierarchical tree structure** displayed in the filter panel.
     *   [ReqFilterNodeManageButtonsv1] Adding, removing, and editing filter nodes must be done via dedicated buttons operating on the selected node in the tree.
-    *   [ReqFilterNodeEditInlinev1] Editing filter values (substrings/regex) must happen **inline** within the tree view.
+    *   [ReqFilterNodeEditInlinev2] Editing filter values (substrings/regex) must happen **inline** within the tree view (e.g., by clicking on the filter text or an Edit button).
+    *   [ReqFilterSubstringDefaultFromSelectionV1] **Substring Default from Selection:** When adding a new Substring filter, if text is selected in the log view, that text should be used as the default value for the new filter.
 *   **Filtering Behavior:**
     *   [ReqFilterDisplayMatchingLinesv1] The log display must show only the lines matching the rules of the **active** filter profile.
     *   [ReqFilterContextLinesv1] The application must provide a setting (`Context Lines` input with increment/decrement buttons) to include a specified number of **context lines** before and after each matching line.
@@ -76,18 +78,19 @@ The reuqirement ID is a unique ID that can be referenced from the source code an
 *   [ReqLineSelectionClickv1] **Line Selection:** Clicking on a line number or log entry in the display area must select that line, highlighting it and updating the selected line number in the status bar.
 *   [ReqGoToLineInputBoxv1] **Go To Line Input:** The user must be able to enter an original line number into a dedicated text box (`Ctrl+G` to focus) in the status bar.
 *   [ReqGoToLineExecuteJumpv1] **Go To Line Execution:** Pressing Enter (or clicking a button) must jump to (select and scroll to) the entered line number if it exists in the *filtered* view.
-*   [ReqGoToLineFeedbackNotFoundv1] **Go To Line Feedback:** Feedback must indicate if the entered line number is not found in the filtered view.
+*   [ReqGoToLineFeedbackNotFoundv2] **Go To Line Feedback:** Feedback (e.g., a temporary status message and/or visual cue like background color change) must indicate if the entered line number is not found in the filtered view or if the input is invalid.
 *   **Auto Scroll:**
-    *   [ReqAutoScrollOptionv2] An **anchor toggle button** in the status bar must be available to automatically scroll to the end of the log view when new lines are added. The button's visual state (e.g., icon color) should indicate whether auto-scroll is enabled or disabled.
-    *   [ReqAutoScrollDisableOnManualv1] Auto Scroll must be **automatically disabled** if the user manually scrolls the log view using the mouse wheel (scrolling up), keyboard navigation keys (PgUp/Dn, Arrows, Home/End), or by interacting with the scrollbar/overview ruler.
+    *   [ReqAutoScrollOptionv3] **Auto Scroll Control:** An **anchor toggle button** in the status bar must be available to enable/disable automatically scrolling to the end of the log view when new lines are added. The button's visual state (e.g., icon color/style) must clearly indicate whether auto-scroll is enabled or disabled. When enabled and filter changes occur, the view should scroll to the new end.
+    *   [ReqAutoScrollDisableOnManualv2] **Automatic Auto Scroll Disabling:** Auto Scroll must be **automatically disabled** if the user manually scrolls the log view away from the end (e.g., using the mouse wheel upwards, keyboard navigation keys like PgUp/Dn/Arrows/Home, or interacting with the scrollbar/overview ruler).
 *   **Keyboard Shortcuts:** Common actions must be accessible via standard keyboard shortcuts:
-    *   [ReqShortcutOpenFilev1] `Ctrl+O`: Open File (Expected, check implementation)
-    *   [ReqShortcutPasteLogv1] `Ctrl+V`: Paste Log Content
+    *   [ReqShortcutOpenFilev1] `Ctrl+O`: Open File
+    *   [ReqShortcutPasteLogv2] `Ctrl+V`: Paste Log Content (when log view focused)
     *   [ReqShortcutFocusSearchv1] `Ctrl+F`: Focus Search Input
     *   [ReqShortcutFocusGoToLinev1] `Ctrl+G`: Focus Go To Line Input
-    *   [ReqShortcutSearchSelectedv1] `Ctrl+F3`: Search for Selected Text
+    *   [ReqShortcutSearchSelectedv2] `Ctrl+F3`: Search for Selected Text (when log view focused)
     *   [ReqShortcutFindNextv1] `F3`: Find Next Search Result
     *   [ReqShortcutFindPreviousv1] `Shift+F3`: Find Previous Search Result
+    *   [ReqShortcutToggleSimulatorV1] `Ctrl+Alt+Shift+S`: Toggle Simulator Configuration Panel visibility.
 *   [ReqUIResponsivenessv1] **Responsiveness:** The UI must remain responsive during filtering and log updates, using background processing and visual indicators for long operations.
 
 ## 6. Configuration and Persistence
@@ -103,3 +106,17 @@ The reuqirement ID is a unique ID that can be referenced from the source code an
     *   [ReqPersistSettingAutoScrollv1] **Auto scroll to tail toggle state.**
     *   [ReqPersistSettingThemev1] Selected theme.
     *   *(Future: Last viewed file/position, window size/location)*.
+
+## 7. Log Simulator (for Testing/Demo)
+
+*   [ReqSimulatorTogglePanelV1] **Toggle Simulator Panel:** The user must be able to toggle the visibility of a dedicated Simulator Configuration panel using a keyboard shortcut (`Ctrl+Alt+Shift+S`).
+*   [ReqSimulatorBasicControlsV1] **Simulator Basic Controls:** The simulator panel must provide controls to:
+    *   Start generating simulated log lines.
+    *   Stop generating log lines.
+    *   Restart generation (clearing previous simulation state/display).
+    *   Control the approximate rate of generation (Lines Per Second) via a slider.
+    *   Clear the currently displayed log content.
+*   [ReqSimulatorReplaceFileV1] **Simulator Activation:** Starting the simulator must stop any active file monitoring and replace the current log view with simulated content. Opening a file must stop the simulator.
+*   [ReqSimulatorBurstModeV1] **Simulator Burst Mode:** The simulator panel must provide controls to:
+    *   Configure the number of lines in a burst (e.g., via a slider).
+    *   Trigger the generation of a configured number of lines immediately ("Burst" button).
