@@ -112,7 +112,7 @@ namespace Logonaut.TestUtils
         public void SimulateReplaceUpdate(List<FilteredLogLine> lines)
         {
             if (_isDisposed) throw new ObjectDisposedException(nameof(MockReactiveFilteredLogStream));
-            var update = new ReplaceFilteredUpdate(lines); // Create specific type
+            var update = new ReplaceFilteredUpdate(lines, false); // Create specific type
             _filteredUpdatesSubject.OnNext(update);        // Emit
         }
 

@@ -20,6 +20,7 @@
 * The nice moving waves when opening a new file are no longer visible.
 * When the simluator is enabled, rather than a file log, I want a special busy token.
     * When a simulator token is active, use a special animation.
+* The animation used when opening a new file is broken.
 
 * **SimulatorLogSource UI overlay**
 *   1. Implement the key combination trigger and the overlay UI placement over the filter tree. Secret key to toggle overlay: Ctrl+Alt+Shift+S. (DONE)
@@ -29,4 +30,5 @@
 *   5. Refactor SimulatorLogSource to accept and use these basic parameters. (DONE)
 *   6. Sliders or percentage inputs for INFO, WARN, ERROR, DEBUG, TRACE (could enforce sum=100%).
 *   7. TextBox for keywords (comma-separated?), Checkbox "Inject Keywords Randomly". Slider for injection probability. Randomly inserts specified keywords into generated messages. Useful for testing filters.
-*   8. Burst mode. Numeric inputs for "Lines per Burst", "Burst Interval (ms)", "Pause Between Bursts (ms)". Button "Enable Burst Mode". Generate lines rapidly in bursts, followed by pauses.
+*   8. Burst mode. Numeric inputs for "Lines per Burst", "Burst Interval (ms)", "Pause Between Bursts (ms)". Button "Enable Burst Mode". Generate lines rapidly in bursts, followed by pauses. (DONE)
+*       * Burst mode should use the same animation as loading a new log file.

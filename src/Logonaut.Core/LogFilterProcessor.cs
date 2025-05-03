@@ -19,7 +19,7 @@ public class ReactiveFilteredLogStream : IReactiveFilteredLogStream
     private readonly SynchronizationContext _uiContext;
     private readonly IScheduler _backgroundScheduler;
 
-    private readonly BehaviorSubject<FilteredUpdateBase> _filteredUpdatesSubject = new(new ReplaceFilteredUpdate(Array.Empty<FilteredLogLine>()));
+    private readonly BehaviorSubject<FilteredUpdateBase> _filteredUpdatesSubject = new(new ReplaceFilteredUpdate(Array.Empty<FilteredLogLine>(), IsInitialLoadProcessingComplete: false));
     private readonly BehaviorSubject<long> _totalLinesSubject = new BehaviorSubject<long>(0);
     private readonly CompositeDisposable _disposables = new();
 
@@ -117,24 +117,26 @@ public class ReactiveFilteredLogStream : IReactiveFilteredLogStream
                 var fullResult = FilterEngine.ApplyFilters(_logDocument, settingsTuple.filter, settingsTuple.contextLines);
                 Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Full filter yielded {fullResult.Count} lines.");
 
-                bool wasInitial = false;
-                lock (_stateLock) { wasInitial = _isInitialLoadInProgress; }
-                if (wasInitial)
+                bool initialLoadCompletedNow = false;
+                lock (_stateLock)
                 {
-                    // If yes, THIS is where we mark initial load as complete
-                    lock (_stateLock) { _isInitialLoadInProgress = false; }
-                    Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Initial Load Filter Processing Complete (Flag Reset). _isInitialLoadInProgress=false");
+                    if (_isInitialLoadInProgress)
+                    {
+                        _isInitialLoadInProgress = false;
+                        initialLoadCompletedNow = true; // Mark that initial load is done *now*
+                        Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Initial Load Filter Processing Complete (Flag Reset). _isInitialLoadInProgress=false");
 
-                    // Update total lines count *after* the initial filter calculation completes
-                    long docCount = _logDocument.Count;
-                    Interlocked.Exchange(ref _currentLineIndex, docCount); 
-                    // Publish the final count after initial load is processed
-                    _uiContext.Post(_ => _totalLinesSubject.OnNext(docCount), null);
-                    Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Updated TotalLinesSubject and _currentLineIndex after initial filter: {docCount}");
+                        // Update total lines count *after* the initial filter calculation completes
+                        long docCount = _logDocument.Count;
+                        Interlocked.Exchange(ref _currentLineIndex, docCount);
+                        // Publish the final count after initial load is processed
+                        _uiContext.Post(_ => _totalLinesSubject.OnNext(docCount), null);
+                        Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Updated TotalLinesSubject and _currentLineIndex after initial filter: {docCount}");
+                    }
                 }
 
-                // Return the result for the pipeline
-                return new ReplaceFilteredUpdate(fullResult); // Map to ReplaceFilteredUpdate type
+                // Return the result for the pipeline, setting the flag only if initial load completed in this pass
+                return new ReplaceFilteredUpdate(fullResult, IsInitialLoadProcessingComplete: initialLoadCompletedNow); // <<< SET FLAG HERE
             });
 
         // --- Merge Pipelines and Subscribe ---

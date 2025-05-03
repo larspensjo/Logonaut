@@ -816,7 +816,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
         if (string.IsNullOrEmpty(selectedFile)) return;
         Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} OpenLogFileAsync: '{selectedFile}'");
 
-        _uiContext.Post(_ => CurrentBusyStates.Add(LoadingToken), null);
+        _uiContext.Post(_ => {
+            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} OpenLogFileAsync: Adding LoadingToken to BusyStates.");
+            CurrentBusyStates.Add(LoadingToken);
+        }, null);
 
         try
         {
@@ -1013,38 +1016,43 @@ public partial class MainViewModel : ObservableObject, IDisposable
             // 4. Reset BusyFiltering (Append means this batch is done)
             _uiContext.Post(_ => { CurrentBusyStates.Remove(FilteringToken); }, null);
         }
-        else if (update is ReplaceFilteredUpdate replaceUpdate) // <<< Use type pattern matching
+        else if (update is ReplaceFilteredUpdate replaceUpdate)
         {
             int originalLineToRestore = HighlightedOriginalLineNumber;
-            // 1. Replace the entire ObservableCollection with lines from Replace update
             ReplaceFilteredLines(replaceUpdate.Lines);
-            // 2. Schedule the full text replace for AvalonEdit
-            ScheduleLogTextUpdate(FilteredLogLines); // Pass the *updated* collection
-            // 3. Restore Highlight (only makes sense after a replace)
+            ScheduleLogTextUpdate(FilteredLogLines);
+
+            // --- Replace Highlight Restore Logic ---
             if (originalLineToRestore > 0)
             {
                 int newIndex = FilteredLogLines
                     .Select((line, index) => new { line.OriginalLineNumber, Index = index })
                     .FirstOrDefault(item => item.OriginalLineNumber == originalLineToRestore)?.Index ?? -1;
-                // Post the update to the UI thread
                 _uiContext.Post(idx => { HighlightedFilteredLineIndex = (int)idx!; }, newIndex);
             }
             else
             {
-                 // Post the update to the UI thread
-                _uiContext.Post(_ => { HighlightedFilteredLineIndex = -1; }, null);
+                // No line to restore, ensure highlight is cleared
+                 _uiContext.Post(_ => { HighlightedFilteredLineIndex = -1; }, null);
             }
 
-            // 4. Replace means filtering is done AND if it was the initial load, loading is also done.
+            // Replace means this full filtering pass is done.
+            // If it also completed the initial load, remove the loading token.
             _uiContext.Post(_ => {
                 CurrentBusyStates.Remove(FilteringToken);
-                if (wasInitialLoad) CurrentBusyStates.Remove(LoadingToken);
+                // Only remove LoadingToken if this update signals the *completion*
+                // of the initial load processing AND we were actually in the loading state.
+                if (wasInitialLoad && replaceUpdate.IsInitialLoadProcessingComplete)
+                {
+                    CurrentBusyStates.Remove(LoadingToken);
+                    Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} ApplyFilteredUpdate: LoadingToken removed (InitialLoadComplete).");
+                }
+                // REMOVED the unconditional removal based only on wasInitialLoad
             }, null);
         }
         else
         {
-            // Should not happen if processor only emits known types
-            Debug.WriteLine($"WARN: ApplyFilteredUpdate received unknown update type: {update.GetType().Name}");
+            throw new InvalidOperationException($"Unknown update type: {update.GetType().Name}");
         }
     }
 
