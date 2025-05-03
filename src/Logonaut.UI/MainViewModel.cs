@@ -56,7 +56,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
     public static readonly object FilteringToken = new();
     private readonly IFileDialogService _fileDialogService;
     private readonly ISettingsService _settingsService;
-    private ILogSource _currentActiveLogSource;
+    [ObservableProperty] private ILogSource _currentActiveLogSource;
+
     private readonly SynchronizationContext _uiContext;
     private IReactiveFilteredLogStream _reactiveFilteredLogStream; // This will be recreated when switching sources
 
@@ -103,11 +104,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
         // Initialize with FileLogSource as the default
         _fileLogSource = _sourceProvider.CreateFileLogSource();
-        _currentActiveLogSource = _fileLogSource; // Start with file source active
+        CurrentActiveLogSource = _fileLogSource; // Start with file source active
         _disposables.Add(_fileLogSource); // Add file source to disposables
 
         // Create the initial processor with the file source
-        _reactiveFilteredLogStream = CreateFilteredStream(_currentActiveLogSource);
+        _reactiveFilteredLogStream = CreateFilteredStream(CurrentActiveLogSource);
         _disposables.Add(_reactiveFilteredLogStream); // Add processor to disposables
         SubscribeToFilteredStream(); // Subscribe to the initial processor
 
@@ -296,6 +297,16 @@ public partial class MainViewModel : ObservableObject, IDisposable
             RequestScrollToEnd?.Invoke(this, EventArgs.Empty);
 
         SaveCurrentSettingsDelayed();
+    }
+
+    // Responsible for reacting to the switch of CurrentActiveLogSource
+    partial void OnCurrentActiveLogSourceChanged(ILogSource? oldValue, ILogSource newValue)
+    {
+        Debug.WriteLine($"---> CurrentActiveLogSource changed from {oldValue?.GetType().Name ?? "null"} to {newValue.GetType().Name}");
+
+
+        // 1. Update CanExecute for GenerateBurstCommand
+        GenerateBurstCommand.NotifyCanExecuteChanged();
     }
 
     public ThemeViewModel Theme { get; }
@@ -487,7 +498,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         // Enable Burst if the simulator source has been instantiated
         // AND is the currently selected source type.
         // This allows bursting even if the continuous rate (timer) is 0.
-        return _simulatorLogSource != null && _currentActiveLogSource == _simulatorLogSource;
+        return _simulatorLogSource != null && CurrentActiveLogSource == _simulatorLogSource;
     }
 
     private void ExecuteStartSimulatorLogic()
@@ -496,7 +507,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
         try
         {
-            bool wasPreviouslyFileSource = (_currentActiveLogSource == _fileLogSource);
+            bool wasPreviouslyFileSource = (CurrentActiveLogSource == _fileLogSource);
 
             // --- Stop existing source monitoring (File or previous Simulator) ---
             if (wasPreviouslyFileSource)
@@ -520,8 +531,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
             // --- Switch Active Source & Processor ---
             DisposeAndClearFilteredStream();
-            _currentActiveLogSource = _simulatorLogSource;
-            _reactiveFilteredLogStream = CreateFilteredStream(_currentActiveLogSource);
+            CurrentActiveLogSource = _simulatorLogSource;
+            _reactiveFilteredLogStream = CreateFilteredStream(CurrentActiveLogSource);
             _disposables.Add(_reactiveFilteredLogStream);
             SubscribeToFilteredStream();
 
@@ -552,13 +563,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
             _simulatorLogSource.Start(); // NOW start the timer
 
             IsSimulatorRunning = _simulatorLogSource.IsRunning; // Update state
-            GenerateBurstCommand.NotifyCanExecuteChanged(); // Burst might become enabled now
         }
         catch (Exception ex)
         {
             HandleSimulatorError("Error starting simulator", ex);
             IsSimulatorRunning = false; // Ensure state is correct on error
-            GenerateBurstCommand.NotifyCanExecuteChanged(); // Burst might become disabled now
         }
     }
 
@@ -819,8 +828,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
             // 5. Switch Active Source and Recreate Processor
             DisposeAndClearFilteredStream();
-            _currentActiveLogSource = _fileLogSource; // Set file source as active
-            _reactiveFilteredLogStream = CreateFilteredStream(_currentActiveLogSource);
+            CurrentActiveLogSource = _fileLogSource; // Set file source as active
+            _reactiveFilteredLogStream = CreateFilteredStream(CurrentActiveLogSource);
             _disposables.Add(_reactiveFilteredLogStream);
             SubscribeToFilteredStream();
 
@@ -833,9 +842,6 @@ public partial class MainViewModel : ObservableObject, IDisposable
             IFilter? firstFilter = ActiveFilterProfile?.Model?.RootFilter ?? new TrueFilter();
             _reactiveFilteredLogStream.UpdateFilterSettings(firstFilter, ContextLines);
             UpdateFilterSubstrings();
-
-            // !!! Notify CanExecute after switching source !!!
-            GenerateBurstCommand.NotifyCanExecuteChanged();
 
             Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} OpenLogFileAsync: Prepare/Start completed ({initialLines} lines). First filter triggered.");
         }
@@ -850,7 +856,6 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 MessageBox.Show($"Error opening or reading log file '{selectedFile}':\n{ex.Message}", "File Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 CurrentLogFilePath = null;
                 _fileLogSource?.StopMonitoring(); // Stop file source if it got started
-                GenerateBurstCommand.NotifyCanExecuteChanged();
             }, null);
             // Re-throw might not be needed if MessageBox is sufficient user feedback
              // throw;
@@ -1200,7 +1205,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     public void LoadLogFromText(string text)
     {
-        _currentActiveLogSource?.StopMonitoring(); // Stop current source
+        CurrentActiveLogSource?.StopMonitoring(); // Stop current source
         _reactiveFilteredLogStream.Reset();
         LogDoc.Clear();
         FilteredLogLines.Clear();
@@ -1295,7 +1300,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         // 1. Clear the busy state collection (good practice)
         _uiContext.Post(_ => CurrentBusyStates.Clear(), null);
         SaveCurrentSettings();
-         _currentActiveLogSource?.StopMonitoring(); // Explicitly stop monitoring before disposing
+         CurrentActiveLogSource?.StopMonitoring(); // Explicitly stop monitoring before disposing
         Dispose(); // Calls the main Dispose method which cleans everything else
     }
     #endregion // --- Lifecycle Management ---
