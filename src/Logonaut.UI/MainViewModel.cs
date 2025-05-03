@@ -451,30 +451,71 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
         try
         {
-            if (_currentActiveLogSource == _fileLogSource) _fileLogSource?.StopMonitoring();
+            // --- Stop existing source ---
+            if (_currentActiveLogSource == _fileLogSource)
+            {
+                 _fileLogSource?.StopMonitoring();
+                 Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> StartSimulator: Stopped FileLogSource monitoring.");
+            }
+            // If simulator was already running somehow, ensure it's stopped.
+            if (_simulatorLogSource != null && _simulatorLogSource.IsRunning)
+            {
+                 _simulatorLogSource?.Stop();
+                 Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> StartSimulator: Stopped previous SimulatorLogSource.");
+            }
 
-            // 2. Get Simulator Instance via Provider
-            _simulatorLogSource = _sourceProvider.CreateSimulatorLogSource(); // <<<< Returns ISimulatorLogSource
-            if (!_disposables.Contains((IDisposable)_simulatorLogSource)) _disposables.Add((IDisposable)_simulatorLogSource);
-            _simulatorLogSource.Stop(); // Call Stop via interface
 
-            // 3. Configure Simulator
+            // --- Setup Simulator ---
+            // Get Simulator Instance via Provider
+            _simulatorLogSource = _sourceProvider.CreateSimulatorLogSource(); // Returns ISimulatorLogSource
+            if (!_disposables.Contains((IDisposable)_simulatorLogSource))
+            {
+                 _disposables.Add((IDisposable)_simulatorLogSource);
+                 Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> StartSimulator: Created and added new SimulatorLogSource to disposables.");
+            }
+             // Ensure it's stopped before configuration (redundant if just created, but safe)
+            _simulatorLogSource.Stop();
+
+            // Configure Simulator
             _simulatorLogSource.LinesPerSecond = (int)Math.Round(SimulatorLPS); // Set property via interface
+            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> StartSimulator: Configured Simulator LPS to {SimulatorLPS}.");
 
-            // 4. Switch Active Source and Recreate Processor
-            DisposeAndClearFilteredStream();
+
+            // --- Switch Active Source & Processor ---
+            DisposeAndClearFilteredStream(); // Dispose OLD stream first
             _currentActiveLogSource = _simulatorLogSource; // Assign ISimulatorLogSource (which is also ILogSource)
-            _reactiveFilteredLogStream = CreateFilteredStream(_currentActiveLogSource);
-            _disposables.Add(_reactiveFilteredLogStream);
-            SubscribeToFilteredStream();
+            _reactiveFilteredLogStream = CreateFilteredStream(_currentActiveLogSource); // Create NEW stream
+            _disposables.Add(_reactiveFilteredLogStream); // Add NEW stream to disposables
+            SubscribeToFilteredStream(); // Subscribe to NEW stream
 
-            // 5. Reset Document and UI State
-            ResetLogDocumentAndUIState();
+
+            // --- Reset State ---
+            ResetLogDocumentAndUIState(); // Calls processor.Reset(), sets _isInitialLoadInProgress=true
             CurrentLogFilePath = "[Simulation Active]";
 
-            // 6. Prepare and Start Simulator Source
-            _simulatorLogSource.PrepareAndGetInitialLinesAsync("Simulator", AddLineToLogDocument).Wait();
-            _simulatorLogSource.Start(); // Call Start via interface
+
+            // --- Prepare Simulator (NO initial lines) ---
+            // PrepareAndGetInitialLinesAsync MUST be called, even if it does nothing for the simulator.
+            // We don't need to wait for the result since it's always 0.
+             _simulatorLogSource.PrepareAndGetInitialLinesAsync("Simulator", AddLineToLogDocument)
+                                .ContinueWith(t => {
+                                    if (t.IsFaulted) {
+                                        Debug.WriteLine($"!!! StartSimulator: Error during simulator PrepareAndGetInitialLinesAsync: {t.Exception?.InnerExceptions.FirstOrDefault()?.Message}");
+                                        // Optionally handle the error, e.g., show message box
+                                    } else {
+                                         Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> StartSimulator: Simulator PrepareAndGetInitialLinesAsync completed.");
+                                    }
+                                }, TaskScheduler.Default);
+
+
+            // --- **** EXPLICITLY TRIGGER INITIAL FILTER **** ---
+            // This call is CRUCIAL. It ensures the fullRefilterPipeline runs once,
+            // processes the (empty) initial state, and resets _isInitialLoadInProgress to false.
+            IFilter? firstFilter = ActiveFilterProfile?.Model?.RootFilter ?? new TrueFilter();
+            _reactiveFilteredLogStream.UpdateFilterSettings(firstFilter, ContextLines);
+
+            _simulatorLogSource.Start(); // NOW start the timer
+
 
             IsSimulatorRunning = _simulatorLogSource.IsRunning; // Use IsRunning property via interface
         }
@@ -483,6 +524,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             HandleSimulatorError("Error starting simulator", ex);
         }
     }
+
     private bool CanStartSimulator() => !IsSimulatorRunning;
 
     [RelayCommand(CanExecute = nameof(CanStopSimulator))]
@@ -509,14 +551,27 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand(CanExecute = nameof(CanStopSimulator))] // Can only restart if running
     private void RestartSimulator()
     {
-        if (!IsSimulatorRunning) return; // Should be handled by CanExecute, but double-check
+        if (!IsSimulatorRunning || _simulatorLogSource == null) return; // Check source exists too
 
         try
         {
+            // 1. Reset State (calls processor.Reset(), sets flag=true)
             ResetLogDocumentAndUIState();
-            _simulatorLogSource?.Restart(); // Call Restart via interface
-            IsSimulatorRunning = _simulatorLogSource?.IsRunning ?? false;
-            Debug.WriteLine("---> Simulator Restarted");
+
+            // 2. Explicitly Trigger Initial Filter (to reset the flag)
+            // Explicitly trigger the initial filter pipeline.
+            // This is necessary to run the logic within the fullRefilterPipeline
+            // which resets the _isInitialLoadInProgress flag after processing the
+            // initial (potentially empty) document state. This ensures the incremental
+            // pipeline is unblocked before the source starts emitting lines.
+            IFilter? currentFilter = ActiveFilterProfile?.Model?.RootFilter ?? new TrueFilter();
+            _reactiveFilteredLogStream.UpdateFilterSettings(currentFilter, ContextLines);
+
+            // 3. Restart Simulator Emissions
+            //    The internal Restart likely handles PrepareAndGetInitialLinesAsync implicitly or it's not needed again.
+            _simulatorLogSource.Restart(); // Call Restart via interface
+
+            IsSimulatorRunning = _simulatorLogSource.IsRunning; // Update running state
         }
          catch (Exception ex)
         {
@@ -888,13 +943,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
     */
     private void ApplyFilteredUpdate(FilteredUpdateBase update)
     {
-        Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> ApplyFilteredUpdate received: {update.GetType().Name}. Lines={update.Lines.Count}");
         bool wasInitialLoad = CurrentBusyStates.Contains(LoadingToken);
 
         if (update is AppendFilteredUpdate appendUpdate) // <<< Use type pattern matching
         {
-            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> ApplyFilteredUpdate: Handling Append.");
-
             // 1. Add only the new lines from the Append update
             AddFilteredLines(appendUpdate.Lines); // This contains ONLY the new/context lines
             // 2. Schedule the append text operation for AvalonEdit
@@ -906,7 +958,6 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
         else if (update is ReplaceFilteredUpdate replaceUpdate) // <<< Use type pattern matching
         {
-            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> ApplyFilteredUpdate: Handling Replace.");
             int originalLineToRestore = HighlightedOriginalLineNumber;
             // 1. Replace the entire ObservableCollection with lines from Replace update
             ReplaceFilteredLines(replaceUpdate.Lines);

@@ -22,9 +22,9 @@
 * **SimulatorLogSource UI overlay**
 *   1. Implement the key combination trigger and the overlay UI placement over the filter tree. Secret key to toggle overlay: Ctrl+Alt+Shift+S. (DONE)
 *   2. Add basic controls: Lines Per Second slider, Start/Stop/Restart buttons, Clear Log button. (DONE)
-*   3. Start/Stop/Restart buttons within the simulator UI. Controls the Timer in SimulatorLogSource. Needs to be independent of file opening.
-*   4. Add an "Error Rate %" slider and an "Inject ERROR Now" button.
-*   5. Refactor SimulatorLogSource to accept and use these basic parameters.
+*   3. Start/Stop/Restart buttons within the simulator UI. Controls the Timer in SimulatorLogSource. Needs to be independent of file opening. (DONE)
+*   4. Add an "Average Error Rate", as measuered in avarage number of lines between errors. Use exponential slider converter. An "Inject ERROR Now" button.
+*   5. Refactor SimulatorLogSource to accept and use these basic parameters. (DONE)
 *   6. Sliders or percentage inputs for INFO, WARN, ERROR, DEBUG, TRACE (could enforce sum=100%).
 *   7. TextBox for keywords (comma-separated?), Checkbox "Inject Keywords Randomly". Slider for injection probability. Randomly inserts specified keywords into generated messages. Useful for testing filters.
 *   8. Burst mode. Numeric inputs for "Lines per Burst", "Burst Interval (ms)", "Pause Between Bursts (ms)". Button "Enable Burst Mode". Generate lines rapidly in bursts, followed by pauses.

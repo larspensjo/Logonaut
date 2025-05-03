@@ -77,7 +77,15 @@ public class ReactiveFilteredLogStream : IReactiveFilteredLogStream
                 return new OriginalLineInfo((int)newIndex, line); // Pass 0-based index
             })
             .ObserveOn(_backgroundScheduler) // Shift further processing to background
-            .Where(_ => { lock (_stateLock) return !_isInitialLoadInProgress; }) // Don't process new lines during initial load
+            .Where(_ => {
+                // Check the flag state correctly
+                bool stillInitialLoad;
+                lock (_stateLock) { stillInitialLoad = _isInitialLoadInProgress; }
+                if (stillInitialLoad) {
+                     Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> incrementalUpdatePipeline: SKIPPING line, _isInitialLoadInProgress={stillInitialLoad}");
+                }
+                return !stillInitialLoad; // Process only if initial load is FALSE
+            })
             .Buffer(_lineBufferTimeSpan, LineBufferSize, _backgroundScheduler) // Buffer lines by time or count
             .Where(buffer => buffer.Any()) // Only process non-empty buffers
             .Select(bufferedLines => {
@@ -88,10 +96,8 @@ public class ReactiveFilteredLogStream : IReactiveFilteredLogStream
                     filter = _currentFilter;
                     context = _currentContextLines;
                 }
-                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Applying incremental filter to batch of {bufferedLines.Count} lines.");
                 // ApplyFilterToSubset needs the full document for context lookup
                 var appendResult = FilterEngine.ApplyFilterToSubset(bufferedLines, _logDocument, filter, context);
-                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Incremental filter yielded {appendResult.Count} lines (incl. context).");
                 return appendResult;
             })
             .Where(result => result.Any()) // Only emit if the incremental filter yielded results
@@ -115,15 +121,19 @@ public class ReactiveFilteredLogStream : IReactiveFilteredLogStream
                 lock (_stateLock) { wasInitial = _isInitialLoadInProgress; }
                 if (wasInitial)
                 {
-                    // Set total lines *after* the initial filtering gives the final count
-                    // This assumes the first UpdateFilterSettings call *after* Reset marks the end of initial lines processing.
+                    // If yes, THIS is where we mark initial load as complete
+                    lock (_stateLock) { _isInitialLoadInProgress = false; }
+                    Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Initial Load Filter Processing Complete (Flag Reset). _isInitialLoadInProgress=false");
+
+                    // Update total lines count *after* the initial filter calculation completes
                     long docCount = _logDocument.Count;
-                     // Update the total line count state *here* after initial load calculation
-                    Interlocked.Exchange(ref _currentLineIndex, docCount);
-                     // Publish the count to the ViewModel
-                    _totalLinesSubject.OnNext(docCount);
+                    Interlocked.Exchange(ref _currentLineIndex, docCount); 
+                    // Publish the final count after initial load is processed
+                    _uiContext.Post(_ => _totalLinesSubject.OnNext(docCount), null);
                     Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Updated TotalLinesSubject and _currentLineIndex after initial filter: {docCount}");
                 }
+
+                // Return the result for the pipeline
                 return new ReplaceFilteredUpdate(fullResult); // Map to ReplaceFilteredUpdate type
             });
 
@@ -135,21 +145,12 @@ public class ReactiveFilteredLogStream : IReactiveFilteredLogStream
             .ObserveOn(_uiContext) // Switch to UI thread *before* the final subscription
             .Subscribe(
                 update => { // Receives ReplaceFilteredUpdate OR AppendFilteredUpdate
-                    Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Sending {update.GetType().Name} to UI. Lines={update.Lines.Count}. _isInitialLoadInProgress(BeforeSend) = {_isInitialLoadInProgress}");
-                    bool wasInitialLoad = false;
-                    lock (_stateLock) { wasInitialLoad = _isInitialLoadInProgress; }
-
+                    // Just forward the update
                     _filteredUpdatesSubject.OnNext(update); // Emit the update
 
-                    // If this update was the result of the initial load (always a Replace), mark initial load as finished
-                    if (wasInitialLoad && update is ReplaceFilteredUpdate)
-                    {
-                        lock (_stateLock) { _isInitialLoadInProgress = false; }
-                        Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Initial Load Filter Complete. _isInitialLoadInProgress=false");
-                    }
                 },
                 ex => {
-                    lock (_stateLock) { _isInitialLoadInProgress = false; } // Ensure flag is reset on error
+                    // DO NOT reset _isInitialLoadInProgress here, Reset() or successful completion handles it.
                     HandlePipelineError("Log Processing Pipeline Error", ex);
                 }
             );
@@ -162,12 +163,13 @@ public class ReactiveFilteredLogStream : IReactiveFilteredLogStream
 
     public void UpdateFilterSettings(IFilter newFilter, int contextLines)
     {
+        Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: UpdateFilterSettings METHOD ENTERED. Filter='{newFilter?.GetType().Name ?? "null"}', Context={contextLines}");
         var filterToUse = newFilter ?? new TrueFilter();
         var contextToUse = Math.Max(0, contextLines);
 
         // Trigger the pipeline responsible for settings changes
         _filterChangeTriggerSubject.OnNext((filterToUse, contextToUse));
-        Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: UpdateFilterSettings called. Triggering full re-filter.");
+        Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: UpdateFilterSettings PUSHED to _filterChangeTriggerSubject.");
     }
 
     public void Reset()

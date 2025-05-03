@@ -229,7 +229,6 @@ public partial class MainWindow : Window, IDisposable
 
                 // Get the brush from the TextView's Tag property (where we stored the resource)
                 var highlightBrush = _logOutputEditor.TextArea.TextView.Tag as Brush;
-                Debug.WriteLine($"ViewModel_PropertyChanged: Updating transformer. Line={newLineNumberInFilteredDoc}, Brush={(highlightBrush?.ToString() ?? "null")}");
 
                 // Update the transformer state (this method handles redraw)
                 _selectedIndexTransformer.UpdateState(newLineNumberInFilteredDoc, highlightBrush, _logOutputEditor.TextArea.TextView);
@@ -242,7 +241,6 @@ public partial class MainWindow : Window, IDisposable
             }
         }
 
-        Debug.WriteLine($"ViewModel_PropertyChanged: {e.PropertyName} _viewModel.JumpStatusMessage: {_viewModel.JumpStatusMessage} _viewModel.HighlightedOriginalLineNumber: {_viewModel.HighlightedOriginalLineNumber} _viewModel.TargetOriginalLineNumberInput: {_viewModel.TargetOriginalLineNumberInput}");
         // Clear Status Message on Successful Jump ---
         // Optional: Could also be done via a timer in the ViewModel
         if (e.PropertyName == nameof(MainViewModel.HighlightedOriginalLineNumber) &&
