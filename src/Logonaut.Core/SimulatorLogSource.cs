@@ -14,7 +14,8 @@ public class SimulatorLogSource : ISimulatorLogSource
     private bool _isRunning = false;
     private bool _isDisposed = false;
     private long _lineCounter = 0;
-    private readonly string[] _logLevels = { "INFO", "WARN", "ERROR", "DEBUG", "TRACE" };
+    private int _errorFrequency = 100; // Default: 1 error every 100 lines
+    private readonly string[] _logLevels = { "INFO", "WARN", "DEBUG", "TRACE" };
     private readonly Random _random = new();
     private readonly object _lock = new object();
 
@@ -163,6 +164,20 @@ public class SimulatorLogSource : ISimulatorLogSource
             }
         });
     }
+
+    public int ErrorFrequency
+    {
+        get => _errorFrequency;
+        set
+        {
+            lock (_lock) // Protect access if set externally while running
+            {
+                _errorFrequency = Math.Max(1, value); // Ensure frequency is at least 1
+                Debug.WriteLine($"---> SimulatorLogSource: Error Frequency set to 1 in {_errorFrequency}");
+            }
+        }
+    }
+
     #endregion // --- End ISimulatorLogSource Methods ---
 
     #region Internal & Private Methods
@@ -177,29 +192,41 @@ public class SimulatorLogSource : ISimulatorLogSource
 
     private void GenerateLogLineCallback(object? state)
     {
-        if (!_isRunning || _isDisposed || _timer == null) return; // Recheck state inside callback
+        if (!_isRunning || _isDisposed || _timer == null) return;
 
-        try
+        long currentLine = Interlocked.Increment(ref _lineCounter);
+        string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
+
+        string level;
+        string message;
+        int currentErrorFrequency; // Read the value safely inside the callback context
+        lock (_lock)
         {
-            long currentLine = Interlocked.Increment(ref _lineCounter);
-            string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
-            string level = _logLevels[_random.Next(_logLevels.Length)];
-            string message = GenerateRandomMessage(currentLine);
-            string logLine = $"{timestamp} [{level}] {message}";
-            _logLinesSubject.OnNext(logLine);
+            currentErrorFrequency = _errorFrequency;
         }
-        catch (Exception ex)
+
+        // --- Determine Level based on Frequency ---
+        // Check if this line number is a multiple of the frequency
+        if (currentLine > 0 && currentErrorFrequency > 0 && (currentLine % currentErrorFrequency == 0))
         {
-             Debug.WriteLine($"!!! SimulatorLogSource: Error in generation callback: {ex.Message}");
-             // Consider stopping on error?
-             // Stop();
-             // _logLinesSubject.OnError(ex); // Propagate?
+            level = "ERROR";
+            // Generate a specific error message or reuse random
+            message = $"ERROR: Service API fail. Attempt {currentLine % 50 + 1}.";
         }
+        else
+        {
+            // Original random logic
+            level = _logLevels[_random.Next(_logLevels.Length)];
+            message = GenerateRandomMessage(currentLine); // Original random message logic
+        }
+
+        string logLine = $"{timestamp} [{level}] {message}";
+        _logLinesSubject.OnNext(logLine);
     }
 
     private string GenerateRandomMessage(long lineNumber)
     {
-        int choice = _random.Next(10);
+        int choice = _random.Next(20);
         return choice switch
         {
             0 => $"Processing request {lineNumber % 1000}",
@@ -209,8 +236,7 @@ public class SimulatorLogSource : ISimulatorLogSource
             4 => $"Cache miss: user_prefs_{_random.Next(100)}",
             5 => "System health check OK.",
             6 => $"WARN: High CPU: {_random.Next(85, 99)}%",
-            7 => $"ERROR: Service API fail. Attempt {lineNumber % 3 + 1}.",
-            8 => "Config reloaded.",
+            7 => "Config reloaded.",
             _ => $"Background task {lineNumber}.",
         };
     }

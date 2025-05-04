@@ -449,6 +449,15 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _simulatorLogSource?.UpdateRate((int)Math.Round(value));
     }
 
+    [ObservableProperty] private double _simulatorErrorFrequency = 100.0;
+    partial void OnSimulatorErrorFrequencyChanged(double value)
+    {
+        if (_simulatorLogSource != null)
+        {
+            _simulatorLogSource.ErrorFrequency = (int)Math.Round(value); // Update the source
+        }
+    }
+
     [ObservableProperty] private double _simulatorBurstSize = 1000; // Default burst size (will be bound to slider)
 
     #endregion // Simulator Configuration UI State & Properties
@@ -530,7 +539,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             }
 
             _simulatorLogSource.LinesPerSecond = (int)Math.Round(SimulatorLPS);
-            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> StartSimulatorLogic: Configured Simulator LPS to {SimulatorLPS}.");
+            _simulatorLogSource.ErrorFrequency = (int)Math.Round(SimulatorErrorFrequency);
 
             // --- Switch Active Source & Processor ---
             DisposeAndClearFilteredStream();

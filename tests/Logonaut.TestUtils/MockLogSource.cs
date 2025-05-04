@@ -155,6 +155,14 @@ public class MockLogSource : ISimulatorLogSource
     {
         throw new NotImplementedException("Burst generation not implemented in MockLogSource.");
     }
+    public int ErrorFrequency
+    {
+        get => 0;
+        set
+        {
+            throw new NotImplementedException("Error frequency not applicable in MockLogSource.");
+        }
+    }
 
     // --- IDisposable ---
 

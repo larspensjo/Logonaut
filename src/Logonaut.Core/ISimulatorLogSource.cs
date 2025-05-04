@@ -64,4 +64,10 @@ public interface ISimulatorLogSource : ILogSource
     /// <param name="lineCount">The number of lines to generate.</param>
     /// <returns>A task that completes when the burst generation is finished.</returns>
     Task GenerateBurstAsync(int lineCount);
+
+    /// <summary>
+    /// Gets or sets the approximate frequency of ERROR messages (1 error every N lines).
+    /// Minimum value is 1.
+    /// </summary>
+    public int ErrorFrequency  { get; set; }
 }

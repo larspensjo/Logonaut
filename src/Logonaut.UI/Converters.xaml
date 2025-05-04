@@ -23,4 +23,10 @@
                                           MinSliderValue="0"
                                           MaxSliderValue="100"/>
 
+    <converters:ExponentialValueConverter x:Key="ErrorFrequencyConverter"
+                                          MinTargetValue="1"
+                                          MaxTargetValue="100000"
+                                          MinSliderValue="0"
+                                          MaxSliderValue="100"/>
+
 </ResourceDictionary>

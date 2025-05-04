@@ -318,6 +318,7 @@
                             <Slider Name="LpsSlider"
                                     Minimum="0" Maximum="100" SmallChange="1" LargeChange="5"
                                     IsSnapToTickEnabled="True" TickFrequency="1"
+                                    ToolTip="Adjust how fast the log is written, as measured in lines per second."
                                     Value="{Binding SimulatorLPS, Mode=TwoWay, Converter={StaticResource LpsConverter}}"
                                     Margin="0,0,0,2">
                             </Slider>
@@ -325,6 +326,19 @@
                                        Foreground="{DynamicResource Overlay.ForegroundBrush}"
                                        HorizontalAlignment="Center" Margin="0,0,0,10"/>
 
+                            <!-- ERROR FREQUENCY CONTROLS === -->
+                            <TextBlock Text="Error Frequency (1 in N lines):"
+                                       Foreground="{DynamicResource Overlay.ForegroundBrush}"
+                                       Margin="0,10,0,2"/>
+                            <Slider Minimum="0" Maximum="100" SmallChange="1" LargeChange="10"
+                                    IsSnapToTickEnabled="False"
+                                    ToolTip="Adjust how often ERROR messages are generated (1 = every line, 100000 = very rare)."
+                                    Value="{Binding SimulatorErrorFrequency, Mode=TwoWay, Converter={StaticResource ErrorFrequencyConverter}}"
+                                    Margin="0,0,0,2"/>
+                            <TextBlock Text="{Binding SimulatorErrorFrequency, StringFormat='1 in {0:N0}'}"
+                                       Foreground="{DynamicResource Overlay.ForegroundBrush}"
+                                       HorizontalAlignment="Center" Margin="0,0,0,10"/>
+ 
                             <!-- BURST CONTROLS -->
                             <Separator Margin="0,15"/>
 
@@ -334,6 +348,7 @@
                             <Slider Name="BurstSlider"
                                     Minimum="0" Maximum="100" SmallChange="1" LargeChange="10"
                                     IsSnapToTickEnabled="False"
+                                    ToolTip="Adjust how many lines to generate in a burst. Big values can slow down the UI."
                                     Value="{Binding SimulatorBurstSize, Mode=TwoWay, Converter={StaticResource BurstSizeConverter}}"
                                     Margin="0,0,0,2"/>
                             <TextBlock Text="{Binding SimulatorBurstSize, StringFormat='{}{0:N0} Lines'}"
