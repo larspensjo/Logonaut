@@ -54,6 +54,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private readonly ILogSourceProvider _sourceProvider;
     public static readonly object LoadingToken = new();
     public static readonly object FilteringToken = new();
+    public static readonly object BurstToken = new();
     private readonly IFileDialogService _fileDialogService;
     private readonly ISettingsService _settingsService;
     [ObservableProperty] private ILogSource _currentActiveLogSource;
@@ -381,7 +382,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     // Bound to the UI's BusyIndicator; the indicator spins if this collection is not empty.
     // Add/remove specific tokens (e.g., LoadingToken) to control the busy state.
     public ObservableCollection<object> CurrentBusyStates { get; } = new();
-    public bool IsLoading => CurrentBusyStates.Contains(LoadingToken);
+    public bool IsLoading => CurrentBusyStates.Contains(LoadingToken) || CurrentBusyStates.Contains(BurstToken);
 
     // Controls whether search is case sensitive
     [ObservableProperty]
@@ -470,26 +471,28 @@ public partial class MainViewModel : ObservableObject, IDisposable
         if (burstCount <= 0) return;
 
         // Add busy indicator token
-        object burstToken = new(); // Unique token for this operation
-        _uiContext.Post(_ => CurrentBusyStates.Add(burstToken), null);
-        Debug.WriteLine($"---> GenerateBurst: Starting burst of {burstCount} lines.");
+        _uiContext.Post(_ => CurrentBusyStates.Add(BurstToken), null);
+        Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> GenerateBurst: Starting burst of {burstCount} lines. Adding BurstToken to busy states.");
 
         try
         {
             // Call the simulator's burst method
             await _simulatorLogSource.GenerateBurstAsync(burstCount);
-            Debug.WriteLine($"---> GenerateBurst: Burst generation task completed for {burstCount} lines.");
+            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> GenerateBurst: Burst generation task completed for {burstCount} lines.");
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"!!! GenerateBurst: Error during burst: {ex.Message}");
+            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}!!! GenerateBurst: Error during burst: {ex.Message}");
             // Show error to user
             MessageBox.Show($"Error generating burst: {ex.Message}", "Burst Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
             // Ensure busy indicator token is removed
-            _uiContext.Post(_ => CurrentBusyStates.Remove(burstToken), null);
+            _uiContext.Post(_ => {
+                CurrentBusyStates.Remove(BurstToken);
+                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> GenerateBurst: Removing BurstToken from busy states.");
+            }, null);
         }
     }
 
