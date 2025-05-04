@@ -90,7 +90,7 @@ The requirement ID is a unique ID that can be referenced from the source code an
     *   [ReqShortcutSearchSelectedv2] `Ctrl+F3`: Search for Selected Text (when log view focused)
     *   [ReqShortcutFindNextv1] `F3`: Find Next Search Result
     *   [ReqShortcutFindPreviousv1] `Shift+F3`: Find Previous Search Result
-    *   [ReqShortcutToggleSimulatorV1] `Ctrl+Alt+Shift+S`: Toggle Simulator Configuration Panel visibility.
+    *   [ReqShortcutToggleSimulatorV2] `F12`: Toggle Simulator Configuration Panel visibility.
 *   [ReqUIResponsivenessv1] **Responsiveness:** The UI must remain responsive during filtering and log updates, using background processing and visual indicators for long operations.
 
 ## 6. Configuration and Persistence

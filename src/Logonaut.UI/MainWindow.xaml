@@ -18,7 +18,7 @@
         <KeyBinding Modifiers="Ctrl" Key="F" Command="{x:Static local:MainWindow.FocusSearchCommand}"/>
         <KeyBinding Key="F3" Command="{Binding NextSearchCommand}" />
         <KeyBinding Key="F3" Modifiers="Shift" Command="{Binding PreviousSearchCommand}" />
-        <KeyBinding Modifiers="Ctrl+Alt+Shift" Key="S" Command="{x:Static local:MainWindow.ToggleSimulatorConfigCommand}"/>
+        <KeyBinding Key="F12" Command="{x:Static local:MainWindow.ToggleSimulatorConfigCommand}"/>
     </Window.InputBindings>
 
     <Window.Resources>
