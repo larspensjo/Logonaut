@@ -62,6 +62,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private readonly SynchronizationContext _uiContext;
     private IReactiveFilteredLogStream _reactiveFilteredLogStream; // This will be recreated when switching sources
 
+    private readonly HashSet<int> _existingOriginalLineNumbers = new HashSet<int>(); // A helper HashSet to efficiently track existing original line numbers
+
     // --- Simulator Specific Fields ---
     private ISimulatorLogSource? _simulatorLogSource; // Keep a dedicated instance
     private ILogSource? _fileLogSource; // Keep a reference to the file source instance
@@ -1010,31 +1012,61 @@ public partial class MainViewModel : ObservableObject, IDisposable
     *   - Scheduling direct TextEditor.Document updates (Append/Replace) on the UI thread.
     *   - Managing busy indicators (FilteringToken, LoadingToken).
     *   - Preserving highlighted line selection during Replace updates.
+    *   - Ensuring unique original line numbers during Append updates.
     *
     * Accepts explicit FilteredUpdateBase subtypes (ReplaceFilteredUpdate or AppendFilteredUpdate).
     */
     private void ApplyFilteredUpdate(FilteredUpdateBase update)
     {
         bool wasInitialLoad = CurrentBusyStates.Contains(LoadingToken);
+        bool linesAdded = false; // Track if any lines were actually added in append
 
-        if (update is AppendFilteredUpdate appendUpdate) // <<< Use type pattern matching
+        if (update is AppendFilteredUpdate appendUpdate)
         {
-            // 1. Add only the new lines from the Append update
-            AddFilteredLines(appendUpdate.Lines); // This contains ONLY the new/context lines
-            // 2. Schedule the append text operation for AvalonEdit
-            ScheduleLogTextAppend(appendUpdate.Lines);
-            // 3. Trigger Auto-Scroll if enabled
-            if (IsAutoScrollEnabled) RequestScrollToEnd?.Invoke(this, EventArgs.Empty);
-            // 4. Reset BusyFiltering (Append means this batch is done)
+            var linesActuallyAdded = new List<FilteredLogLine>(); // Store only the truly new lines for editor append
+
+            // --- Check for duplicates before adding ---
+            foreach (var lineToAdd in appendUpdate.Lines)
+            {
+                // Add only if the original line number is not already present
+                if (_existingOriginalLineNumbers.Add(lineToAdd.OriginalLineNumber))
+                {
+                    FilteredLogLines.Add(lineToAdd); // Add to UI collection
+                    linesActuallyAdded.Add(lineToAdd); // Add to list for editor update
+                    linesAdded = true;
+                }
+                // Optional: Handle the case where a line previously added as context now arrives as a match?
+                // For now, just preventing duplicates is the main goal. We could potentially update
+                // the IsContextLine flag on the existing entry if needed, but it adds complexity.
+            }
+
+            // Only proceed if lines were actually added
+            if (linesAdded)
+            {
+                OnPropertyChanged(nameof(FilteredLogLinesCount));
+                ScheduleLogTextAppend(linesActuallyAdded);
+                if (IsAutoScrollEnabled) RequestScrollToEnd?.Invoke(this, EventArgs.Empty);
+            }
+
             _uiContext.Post(_ => { CurrentBusyStates.Remove(FilteringToken); }, null);
         }
         else if (update is ReplaceFilteredUpdate replaceUpdate)
         {
             int originalLineToRestore = HighlightedOriginalLineNumber;
-            ReplaceFilteredLines(replaceUpdate.Lines);
-            ScheduleLogTextUpdate(FilteredLogLines);
 
-            // --- Replace Highlight Restore Logic ---
+            // --- Clear tracking set before replacing ---
+            _existingOriginalLineNumbers.Clear();
+
+            ReplaceFilteredLines(replaceUpdate.Lines); // This clears FilteredLogLines
+
+            // --- Re-populate tracking set ---
+            foreach (var line in replaceUpdate.Lines)
+            {
+                _existingOriginalLineNumbers.Add(line.OriginalLineNumber);
+            }
+
+            ScheduleLogTextUpdate(FilteredLogLines); // Update editor with the full new text
+
             if (originalLineToRestore > 0)
             {
                 int newIndex = FilteredLogLines
@@ -1045,11 +1077,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
             else
             {
                 // No line to restore, ensure highlight is cleared
-                 _uiContext.Post(_ => { HighlightedFilteredLineIndex = -1; }, null);
+                _uiContext.Post(_ => { HighlightedFilteredLineIndex = -1; }, null);
             }
 
-            // Replace means this full filtering pass is done.
-            // If it also completed the initial load, remove the loading token.
             _uiContext.Post(_ => {
                 CurrentBusyStates.Remove(FilteringToken);
                 // Only remove LoadingToken if this update signals the *completion*
@@ -1059,7 +1089,6 @@ public partial class MainViewModel : ObservableObject, IDisposable
                     CurrentBusyStates.Remove(LoadingToken);
                     Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} ApplyFilteredUpdate: LoadingToken removed (InitialLoadComplete).");
                 }
-                // REMOVED the unconditional removal based only on wasInitialLoad
             }, null);
         }
         else
