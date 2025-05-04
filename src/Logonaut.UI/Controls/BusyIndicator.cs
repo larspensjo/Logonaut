@@ -1,233 +1,385 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.Diagnostics;
 using System.Linq;
 using System.Windows;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 
-namespace Logonaut.UI.Controls
+namespace Logonaut.UI.Controls;
+
+
+/// <summary>
+/// A lightweight FrameworkElement that draws a themeable, rotating arc spinner animation
+/// when its ActiveStates collection is not empty, utilizing CompositionTarget.Rendering for updates.
+/// </summary>
+public class BusyIndicator : FrameworkElement
 {
-    /// <summary>
-    /// A lightweight FrameworkElement that draws a themeable, rotating arc spinner animation
-    /// when its ActiveStates collection is not empty, utilizing CompositionTarget.Rendering for updates.
-    /// </summary>
-    public class BusyIndicator : FrameworkElement
+    // Inside BusyIndicator.cs (or a relevant namespace)
+    private enum AnimationState
     {
-        private const double DegreesPerSecond = 360.0; // Speed of one full rotation
-        private double _currentAngle = 0.0;
-        private TimeSpan _lastRenderTime = TimeSpan.Zero;
-        private bool _isSubscribedToRendering = false;
+        Idle,       // Not visible or spinning
+        Spinning,   // Visible, spinning, full opacity
+        FadingOut   // Visible, not spinning, opacity decreasing
+    }
 
-        #region Dependency Properties
+    // Inside BusyIndicator class
+    private AnimationState _currentState = AnimationState.Idle;
 
-        public static readonly DependencyProperty ActiveStatesProperty =
-            DependencyProperty.Register(
-                nameof(ActiveStates),
-                typeof(ObservableCollection<object>),
-                typeof(BusyIndicator),
-                // Default value is null. Binding will provide the actual collection.
-                // Callback is essential to hook/unhook collection changed handler.
-                new FrameworkPropertyMetadata(null, OnActiveStatesChanged));
+    public bool DebugIsIdle => _currentState == AnimationState.Idle;
+    public bool DebugIsSpinning => _currentState == AnimationState.Spinning;
+    public bool DebugIsFadingOut => _currentState == AnimationState.FadingOut;
 
-        // --- Standard get/set wrapper ---
-        public ObservableCollection<object> ActiveStates
+    private readonly Storyboard _fadeOutStoryboard;
+    private const double FadeOutDurationSeconds = 0.5;
+
+    private const double DegreesPerSecond = 360.0; // Speed of one full rotation
+    private double _currentAngle = 0.0;
+    private TimeSpan _lastRenderTime = TimeSpan.Zero;
+    private bool _isSubscribedToRendering = false;
+
+    #region Dependency Properties
+
+    public static readonly DependencyProperty ActiveStatesProperty =
+        DependencyProperty.Register(
+            nameof(ActiveStates),
+            typeof(ObservableCollection<object>),
+            typeof(BusyIndicator),
+            // Default value is null. Binding will provide the actual collection.
+            // Callback is essential to hook/unhook collection changed handler.
+            new FrameworkPropertyMetadata(null, OnActiveStatesChanged));
+
+    // --- Standard get/set wrapper ---
+    public ObservableCollection<object> ActiveStates
+    {
+        get => (ObservableCollection<object>)GetValue(ActiveStatesProperty);
+        set => SetValue(ActiveStatesProperty, value); // Standard setter
+    }
+
+    // SpinnerBrush: Defines the color of the spinner arc. Allows theme overrides.
+    public static readonly DependencyProperty SpinnerBrushProperty =
+        DependencyProperty.Register(nameof(SpinnerBrush), typeof(Brush), typeof(BusyIndicator),
+            new FrameworkPropertyMetadata(Brushes.DimGray, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    public Brush SpinnerBrush
+    {
+        get => (Brush)GetValue(SpinnerBrushProperty);
+        set => SetValue(SpinnerBrushProperty, value);
+    }
+
+    // SpinnerThickness: Defines the stroke thickness of the arc. Allows theme overrides.
+    public static readonly DependencyProperty SpinnerThicknessProperty =
+        DependencyProperty.Register(nameof(SpinnerThickness), typeof(double), typeof(BusyIndicator),
+            new FrameworkPropertyMetadata(2.0, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    public double SpinnerThickness
+    {
+        get => (double)GetValue(SpinnerThicknessProperty);
+        set => SetValue(SpinnerThicknessProperty, value);
+    }
+
+    // SpeedRatio: Modifies the default rotation speed.
+    public static readonly DependencyProperty SpeedRatioProperty =
+        DependencyProperty.Register(nameof(SpeedRatio), typeof(double), typeof(BusyIndicator),
+            new FrameworkPropertyMetadata(1.0));
+
+    public double SpeedRatio
+    {
+        get => (double)GetValue(SpeedRatioProperty);
+        set => SetValue(SpeedRatioProperty, value);
+    }
+
+    #endregion
+
+    // Static constructor for overriding default metadata if needed
+    static BusyIndicator()
+    {
+        // Ensure the control is not focusable by default
+        FocusableProperty.OverrideMetadata(typeof(BusyIndicator), new FrameworkPropertyMetadata(false));
+    }
+
+    // Instance constructor
+    public BusyIndicator()
+    {
+        Debug.WriteLine($"[BI {this.GetHashCode():X}] Constructor Start. Initial State: {_currentState}");
+        IsVisibleChanged += BusyIndicator_IsVisibleChanged;
+
+        // --- Create Fade Out Animation ---
+        var fadeOutAnimation = new DoubleAnimation
         {
-            get => (ObservableCollection<object>)GetValue(ActiveStatesProperty);
-            set => SetValue(ActiveStatesProperty, value); // Standard setter
+            To = 0.0, // Fade to fully transparent
+            Duration = TimeSpan.FromSeconds(FadeOutDurationSeconds),
+            FillBehavior = FillBehavior.Stop // Stop holding the value after completion
+        };
+        Storyboard.SetTarget(fadeOutAnimation, this);
+        Storyboard.SetTargetProperty(fadeOutAnimation, new PropertyPath(FrameworkElement.OpacityProperty));
+
+        _fadeOutStoryboard = new Storyboard();
+        _fadeOutStoryboard.Children.Add(fadeOutAnimation);
+
+        // --- Handle Animation Completion ---
+        _fadeOutStoryboard.Completed += FadeOut_Completed;
+        Debug.WriteLine($"[BI {this.GetHashCode():X}] Constructor End. Opacity={Opacity}, Visibility={Visibility}");
+    }
+
+    // Storyboard completed handler
+    private void FadeOut_Completed(object? sender, EventArgs e)
+    {
+        Debug.WriteLine($"[BI {this.GetHashCode():X}] FadeOut_Completed FIRED. CurrentState={_currentState}");
+        // Only transition to Idle if we are still logically FadingOut.
+        if (_currentState == AnimationState.FadingOut)
+        {
+            Debug.WriteLine($"[BI {this.GetHashCode():X}] FadeOut_Completed - Transitioning to Idle.");
+            TransitionToState(AnimationState.Idle);
+        }
+        else
+        {
+            Debug.WriteLine($"[BI {this.GetHashCode():X}] FadeOut_Completed - Ignored (State is {_currentState}).");
+        }
+    }
+
+    // Central method to check state and update animation/visibility
+    private void UpdateAnimationState()
+    {
+        bool isActive = ActiveStates?.Any() ?? false;
+        // Determine target state SOLELY based on activity
+        AnimationState targetState = isActive ? AnimationState.Spinning : AnimationState.Idle;
+
+        Debug.WriteLine($"[BI {this.GetHashCode():X}] UpdateAnimationState - isActive={isActive}, CurrentState={_currentState}, TargetStateBasedOnActivity={targetState}");
+
+        // Calculate the next state based on current and target
+        AnimationState nextState = _currentState;
+        switch (_currentState)
+        {
+            case AnimationState.Idle:
+                if (targetState == AnimationState.Spinning) nextState = AnimationState.Spinning;
+                break;
+            case AnimationState.Spinning:
+                if (targetState == AnimationState.Idle) nextState = AnimationState.FadingOut; // Start fade when becoming inactive
+                break;
+            case AnimationState.FadingOut:
+                if (targetState == AnimationState.Spinning) nextState = AnimationState.Spinning; // Interrupt fade
+                // Stay FadingOut if target is Idle (let Completed handler finish)
+                break;
         }
 
-        // SpinnerBrush: Defines the color of the spinner arc. Allows theme overrides.
-        public static readonly DependencyProperty SpinnerBrushProperty =
-            DependencyProperty.Register(nameof(SpinnerBrush), typeof(Brush), typeof(BusyIndicator),
-                new FrameworkPropertyMetadata(Brushes.DimGray, FrameworkPropertyMetadataOptions.AffectsRender));
-
-        public Brush SpinnerBrush
+        // Trigger the transition if needed
+        if (nextState != _currentState)
         {
-            get => (Brush)GetValue(SpinnerBrushProperty);
-            set => SetValue(SpinnerBrushProperty, value);
+            Debug.WriteLine($"[BI {this.GetHashCode():X}] UpdateAnimationState - Requesting transition from {_currentState} to {nextState}");
+            TransitionToState(nextState);
         }
-
-        // SpinnerThickness: Defines the stroke thickness of the arc. Allows theme overrides.
-        public static readonly DependencyProperty SpinnerThicknessProperty =
-            DependencyProperty.Register(nameof(SpinnerThickness), typeof(double), typeof(BusyIndicator),
-                new FrameworkPropertyMetadata(2.0, FrameworkPropertyMetadataOptions.AffectsRender));
-
-        public double SpinnerThickness
+        else
         {
-            get => (double)GetValue(SpinnerThicknessProperty);
-            set => SetValue(SpinnerThicknessProperty, value);
+            Debug.WriteLine($"[BI {this.GetHashCode():X}] UpdateAnimationState - No state change needed from {_currentState}.");
         }
+    }
 
-        // SpeedRatio: Modifies the default rotation speed.
-        public static readonly DependencyProperty SpeedRatioProperty =
-            DependencyProperty.Register(nameof(SpeedRatio), typeof(double), typeof(BusyIndicator),
-                new FrameworkPropertyMetadata(1.0));
+    // --- State Transition Logic ---
+    private void TransitionToState(AnimationState newState)
+    {
+        if (_currentState == newState) return; // No change
 
-        public double SpeedRatio
+        var previousState = _currentState;
+        Debug.WriteLine($"[BI {this.GetHashCode():X}] TransitionToState START - From: {previousState}, To: {newState}");
+        _currentState = newState; // Set the new state immediately
+
+        // Stop animations/subscriptions of the PREVIOUS state
+        if (previousState == AnimationState.Spinning) StopSpinningAnimation();
+        else if (previousState == AnimationState.FadingOut) StopFadeOutAnimation();
+
+        // Configure the NEW state
+        switch (newState)
         {
-            get => (double)GetValue(SpeedRatioProperty);
-            set => SetValue(SpeedRatioProperty, value);
+            case AnimationState.Idle:
+                Debug.WriteLine($"[BI {this.GetHashCode():X}] TransitionToState(Idle) - Setting Opacity=0.0, Visibility=Collapsed. Stopping animations.");
+                StopSpinningAnimation();
+                StopFadeOutAnimation();
+                Opacity = 0.0;
+                Visibility = Visibility.Collapsed; // <<< SET VISIBILITY TO COLLAPSED
+                break;
+
+            case AnimationState.Spinning:
+                Debug.WriteLine($"[BI {this.GetHashCode():X}] TransitionToState(Spinning) - Setting Opacity=1.0, Visibility=Visible and starting spin.");
+                StopFadeOutAnimation(); // Stop fade if interrupting
+                Opacity = 1.0;
+                Visibility = Visibility.Visible;   // <<< SET VISIBILITY TO VISIBLE
+                StartSpinningAnimation(); // Start the render loop
+                break;
+
+            case AnimationState.FadingOut:
+                Debug.WriteLine($"[BI {this.GetHashCode():X}] TransitionToState(FadingOut) - Setting Visibility=Visible. Starting fade storyboard.");
+                StopSpinningAnimation(); // Ensure render loop is stopped first
+                Visibility = Visibility.Visible;   // <<< SET VISIBILITY TO VISIBLE (Must be visible for fade)
+                // Opacity should be 1.0 from Spinning state. StartFade will ensure it.
+                StartFadeOutAnimation(); // Start the storyboard
+                break;
         }
+        Debug.WriteLine($"[BI {this.GetHashCode():X}] TransitionToState END - Current State: {_currentState}. Opacity={Opacity}, Visibility={Visibility}");
+    }
 
-        #endregion
-
-        // Static constructor for overriding default metadata if needed
-        static BusyIndicator()
+    // --- Helper methods to manage animations ---
+    private void StartSpinningAnimation()
+    {
+        if (!_isSubscribedToRendering)
         {
-            // Ensure the control is not focusable by default
-            FocusableProperty.OverrideMetadata(typeof(BusyIndicator), new FrameworkPropertyMetadata(false)); // Changed owner type
+            Debug.WriteLine($"[BI {this.GetHashCode():X}] StartSpinningAnimation - Subscribing to CompositionTarget.Rendering.");
+            _lastRenderTime = TimeSpan.Zero;
+            CompositionTarget.Rendering += OnRendering;
+            _isSubscribedToRendering = true;
+        } else {
+            Debug.WriteLine($"[BI {this.GetHashCode():X}] StartSpinningAnimation - Already subscribed.");
         }
+    }
 
-        // Instance constructor
-        public BusyIndicator()
+    private void StopSpinningAnimation()
+    {
+        if (_isSubscribedToRendering)
         {
-            this.IsVisibleChanged += BusyIndicator_IsVisibleChanged;
+            Debug.WriteLine($"[BI {this.GetHashCode():X}] StopSpinningAnimation - Unsubscribing from CompositionTarget.Rendering.");
+            CompositionTarget.Rendering -= OnRendering;
+            _isSubscribedToRendering = false;
+        } else {
+            Debug.WriteLine($"[BI {this.GetHashCode():X}] StopSpinningAnimation - Already unsubscribed.");
         }
+    }
 
-        // Callback when the ActiveStates DP *itself* changes (i.e., binding assigns a new collection)
-        private static void OnActiveStatesChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    private void StartFadeOutAnimation()
+    {
+        // Ensure Opacity starts at 1.0 for the fade, regardless of current actual value
+        // This helps if the state transition was interrupted.
+        Opacity = 1.0;
+        Debug.WriteLine($"[BI {this.GetHashCode():X}] StartFadeOutAnimation - Set Opacity={Opacity}. Beginning storyboard...");
+        _fadeOutStoryboard.Begin(this, true); // Use HandoffBehavior.SnapshotAndReplace
+    }
+
+    private void StopFadeOutAnimation()
+    {
+        // Check if the OpacityProperty has an animation clock associated with it.
+        if (this.HasAnimatedProperties)
         {
-            var indicator = (BusyIndicator)d;
-
-            // Unsubscribe from the old collection (if it existed and was INotifyCollectionChanged)
-            if (e.OldValue is INotifyCollectionChanged oldCollection)
-                oldCollection.CollectionChanged -= indicator.ActiveStates_CollectionChanged;
-
-            // Subscribe to the new collection (if it exists and is INotifyCollectionChanged)
-            if (e.NewValue is INotifyCollectionChanged newCollection)
-                newCollection.CollectionChanged += indicator.ActiveStates_CollectionChanged;
-
-            // Trigger initial state check based on the *newly bound* collection's state
-            indicator.UpdateRenderingBasedOnState();
-        }
-
-        // Handler for collection content changes (in the bound ViewModel's collection)
-        private void ActiveStates_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
-        {
-            UpdateRenderingBasedOnState();
-        }
-
-        private void BusyIndicator_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
-        {
-            // Update subscription based on new visibility AND collection state
-            UpdateRenderingBasedOnState();
-        }
-
-        // Central method to check state and update subscription
-        private void UpdateRenderingBasedOnState()
-        {
-            bool shouldBeSpinning = (ActiveStates?.Any() == true); // Check if collection has items
-            UpdateRenderingSubscription(shouldBeSpinning);
-        }
-
-        // Centralizes the logic for subscribing or unsubscribing from CompositionTarget.Rendering.
-        // Now takes a parameter indicating if spinning should occur.
-        private void UpdateRenderingSubscription(bool shouldBeSpinning)
-        {
-            // Subscribe only if shouldBeSpinning, visible, and not already subscribed.
-            bool shouldBeSubscribed = shouldBeSpinning && IsVisible;
-
-            if (shouldBeSubscribed && !_isSubscribedToRendering)
+            var clock = this.ReadLocalValue(OpacityProperty) as AnimationClock;
+            if (clock != null && clock.Controller != null) // Check clock and controller exist
             {
-                // Reset time when subscribing to avoid large initial jump
-                _lastRenderTime = TimeSpan.Zero;
-                CompositionTarget.Rendering += OnRendering;
-                _isSubscribedToRendering = true;
+                Debug.WriteLine($"[BI {this.GetHashCode():X}] StopFadeOutAnimation - Found active clock. Stopping storyboard.");
+                _fadeOutStoryboard.Stop(this);
+                 // It's often useful to immediately set the property to the animation's
+                 // target value when stopping prematurely, especially if FillBehavior=Stop.
+                 // Opacity = 0.0; // Explicitly set to final value on stop? Or let TransitionToState handle it? Let's let Transition handle it.
+            } else {
+                 Debug.WriteLine($"[BI {this.GetHashCode():X}] StopFadeOutAnimation - Opacity has clock but no controller? Clock State: {clock?.CurrentState}");
             }
-            else if (!shouldBeSubscribed && _isSubscribedToRendering)
-            {
-                // Unsubscribe if not spinning, not visible, or explicitly requested while subscribed.
-                CompositionTarget.Rendering -= OnRendering;
-                _isSubscribedToRendering = false;
-                // Also explicitly invalidate visual when stopping to clear the last frame
-                this.InvalidateVisual();
-            }
+        } else {
+            Debug.WriteLine($"[BI {this.GetHashCode():X}] StopFadeOutAnimation - No animated properties found.");
         }
+    }
 
-        // Event handler for CompositionTarget.Rendering. Updates animation state and triggers redraw.
-        private void OnRendering(object? sender, EventArgs e)
+    // Callback when the ActiveStates DP *itself* changes (i.e., binding assigns a new collection)
+    private static void OnActiveStatesChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        var indicator = (BusyIndicator)d;
+        Debug.WriteLine($"[BI {indicator.GetHashCode():X}] OnActiveStatesChanged - NewValue type: {e.NewValue?.GetType().Name ?? "null"}");
+        if (e.OldValue is INotifyCollectionChanged oldCollection)
         {
-            // Ensure we should still be rendering based on subscription status
-            if (!_isSubscribedToRendering)
-            {
-                 // This might happen if visibility/state changed between frame request and execution
-                 // Try to unsubscribe again just in case, though it should already be done.
-                 CompositionTarget.Rendering -= OnRendering;
-                 return;
-            }
-
-            // RenderingEventArgs doesn't exist in standard EventArgs, use RenderingTime directly
-            // RenderingEventArgs is the correct type, cast is needed.
-            var args = e as RenderingEventArgs ?? throw new InvalidOperationException("Invalid event args type for CompositionTarget.Rendering.");
-            var renderingTime = args.RenderingTime;
-
-            if (_lastRenderTime == TimeSpan.Zero) // Initialize on first frame after subscribe
-            {
-                _lastRenderTime = renderingTime;
-                return;
-            }
-
-            // Calculate elapsed time for frame-rate independent animation.
-            TimeSpan elapsed = renderingTime - _lastRenderTime;
-            // Prevent huge jumps if rendering was suspended (e.g., window minimized)
-            if (elapsed.TotalSeconds > 1.0) // Cap max elapsed time
-            {
-                elapsed = TimeSpan.FromSeconds(1.0 / 60.0); // Assume 60fps for catch-up frame
-            }
-
-            double deltaAngle = elapsed.TotalSeconds * DegreesPerSecond * SpeedRatio;
-
-            // Update animation state.
-            _currentAngle = (_currentAngle + deltaAngle) % 360;
-            _lastRenderTime = renderingTime;
-
-            // Schedule the OnRender method to be called.
-            this.InvalidateVisual();
+            oldCollection.CollectionChanged -= indicator.ActiveStates_CollectionChanged;
+             Debug.WriteLine($"[BI {indicator.GetHashCode():X}] OnActiveStatesChanged - Unsubscribed from old collection.");
         }
-
-        // Draws the spinner arc based on the current angle and properties.
-        protected override void OnRender(DrawingContext dc)
+        if (e.NewValue is INotifyCollectionChanged newCollection)
         {
-            // Only render if we are subscribed (i.e., ActiveStates has items and control is visible)
-            if (!_isSubscribedToRendering) return; // <<< MODIFIED Check
-
-            double width = ActualWidth;
-            double height = ActualHeight;
-            if (width <= 0 || height <= 0 || SpinnerThickness <= 0) return; // Avoid drawing if size is invalid
-
-            Point center = new Point(width / 2.0, height / 2.0);
-            // Radius calculation should account for half the thickness to fit within bounds.
-            double radius = Math.Min(width, height) / 2.0 - (SpinnerThickness / 2.0);
-            if (radius <= 0) return;
-
-            // Define start and end points for a 270-degree arc
-            Point startPoint = new Point(center.X + radius, center.Y);
-            Point endPoint = new Point(center.X, center.Y - radius);
-            Size arcSize = new Size(radius, radius);
-
-            var geometry = new StreamGeometry();
-            using (StreamGeometryContext ctx = geometry.Open())
-            {
-                ctx.BeginFigure(startPoint, isFilled: false, isClosed: false);
-                ctx.ArcTo(endPoint, arcSize, 0, true, SweepDirection.Clockwise, true, false);
-            }
-            geometry.Freeze(); // Optimize geometry performance.
-
-            var pen = new Pen(SpinnerBrush, SpinnerThickness)
-            {
-                StartLineCap = PenLineCap.Round,
-                EndLineCap = PenLineCap.Round
-            };
-            pen.Freeze(); // Optimize pen performance.
-
-            // Apply rotation transformation around the center.
-            dc.PushTransform(new RotateTransform(angle: _currentAngle, centerX: center.X, centerY: center.Y));
-
-            // Draw the single rotated arc geometry.
-            dc.DrawGeometry(brush: null, pen: pen, geometry: geometry);
-
-            // Restore the drawing context state.
-            dc.Pop();
+            newCollection.CollectionChanged += indicator.ActiveStates_CollectionChanged;
+             Debug.WriteLine($"[BI {indicator.GetHashCode():X}] OnActiveStatesChanged - Subscribed to new collection.");
         }
+        indicator.UpdateAnimationState();
+    }
+
+    // Handler for collection content changes (in the bound ViewModel's collection)
+    private void ActiveStates_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        Debug.WriteLine($"[BI {this.GetHashCode():X}] ActiveStates_CollectionChanged FIRED. Action={e.Action}");
+        UpdateAnimationState();
+    }
+
+    private void BusyIndicator_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        Debug.WriteLine($"[BI {this.GetHashCode():X}] IsVisibleChanged FIRED. NewValue={e.NewValue}, CurrentState={_currentState}");
+        bool isNowVisible = (bool)e.NewValue == true;
+
+        if (!isNowVisible && _currentState != AnimationState.Idle)
+        {
+            // If hidden externally, force the Idle state immediately.
+            Debug.WriteLine($"[BI {this.GetHashCode():X}] IsVisibleChanged - Became Hidden. Forcing transition to Idle from {_currentState}.");
+            TransitionToState(AnimationState.Idle);
+        }
+        else if (isNowVisible && _currentState == AnimationState.Spinning)
+        {
+             // *** If we became visible AND we are supposed to be spinning, ensure rendering starts ***
+             Debug.WriteLine($"[BI {this.GetHashCode():X}] IsVisibleChanged - Became Visible while logically Spinning. Ensuring render loop is active.");
+             StartSpinningAnimation(); // Make sure rendering is subscribed
+             this.InvalidateVisual(); // Force a redraw check
+        }
+         else if (isNowVisible && _currentState == AnimationState.FadingOut)
+        {
+             // *** If we became visible AND we are supposed to be fading, ensure storyboard starts ***
+              Debug.WriteLine($"[BI {this.GetHashCode():X}] IsVisibleChanged - Became Visible while logically FadingOut. Ensuring fade storyboard is active.");
+              StartFadeOutAnimation(); // Make sure fade runs
+        }
+         // No action needed if became visible and state is Idle (UpdateAnimationState handles this if ActiveStates changes later)
+    }
+
+    // Event handler for CompositionTarget.Rendering. Updates animation state and triggers redraw.
+    private void OnRendering(object? sender, EventArgs e)
+    {
+        if (!_isSubscribedToRendering)
+        {
+            Debug.WriteLine($"[BI {this.GetHashCode():X}] OnRendering - EXITING (Not subscribed).");
+             // Defensive unsubscribe
+            CompositionTarget.Rendering -= OnRendering;
+            return;
+        }
+        // Debug.WriteLineIf(_isSubscribedToRendering, $"[BI {this.GetHashCode():X}] OnRendering TICK."); // Can be very noisy
+
+        var args = e as RenderingEventArgs ?? throw new InvalidOperationException("Invalid event args type for CompositionTarget.Rendering.");
+        var renderingTime = args.RenderingTime;
+        if (_lastRenderTime == TimeSpan.Zero) { _lastRenderTime = renderingTime; return; }
+
+        TimeSpan elapsed = renderingTime - _lastRenderTime;
+        if (elapsed.TotalSeconds > 1.0) { elapsed = TimeSpan.FromSeconds(1.0 / 60.0); }
+
+        double deltaAngle = elapsed.TotalSeconds * DegreesPerSecond * SpeedRatio;
+        _currentAngle = (_currentAngle + deltaAngle) % 360;
+        _lastRenderTime = renderingTime;
+
+        InvalidateVisual(); // Schedule OnRender
+    }
+
+    // Draws the spinner arc based on the current angle and properties.
+    protected override void OnRender(DrawingContext dc)
+    {
+        if (!IsVisible || _currentState != AnimationState.Spinning)
+        {
+            // Debug.WriteLine($"[BI {this.GetHashCode():X}] OnRender - SKIPPING (State: {_currentState})");
+            return; // Only render when spinning
+        }
+        // Debug.WriteLine($"[BI {this.GetHashCode():X}] OnRender - DRAWING (State: {_currentState})");
+
+        // --- Drawing logic remains the same ---
+        double width = ActualWidth;
+        double height = ActualHeight;
+        if (width <= 0 || height <= 0 || SpinnerThickness <= 0) return;
+        Point center = new Point(width / 2.0, height / 2.0);
+        double radius = Math.Min(width, height) / 2.0 - (SpinnerThickness / 2.0);
+        if (radius <= 0) return;
+        Point startPoint = new Point(center.X + radius, center.Y);
+        Point endPoint = new Point(center.X, center.Y - radius);
+        Size arcSize = new Size(radius, radius);
+        var geometry = new StreamGeometry();
+        using (StreamGeometryContext ctx = geometry.Open()) { ctx.BeginFigure(startPoint, false, false); ctx.ArcTo(endPoint, arcSize, 0, true, SweepDirection.Clockwise, true, false); }
+        geometry.Freeze();
+        var pen = new Pen(SpinnerBrush, SpinnerThickness) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+        pen.Freeze();
+        dc.PushTransform(new RotateTransform(angle: _currentAngle, centerX: center.X, centerY: center.Y));
+        dc.DrawGeometry(brush: null, pen: pen, geometry: geometry);
+        dc.Pop();
     }
 }
