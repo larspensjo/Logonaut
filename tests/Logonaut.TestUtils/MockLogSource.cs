@@ -157,11 +157,8 @@ public class MockLogSource : ISimulatorLogSource
     }
     public int ErrorFrequency
     {
-        get => 0;
-        set
-        {
-            throw new NotImplementedException("Error frequency not applicable in MockLogSource.");
-        }
+        get;
+        set;
     }
 
     // --- IDisposable ---

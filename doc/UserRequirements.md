@@ -105,7 +105,7 @@ The requirement ID is a unique ID that can be referenced from the source code an
     *   [ReqPersistSettingSearchCasev1] Search options (case sensitivity toggle state).
     *   [ReqPersistSettingAutoScrollv1] **Auto scroll to tail toggle state.**
     *   [ReqPersistSettingThemev1] Selected theme.
-    *   *(Future: Last viewed file/position, window size/location)*.
+    *   [ReqPersistSettingSimulatorV1] **Simulator Settings:** Simulator configuration (rate, error frequency, burst size) must be saved and restored across sessions.
 
 ## 7. Log Simulator (for Testing/Demo)
 

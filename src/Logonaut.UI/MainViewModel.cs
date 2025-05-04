@@ -404,14 +404,30 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private void LoadPersistedSettings()
     {
-        LogonautSettings settings;
-        settings = _settingsService.LoadSettings();
-        LoadFilterProfiles(settings);
+        LogonautSettings settings = _settingsService.LoadSettings();
+
+        // --- Load Filter Profiles ---
+        LoadFilterProfiles(settings); // This handles profiles and LastActiveProfileName
+
+        // --- Load Display/Search Settings ---
         ShowLineNumbers = settings.ShowLineNumbers;
         HighlightTimestamps = settings.HighlightTimestamps;
         IsCaseSensitiveSearch = settings.IsCaseSensitiveSearch;
         ContextLines = settings.ContextLines;
         IsAutoScrollEnabled = settings.AutoScrollToTail;
+
+        // --- Load Simulator Settings ---
+        SimulatorLPS = settings.SimulatorLPS;
+        SimulatorErrorFrequency = settings.SimulatorErrorFrequency;
+        SimulatorBurstSize = settings.SimulatorBurstSize;
+
+        // Ensure simulator instance reflects loaded LPS rate if it exists
+        _simulatorLogSource?.UpdateRate((int)Math.Round(SimulatorLPS));
+        // Ensure simulator instance reflects loaded Error Frequency if it exists
+        if (_simulatorLogSource != null)
+        {
+            _simulatorLogSource.ErrorFrequency = (int)Math.Round(SimulatorErrorFrequency);
+        }
     }
 
     private void SaveCurrentSettingsDelayed() => _uiContext.Post(_ => SaveCurrentSettings(), null);
@@ -420,13 +436,23 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         var settingsToSave = new LogonautSettings
         {
+            // --- Save Display/Search Settings ---
             ContextLines = this.ContextLines,
             ShowLineNumbers = this.ShowLineNumbers,
             HighlightTimestamps = this.HighlightTimestamps,
             IsCaseSensitiveSearch = this.IsCaseSensitiveSearch,
             AutoScrollToTail = this.IsAutoScrollEnabled,
+
+            // --- Save Simulator Settings ---
+            SimulatorLPS = this.SimulatorLPS,
+            SimulatorErrorFrequency = this.SimulatorErrorFrequency,
+            SimulatorBurstSize = this.SimulatorBurstSize
         };
-        SaveFilterProfiles(settingsToSave);
+
+        // --- Save Filter Profiles ---
+        SaveFilterProfiles(settingsToSave); // Handles LastActiveProfileName and the list
+
+        // --- Save to Service ---
         _settingsService.SaveSettings(settingsToSave);
     }
     #endregion // --- UI State Management ---
@@ -449,6 +475,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         // Update the running simulator's rate immediately via interface
         _simulatorLogSource?.UpdateRate((int)Math.Round(value));
+        SaveCurrentSettingsDelayed();
     }
 
     [ObservableProperty] private double _simulatorErrorFrequency = 100.0;
@@ -457,7 +484,14 @@ public partial class MainViewModel : ObservableObject, IDisposable
         if (_simulatorLogSource != null)
         {
             _simulatorLogSource.ErrorFrequency = (int)Math.Round(value); // Update the source
+            SaveCurrentSettingsDelayed();
         }
+    }
+
+    partial void OnSimulatorBurstSizeChanged(double value)
+    {
+        // Burst size doesn't directly affect the running simulator, only the next burst command
+        SaveCurrentSettingsDelayed(); // <<< Ensure this call exists
     }
 
     [ObservableProperty] private double _simulatorBurstSize = 1000; // Default burst size (will be bound to slider)

@@ -247,4 +247,76 @@ public class MainViewModel_InitializationPersistenceTests : MainViewModelTestBas
         Assert.IsNotNull(_mockSettings.SavedSettings, "Settings save failed.");
         Assert.IsTrue(_mockSettings.SavedSettings?.IsCaseSensitiveSearch, "Saved case sensitivity mismatch.");
     }
+    // Verifies: [ReqPersistSettingSimulatorV1] (Loading part)
+    [TestMethod] public void Constructor_LoadsSimulatorSettings()
+    {
+        // Arrange
+        var settings = MockSettingsService.CreateDefaultTestSettings();
+        settings.SimulatorLPS = 55.5;
+        settings.SimulatorErrorFrequency = 123.0;
+        settings.SimulatorBurstSize = 4567.0;
+        _mockSettings.SettingsToReturn = settings;
+
+        // Act: Recreate the ViewModel to force loading the arranged settings
+        // The base TestInitialize runs before each test, so _viewModel uses the settings above.
+        var localViewModel = new MainViewModel(_mockSettings, _mockSourceProvider, _mockFileDialog, _testContext, _backgroundScheduler);
+
+
+        // Assert
+        Assert.AreEqual(55.5, localViewModel.SimulatorLPS);
+        Assert.AreEqual(123.0, localViewModel.SimulatorErrorFrequency);
+        Assert.AreEqual(4567.0, localViewModel.SimulatorBurstSize);
+
+        localViewModel.Dispose(); // Dispose the local instance
+    }
+
+    // Verifies: [ReqPersistSettingSimulatorV1] (Saving LPS)
+    [TestMethod] public void SimulatorLPS_Set_SavesSettings()
+    {
+        // Arrange: ViewModel starts with default settings (10.0)
+        _mockSettings.ResetSettings(); // Clear save status
+
+        // Act
+        _viewModel.ToggleSimulatorCommand.Execute(null); // Start simulator mode
+        _viewModel.SimulatorLPS = 77.0;
+        _testContext.Send(_ => { }, null); // Process the SaveCurrentSettingsDelayed post
+
+        // Assert
+        Assert.IsNotNull(_mockSettings.SavedSettings, "Settings should have been saved.");
+        Assert.AreEqual(77.0, _mockSettings.SavedSettings?.SimulatorLPS, "Saved SimulatorLPS mismatch.");
+    }
+
+    // Verifies: [ReqPersistSettingSimulatorV1] (Saving Error Frequency)
+    [TestMethod] public void SimulatorErrorFrequency_Set_SavesSettings()
+    {
+        // Arrange: ViewModel starts with default settings (100.0)
+        _mockSettings.ResetSettings();
+
+        // Act
+        _viewModel.ToggleSimulatorCommand.Execute(null); // Start simulator mode
+        _testContext.Send(_ => { }, null);
+
+        _viewModel.SimulatorErrorFrequency = 50.0;
+        _testContext.Send(_ => { }, null);
+
+        // Assert
+        Assert.IsNotNull(_mockSettings.SavedSettings);
+        Assert.AreEqual(50.0, _mockSettings.SavedSettings?.SimulatorErrorFrequency);
+    }
+
+    // Verifies: [ReqPersistSettingSimulatorV1] (Saving Burst Size)
+    [TestMethod] public void SimulatorBurstSize_Set_SavesSettings()
+    {
+        // Arrange: ViewModel starts with default settings (1000.0)
+        _mockSettings.ResetSettings();
+
+        // Act
+        _viewModel.ToggleSimulatorCommand.Execute(null); // Start simulator mode
+        _viewModel.SimulatorBurstSize = 9999.0;
+        _testContext.Send(_ => { }, null);
+
+        // Assert
+        Assert.IsNotNull(_mockSettings.SavedSettings);
+        Assert.AreEqual(9999.0, _mockSettings.SavedSettings?.SimulatorBurstSize);
+    }
 }
