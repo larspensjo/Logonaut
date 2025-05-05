@@ -7,6 +7,7 @@ using System.Windows.Media;
 using System.Windows.Input; // Required for RoutedUICommand
 using ICSharpCode.AvalonEdit;
 using ICSharpCode.AvalonEdit.Rendering;
+using ICSharpCode.AvalonEdit.Editing; // Required for Caret
 using ICSharpCode.AvalonEdit.Document; // Required for DocumentLine
 using Logonaut.UI.Helpers;
 using Logonaut.UI.ViewModels;
@@ -47,6 +48,8 @@ namespace Logonaut.UI;
  */
 public partial class MainWindow : Window, IDisposable
 {
+    private int _lastKnownCaretLine = -1; // Field to track the last caret line
+
     public static readonly RoutedUICommand ToggleSimulatorConfigCommand = new RoutedUICommand(
         "Toggle Simulator Configuration Panel", "ToggleSimulatorConfigCommand", typeof(MainWindow)
     );
@@ -371,6 +374,10 @@ public partial class MainWindow : Window, IDisposable
         // --- Subscribe to User Input Events for Scrolling ---
         _logOutputEditor.TextArea.PreviewMouseWheel += TextArea_PreviewMouseWheel;
         _logOutputEditor.TextArea.PreviewKeyDown += TextArea_PreviewKeyDown;
+
+        // --- Subscribe to Caret Position Changes ---
+        _logOutputEditor.TextArea.Caret.PositionChanged += Caret_PositionChanged;
+        _lastKnownCaretLine = _logOutputEditor.TextArea.Caret.Line; // Initialize
     }
 
     private void LogOutputEditor_Unloaded(object? sender, RoutedEventArgs? e)
@@ -381,6 +388,9 @@ public partial class MainWindow : Window, IDisposable
             _overviewRuler.PreviewMouseLeftButtonDown -= OverviewRuler_PreviewMouseLeftButtonDown;
         }
         _overviewRuler = null; // Release reference
+
+        if (_logOutputEditor?.TextArea?.Caret != null)
+            _logOutputEditor.TextArea.Caret.PositionChanged -= Caret_PositionChanged;
 
         // --- Unsubscribe from User Input Events ---
         if (_logOutputEditor?.TextArea != null)
@@ -419,6 +429,47 @@ public partial class MainWindow : Window, IDisposable
             _chunkSeparator.Dispose();
         }
         _chunkSeparator = null; // Release reference
+    }
+
+   private void Caret_PositionChanged(object? sender, EventArgs e)
+    {
+        if (sender is Caret caret && DataContext is MainViewModel viewModel)
+        {
+            int currentCaretLine = caret.Line; // 1-based line number
+
+            // Check if the line actually changed
+            if (currentCaretLine != _lastKnownCaretLine)
+            {
+                // Update the last known line
+                _lastKnownCaretLine = currentCaretLine;
+
+                // Calculate the 0-based index for the ViewModel
+                int filteredLineIndex = currentCaretLine - 1;
+
+                // Update the ViewModel's highlighted line index
+                // Ensure the index is valid before setting
+                if (filteredLineIndex >= 0 && filteredLineIndex < viewModel.FilteredLogLines.Count)
+                {
+                    viewModel.HighlightedFilteredLineIndex = filteredLineIndex;
+
+                    // IMPORTANT: Disable AutoScroll whenever the user manually changes the line
+                    if (viewModel.IsAutoScrollEnabled)
+                    {
+                        viewModel.IsAutoScrollEnabled = false;
+                        // Debug.WriteLine("AutoScroll disabled due to Caret Line Change.");
+                    }
+                }
+                else
+                {
+                    // If the line number is somehow invalid (e.g., caret moved beyond document end temporarily?)
+                    // you might choose to clear the highlight or ignore. Let's clear it for safety.
+                    if (viewModel.HighlightedFilteredLineIndex != -1)
+                    {
+                        viewModel.HighlightedFilteredLineIndex = -1;
+                    }
+                }
+            }
+        }
     }
 
     private void TextArea_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
