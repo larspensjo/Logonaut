@@ -370,7 +370,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         LogonautSettings settings = _settingsService.LoadSettings();
 
+        // --- Load Filter Profiles FIRST ---
+        // This ensures ActiveFilterProfile is set before any saves are triggered.
+        LoadFilterProfiles(settings);
+
         // --- Load Display/Search Settings ---
+        // Setting these might trigger saves, which is now safe.
         ShowLineNumbers = settings.ShowLineNumbers;
         HighlightTimestamps = settings.HighlightTimestamps;
         IsCaseSensitiveSearch = settings.IsCaseSensitiveSearch;
@@ -378,9 +383,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
         IsAutoScrollEnabled = settings.AutoScrollToTail;
         _lastOpenedFolderPath = settings.LastOpenedFolderPath;
 
+        // --- Load Simulator Settings ---
+        // Setting these might trigger saves, which is now safe.
         LoadSimulatorPersistedSettings(settings);
-
-        LoadFilterProfiles(settings); // This handles profiles and LastActiveProfileName
     }
 
     private void SaveCurrentSettingsDelayed() => _uiContext.Post(_ => SaveCurrentSettings(), null);
