@@ -48,6 +48,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     #region Fields
 
     // --- Services & Context ---
+    private string? _lastOpenedFolderPath;
     private readonly IScheduler? _backgroundScheduler; // Make it possible to inject your own background scheduler
     private readonly ILogSourceProvider _sourceProvider;
     public static readonly object LoadingToken = new();
@@ -369,17 +370,17 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         LogonautSettings settings = _settingsService.LoadSettings();
 
-        // --- Load Filter Profiles ---
-        LoadFilterProfiles(settings); // This handles profiles and LastActiveProfileName
-
         // --- Load Display/Search Settings ---
         ShowLineNumbers = settings.ShowLineNumbers;
         HighlightTimestamps = settings.HighlightTimestamps;
         IsCaseSensitiveSearch = settings.IsCaseSensitiveSearch;
         ContextLines = settings.ContextLines;
         IsAutoScrollEnabled = settings.AutoScrollToTail;
+        _lastOpenedFolderPath = settings.LastOpenedFolderPath;
 
         LoadSimulatorPersistedSettings(settings);
+
+        LoadFilterProfiles(settings); // This handles profiles and LastActiveProfileName
     }
 
     private void SaveCurrentSettingsDelayed() => _uiContext.Post(_ => SaveCurrentSettings(), null);
@@ -394,6 +395,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             HighlightTimestamps = this.HighlightTimestamps,
             IsCaseSensitiveSearch = this.IsCaseSensitiveSearch,
             AutoScrollToTail = this.IsAutoScrollEnabled,
+            LastOpenedFolderPath = this._lastOpenedFolderPath,
         };
 
         SaveSimulatorSettings(settingsToSave);
@@ -520,7 +522,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
 
         // 2. Show File Dialog
-        string? selectedFile = _fileDialogService.OpenFile("Select a log file", "Log Files|*.log;*.txt|All Files|*.*");
+        string? selectedFile = _fileDialogService.OpenFile("Select a log file", "Log Files|*.log;*.txt|All Files|*.*", _lastOpenedFolderPath);
         if (string.IsNullOrEmpty(selectedFile)) return;
         Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} OpenLogFileAsync: '{selectedFile}'");
 
@@ -555,6 +557,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
             UpdateFilterSubstrings();
 
             Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} OpenLogFileAsync: Prepare/Start completed ({initialLines} lines). First filter triggered.");
+
+            // Store the directory of the successfully opened file
+            _lastOpenedFolderPath = System.IO.Path.GetDirectoryName(selectedFile);
+            SaveCurrentSettingsDelayed(); // Trigger saving the settings including the new path
         }
         catch (Exception ex)
         {

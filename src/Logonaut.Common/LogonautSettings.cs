@@ -20,6 +20,11 @@ public class LogonautSettings
     /// </summary>
     public string? LastActiveProfileName { get; set; }
 
+    /// <summary>
+    /// Stores the path of the folder from which the last log file was successfully opened.
+    /// </summary>
+    public string? LastOpenedFolderPath { get; set; }
+
     // Display/Search Settings
     public int ContextLines { get; set; } = 0;
     public bool ShowLineNumbers { get; set; } = true;

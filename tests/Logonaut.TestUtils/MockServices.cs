@@ -59,7 +59,7 @@ namespace Logonaut.TestUtils
     {
         public string? FileToReturn { get; set; } = "C:\\fake\\log.txt";
         public bool ShouldCancel { get; set; } = false;
-        public string? OpenFile(string title, string filter) => ShouldCancel ? null : FileToReturn;
+        public string? OpenFile(string title, string filter, string? initialDirectory = null) => ShouldCancel ? null : FileToReturn;
     }
 
     // --- Log Filter Processor Mock ---

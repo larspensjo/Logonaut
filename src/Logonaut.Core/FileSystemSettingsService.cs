@@ -93,6 +93,7 @@ public class FileSystemSettingsService : ISettingsService
             HighlightTimestamps = true,
             IsCaseSensitiveSearch = false,
             AutoScrollToTail = true,
+            LastOpenedFolderPath = null,
             // --- Default Simulator Settings ---
             SimulatorLPS = 10.0,
             SimulatorErrorFrequency = 100.0,
