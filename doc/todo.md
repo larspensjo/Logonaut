@@ -13,6 +13,7 @@
     * When the user initiates a search using CTR+F, focus is automatically changed to the search box. Use an animation on top of the search box to help the user notice the transition.
     * The same for CTRL+G, the go to line text box.
 * When adding a Substring, it shall by default use the selected string from the logwindow, if any.
+* A better tree node selection system is needed, instead of just highlighting. There should be the "current composite node", making it clear where next substring will be added.
 * The Auto Scroll option could be better visualized with a picture of an anchor. But it need to be placed at a proper place.
 * Implement deployment using Inno
 * When opening a new log, the dialog should remember last folder.
