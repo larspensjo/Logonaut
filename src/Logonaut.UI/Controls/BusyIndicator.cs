@@ -9,11 +9,38 @@ using System.Windows.Media.Animation;
 
 namespace Logonaut.UI.Controls;
 
-
-/// <summary>
-/// A lightweight FrameworkElement that draws a themeable, rotating arc spinner animation
-/// when its ActiveStates collection is not empty, utilizing CompositionTarget.Rendering for updates.
-/// </summary>
+/*
+ * Implements a visual component displaying an animated spinner to indicate background activity.
+ *
+ * Purpose:
+ * Provides user feedback that the application is performing a potentially long-running
+ * operation, preventing the perception of the UI being frozen. It activates based on
+ * the state of a bound collection.
+ *
+ * Role:
+ * Acts as a self-contained UI element within the View layer. It is designed to be bound
+ * to a ViewModel collection (`ActiveStates`). It internally manages its animation state
+ * (Idle, Spinning, FadingOut) and controls its own Visibility and Opacity properties
+ * to handle smooth appearance and disappearance, including a fade-out effect.
+ *
+ * Responsibilities:
+ * - Monitors the bound `ActiveStates` collection.
+ * - Displays a themeable rotating arc animation when `ActiveStates` is not empty.
+ * - Manages transitions between internal states (Idle, Spinning, FadingOut).
+ * - Controls its own `Visibility` and `Opacity` for display and fade-out.
+ * - Uses `CompositionTarget.Rendering` for the spinning animation loop.
+ *
+ * Benefits:
+ * - Provides clear visual indication of application busyness.
+ * - Encapsulates animation and state logic within the control.
+ * - Decouples UI feedback from the specific background tasks being performed.
+ * - Themeable appearance via `SpinnerBrush` and `SpinnerThickness` properties.
+ *
+ * Implementation Notes:
+ * Animation updates are driven by `CompositionTarget.Rendering`. State transitions
+ * are triggered by changes to the `ActiveStates` collection or the control's `IsVisible` property.
+ * It manages its own `Visibility` and `Opacity` internally, overriding external bindings.
+ */
 public class BusyIndicator : FrameworkElement
 {
     // Inside BusyIndicator.cs (or a relevant namespace)
@@ -120,6 +147,10 @@ public class BusyIndicator : FrameworkElement
 
         // --- Handle Animation Completion ---
         _fadeOutStoryboard.Completed += FadeOut_Completed;
+
+        // --- Explicitly set initial visual state to match Idle ---
+        Visibility = Visibility.Collapsed;
+        Opacity = 0.0;
         Debug.WriteLine($"[BI {this.GetHashCode():X}] Constructor End. Opacity={Opacity}, Visibility={Visibility}");
     }
 
