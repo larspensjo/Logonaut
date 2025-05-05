@@ -435,11 +435,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
             default: return; // Unknown type
         }
 
-            // Note: The callback passed down when creating FilterViewModel ensures TriggerFilterUpdate is called
+        // Note: The callback passed down when creating FilterViewModel ensures TriggerFilterUpdate is called
         FilterViewModel newFilterNodeVM = new FilterViewModel(newFilterNodeModel, TriggerFilterUpdate);
         FilterViewModel? targetParentVM = SelectedFilterNode ?? ActiveFilterProfile.RootFilterViewModel;
 
-            // Case 1: Active profile's tree is currently empty
+        // Case 1: Active profile's tree is currently empty
         if (ActiveFilterProfile.RootFilterViewModel == null)
         {
                 ActiveFilterProfile.SetModelRootFilter(newFilterNodeModel); // This sets model and refreshes RootFilterViewModel
@@ -516,7 +516,40 @@ public partial class MainViewModel : ObservableObject, IDisposable
     }
     
     private bool CanToggleEditNode() => SelectedFilterNode?.IsEditable ?? false;
-    [RelayCommand] private async Task OpenLogFileAsync()
+
+    // Helper to reset document and related UI state.
+    // IMPORTANT: Do not use a context.Post() method here, as the clearing operations and state changes must be done immediately.
+    private void ResetLogDocumentAndUIStateImmediate()
+    {
+        // Reset Core State
+        _reactiveFilteredLogStream.Reset(); // Resets processor's internal index and total lines observable
+
+        // Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} ResetLogDocumentAndUIState: Calling Clear() on LogDoc (without using _uicontext.Post). thread={Environment.CurrentManagedThreadId}. Stack trace:");
+        // Debug.WriteLine(Environment.StackTrace);
+        LogDoc.Clear();
+        FilteredLogLines.Clear();
+        OnPropertyChanged(nameof(FilteredLogLinesCount)); // Notify count changed
+        ScheduleLogTextUpdate(FilteredLogLines); // Clear editor
+        SearchMarkers.Clear();
+        _searchMatches.Clear();
+        _currentSearchIndex = -1;
+        OnPropertyChanged(nameof(SearchStatusText));
+        HighlightedFilteredLineIndex = -1;
+        HighlightedOriginalLineNumber = -1;
+        TargetOriginalLineNumberInput = string.Empty; // Clear jump input
+        JumpStatusMessage = string.Empty;
+        IsJumpTargetInvalid = false;
+        // TotalLogLines is reset by _logFilterProcessor.Reset() via its observable
+    }
+
+    private bool CanPerformActionWhileNotLoading()
+    {
+        // Check if the loading token is NOT present
+        return !CurrentBusyStates.Contains(LoadingToken);
+    }
+
+    [RelayCommand(CanExecute = nameof(CanPerformActionWhileNotLoading))]
+    private async Task OpenLogFileAsync()
     {
         // 1. Stop Simulator if running
         if (IsSimulatorRunning)
@@ -551,7 +584,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             _disposables.Add(_reactiveFilteredLogStream);
             SubscribeToFilteredStream();
 
-            ResetLogDocumentAndUIState();
+            ResetLogDocumentAndUIStateImmediate();
             CurrentLogFilePath = selectedFile;
             long initialLines = await _fileLogSource.PrepareAndGetInitialLinesAsync(selectedFile, AddLineToLogDocument).ConfigureAwait(true);
             _uiContext.Post(_ => TotalLogLines = initialLines, null);
@@ -573,7 +606,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             _uiContext.Post(_ => {
                 CurrentBusyStates.Remove(LoadingToken);
                 CurrentBusyStates.Remove(FilteringToken);
-                ResetLogDocumentAndUIState(); // Reset state on error
+                ResetLogDocumentAndUIStateImmediate(); // Reset state on error
                 Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} OpenLogFileAsync: Error opening file '{selectedFile}': {ex.Message}");
                 MessageBox.Show($"Error opening or reading log file '{selectedFile}':\n{ex.Message}", "File Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 CurrentLogFilePath = null;
@@ -883,6 +916,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         CurrentActiveLogSource?.StopMonitoring(); // Stop current source
         _reactiveFilteredLogStream.Reset();
+        Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} LoadLogFromText: Calling Clear() on LogDoc. thread={Environment.CurrentManagedThreadId}.");
         LogDoc.Clear();
         FilteredLogLines.Clear();
         OnPropertyChanged(nameof(FilteredLogLinesCount));

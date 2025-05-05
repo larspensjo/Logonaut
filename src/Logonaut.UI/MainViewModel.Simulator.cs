@@ -171,7 +171,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             if (wasPreviouslyFileSource)
             {
                 Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> StartSimulatorLogic: Clearing log because previous source was FileLogSource.");
-                ResetLogDocumentAndUIState(); // CLEAR LOG ONLY IF SWITCHING FROM FILE
+                ResetLogDocumentAndUIStateImmediate(); // CLEAR LOG ONLY IF SWITCHING FROM FILE
             }
             else
             {
@@ -221,7 +221,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    [RelayCommand] private void ToggleSimulator()
+    [RelayCommand(CanExecute = nameof(CanPerformActionWhileNotLoading))]
+    private void ToggleSimulator()
     {
         if (IsSimulatorRunning)
         {
@@ -244,7 +245,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         try
         {
             // 1. Reset State (calls processor.Reset(), sets flag=true)
-            ResetLogDocumentAndUIState();
+            ResetLogDocumentAndUIStateImmediate();
 
             // 2. Explicitly Trigger Initial Filter (to reset the flag)
             // Explicitly trigger the initial filter pipeline.
@@ -267,12 +268,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanPerformActionWhileNotLoading))]
     private void ClearLog()
     {
         try
         {
-            ResetLogDocumentAndUIState();
+            ResetLogDocumentAndUIStateImmediate();
             // If the simulator is running, it keeps running, just the view is cleared
             if (IsSimulatorRunning)
             {
@@ -289,31 +290,6 @@ public partial class MainViewModel : ObservableObject, IDisposable
              Debug.WriteLine($"!!! Error clearing log: {ex.Message}");
              MessageBox.Show($"Error clearing log: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
-    }
-
-    // Helper to reset document and related UI state
-    private void ResetLogDocumentAndUIState()
-    {
-        // Reset Core State
-        _reactiveFilteredLogStream.Reset(); // Resets processor's internal index and total lines observable
-
-        // Clear Document and UI Collections/State
-        _uiContext.Post(_ => {
-            LogDoc.Clear();
-            FilteredLogLines.Clear();
-            OnPropertyChanged(nameof(FilteredLogLinesCount)); // Notify count changed
-            ScheduleLogTextUpdate(FilteredLogLines); // Clear editor
-            SearchMarkers.Clear();
-            _searchMatches.Clear();
-            _currentSearchIndex = -1;
-            OnPropertyChanged(nameof(SearchStatusText));
-            HighlightedFilteredLineIndex = -1;
-            HighlightedOriginalLineNumber = -1;
-            TargetOriginalLineNumberInput = string.Empty; // Clear jump input
-            JumpStatusMessage = string.Empty;
-            IsJumpTargetInvalid = false;
-            // TotalLogLines is reset by _logFilterProcessor.Reset() via its observable
-        }, null);
     }
 
     private void HandleSimulatorError(string context, Exception ex)
