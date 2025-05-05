@@ -49,9 +49,11 @@ The requirement ID is a unique ID that can be referenced from the source code an
     *   [ReqFilterRuleRegexv1] Within the active profile, the user must be able to define filter rules based on **regular expression** pattern matching.
     *   [ReqFilterRuleCombineLogicalv1] The user must be able to combine these rules using logical **AND**, **OR**, and **NOR** operators.
     *   [ReqFilterRuleTreeStructurev1] These rules must be manageable in a **hierarchical tree structure** displayed in the filter panel.
-    *   [ReqFilterNodeManageButtonsv1] Adding, removing, and editing filter nodes must be done via dedicated buttons operating on the selected node in the tree.
+    *   ~~[ReqFilterNodeManageButtonsv1] Adding, removing, and editing filter nodes must be done via dedicated buttons operating on the selected node in the tree.~~
+        *   *[OBSOLETE: Replaced by ReqDnDFilterManageV1. Button-based management removed in favor of Drag and Drop.]*
     *   [ReqFilterNodeEditInlinev2] Editing filter values (substrings/regex) must happen **inline** within the tree view (e.g., by clicking on the filter text or an Edit button).
-    *   [ReqFilterSubstringDefaultFromSelectionV1] **Substring Default from Selection:** When adding a new Substring filter, if text is selected in the log view, that text should be used as the default value for the new filter.
+    *   [ReqDnDFilterManageV1] Filter node management must be performed using Drag and Drop operations, including adding new nodes from a palette, moving/re-parenting existing nodes within the tree, and deleting nodes by dragging to a designated trash target.
+    *   [ReqFilterSubstringDefaultFromSelectionV2] There shall be a special substring filter in the palette that automaticallydynamically contains selected text from the log view.
 *   **Filtering Behavior:**
     *   [ReqFilterDisplayMatchingLinesv1] The log display must show only the lines matching the rules of the **active** filter profile.
     *   [ReqFilterContextLinesv1] The application must provide a setting (`Context Lines` input with increment/decrement buttons) to include a specified number of **context lines** before and after each matching line.
