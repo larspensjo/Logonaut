@@ -56,7 +56,7 @@ public class MainViewModel_InitializationPersistenceTests : MainViewModelTestBas
     {
         // Arrange: _viewModel created in TestInitialize uses default settings (AutoScroll=true)
         Assert.IsTrue(_viewModel.IsAutoScrollEnabled, "Initial state should be true");
-        _mockSettings.ResetSettings(); // Clear saved state
+        _mockSettings.Reset(); // Clear saved state
 
         // Act
         _viewModel.IsAutoScrollEnabled = false;
@@ -65,7 +65,7 @@ public class MainViewModel_InitializationPersistenceTests : MainViewModelTestBas
         // Assert
         Assert.IsNotNull(_mockSettings.SavedSettings, "Settings should have been saved.");
         Assert.IsFalse(_mockSettings.SavedSettings?.AutoScrollToTail, "Saved setting should be false.");
-        _mockSettings.ResetSettings(); // Clear for next check
+        _mockSettings.Reset(); // Clear for next check
 
         // Act
         _viewModel.IsAutoScrollEnabled = true;
@@ -142,7 +142,7 @@ public class MainViewModel_InitializationPersistenceTests : MainViewModelTestBas
     {
         // Arrange
         int initialContextLines = _viewModel.ContextLines; // Usually 0 from defaults
-        _mockSettings.ResetSettings(); // Clear save status before Act
+        _mockSettings.Reset(); // Clear save status before Act
 
         // Act
         _viewModel.ContextLines = 5;
@@ -168,7 +168,7 @@ public class MainViewModel_InitializationPersistenceTests : MainViewModelTestBas
     [TestMethod] public void ShowLineNumbers_Set_SavesSettings_UpdatesVisibilityProperty()
     {
         // Arrange
-        _mockSettings.ResetSettings();
+        _mockSettings.Reset();
         bool initialState = _viewModel.ShowLineNumbers;
         Visibility initialVisibility = _viewModel.IsCustomLineNumberMarginVisible;
         Assert.IsTrue(initialState, "Default state should be true");
@@ -190,7 +190,7 @@ public class MainViewModel_InitializationPersistenceTests : MainViewModelTestBas
     [TestMethod] public void HighlightTimestamps_Set_SavesSettings()
     {
         // Arrange
-        _mockSettings.ResetSettings();
+        _mockSettings.Reset();
         bool initialState = _viewModel.HighlightTimestamps;
         Assert.IsTrue(initialState, "Default state should be true");
 
@@ -233,7 +233,7 @@ public class MainViewModel_InitializationPersistenceTests : MainViewModelTestBas
 
         // 6. Assert initial search results
         Assert.AreEqual(2, _viewModel.SearchMarkers.Count, "Initial case-insensitive search failed."); // Should pass now
-        _mockSettings.ResetSettings(); // Clear save state AFTER initial search setup
+        _mockSettings.Reset(); // Clear save state AFTER initial search setup
 
         // Act
         _viewModel.IsCaseSensitiveSearch = true; // Change to case-sensitive
@@ -274,7 +274,7 @@ public class MainViewModel_InitializationPersistenceTests : MainViewModelTestBas
     [TestMethod] public void SimulatorLPS_Set_SavesSettings()
     {
         // Arrange: ViewModel starts with default settings (10.0)
-        _mockSettings.ResetSettings(); // Clear save status
+        _mockSettings.Reset(); // Clear save status
 
         // Act
         _viewModel.ToggleSimulatorCommand.Execute(null); // Start simulator mode
@@ -290,7 +290,7 @@ public class MainViewModel_InitializationPersistenceTests : MainViewModelTestBas
     [TestMethod] public void SimulatorErrorFrequency_Set_SavesSettings()
     {
         // Arrange: ViewModel starts with default settings (100.0)
-        _mockSettings.ResetSettings();
+        _mockSettings.Reset();
 
         // Act
         _viewModel.ToggleSimulatorCommand.Execute(null); // Start simulator mode
@@ -308,7 +308,7 @@ public class MainViewModel_InitializationPersistenceTests : MainViewModelTestBas
     [TestMethod] public void SimulatorBurstSize_Set_SavesSettings()
     {
         // Arrange: ViewModel starts with default settings (1000.0)
-        _mockSettings.ResetSettings();
+        _mockSettings.Reset();
 
         // Act
         _viewModel.ToggleSimulatorCommand.Execute(null); // Start simulator mode

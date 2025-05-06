@@ -5,6 +5,7 @@ using System.Reactive; // For Unit
 using System.Reactive.Subjects;
 using System.Reactive.Linq;
 using System.Diagnostics; // Added for Debug
+using Newtonsoft.Json; // Required for JsonConvert
 using Logonaut.Common;
 using Logonaut.Core;
 using Logonaut.Filters;
@@ -31,13 +32,83 @@ namespace Logonaut.TestUtils
     // --- Settings Service Mock ---
     public class MockSettingsService : ISettingsService
     {
+        // Settings returned by LoadSettings
         public LogonautSettings SettingsToReturn { get; set; } = CreateDefaultTestSettings();
+
+        // Settings captured by the last call to SaveSettings (now a deep clone)
         public LogonautSettings? SavedSettings { get; private set; }
 
-        public LogonautSettings LoadSettings() => SettingsToReturn;
+        // Counters
+        public int LoadCalledCount { get; private set; } = 0;
+        public int SaveCalledCount { get; private set; } = 0;
 
-        public void SaveSettings(LogonautSettings settings) => SavedSettings = settings;
+        /// <summary>
+        /// Loads settings, returning a deep clone of SettingsToReturn.
+        /// </summary>
+        public LogonautSettings LoadSettings()
+        {
+            LoadCalledCount++;
+            Debug.WriteLine($"---> MockSettingsService: LoadSettings called. Count: {LoadCalledCount}");
+            try
+            {
+                // Return a DEEP CLONE to prevent tests modifying the source object
+                string json = JsonConvert.SerializeObject(SettingsToReturn, Formatting.None,
+                    new JsonSerializerSettings { TypeNameHandling = TypeNameHandling.All });
+                return JsonConvert.DeserializeObject<LogonautSettings>(json,
+                    new JsonSerializerSettings { TypeNameHandling = TypeNameHandling.All })
+                    ?? CreateDefaultTestSettings(); // Fallback if deserialization fails
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("Error during deep clone in LoadSettings", ex);
+            }
+        }
 
+        /// <summary>
+        /// Saves settings by storing a deep clone of the provided settings object.
+        /// </summary>
+        public void SaveSettings(LogonautSettings settings)
+        {
+           // --- Check for duplicate FilterProfiles by name ---
+            var duplicateProfile = settings.FilterProfiles
+            .GroupBy(profile => profile.Name)
+            .FirstOrDefault(group => group.Count() > 1);
+
+            if (duplicateProfile != null)
+                throw new InvalidOperationException($"Duplicate FilterProfile name detected: {duplicateProfile.Key}");
+
+            SaveCalledCount++;
+            Debug.WriteLine($"---> MockSettingsService: SaveSettings called. Count: {SaveCalledCount}");
+
+            // --- Perform a deep clone using JSON serialization ---
+            try
+            {
+                // Serialize the incoming settings object
+                string json = JsonConvert.SerializeObject(settings, Formatting.None,
+                    new JsonSerializerSettings
+                    {
+                        TypeNameHandling = TypeNameHandling.All, // Crucial for IFilter polymorphism
+                        ReferenceLoopHandling = ReferenceLoopHandling.Ignore // Usually safe
+                    });
+
+                // Deserialize back into a new object and store it
+                this.SavedSettings = JsonConvert.DeserializeObject<LogonautSettings>(json,
+                    new JsonSerializerSettings
+                    {
+                        TypeNameHandling = TypeNameHandling.All
+                    });
+                Debug.WriteLine($"---> MockSettingsService: Deep clone successful for SaveSettings.");
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("Error during deep clone in SaveSettings", ex);
+            }
+            // --- End deep clone ---
+        }
+
+        /// <summary>
+        /// Creates default settings used for initialization or fallbacks.
+        /// </summary>
         public static LogonautSettings CreateDefaultTestSettings() => new LogonautSettings
         {
             FilterProfiles = new List<FilterProfile> { new FilterProfile("Default", null) },
@@ -45,12 +116,23 @@ namespace Logonaut.TestUtils
             ContextLines = 0,
             ShowLineNumbers = true,
             HighlightTimestamps = true,
-            IsCaseSensitiveSearch = false
+            IsCaseSensitiveSearch = false,
+            // Add simulator defaults if needed for tests
+            SimulatorLPS = 10.0,
+            SimulatorErrorFrequency = 100.0,
+            SimulatorBurstSize = 1000.0
         };
 
-        public void ResetSettings()
+        /// <summary>
+        /// Resets the state of the mock service (call counts, saved settings).
+        /// </summary>
+        public void Reset() // Renamed from ResetSettings for clarity
         {
             SavedSettings = null;
+            SaveCalledCount = 0;
+            LoadCalledCount = 0;
+            // Don't reset SettingsToReturn here, let tests configure it via its public setter if needed
+            Debug.WriteLine("---> MockSettingsService: Reset.");
         }
     }
 

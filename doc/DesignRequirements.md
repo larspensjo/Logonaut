@@ -66,4 +66,4 @@
     *   Focus on the architectural intent and purpose.
     *   Avoid deep implementation details.
     *   Keep comments up-to-date as the code evolves.
-    *   Keep the total size limited to 1000 characters or less, and not more than 25 lines.
+    *   Keep the total size limited to 1000 characters or less, and not more than 20 lines.

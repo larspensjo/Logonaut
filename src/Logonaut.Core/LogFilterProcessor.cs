@@ -109,6 +109,8 @@ public class ReactiveFilteredLogStream : IReactiveFilteredLogStream
             .Throttle(_filterDebounceTime, _backgroundScheduler) // Debounce setting changes
             .Select(settingsTuple => {
                 lock (_stateLock) { // Update current settings safely
+                    if (settingsTuple.filter is null)
+                        throw new ArgumentNullException(nameof(settingsTuple.filter), "Filter cannot be null.");
                     _currentFilter = settingsTuple.filter;
                     _currentContextLines = settingsTuple.contextLines;
                 }
@@ -165,13 +167,17 @@ public class ReactiveFilteredLogStream : IReactiveFilteredLogStream
 
     public void UpdateFilterSettings(IFilter newFilter, int contextLines)
     {
-        Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: UpdateFilterSettings METHOD ENTERED. Filter='{newFilter?.GetType().Name ?? "null"}', Context={contextLines}");
+        string filterTypeName = newFilter?.GetType().Name ?? "null";
+        Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> ReactiveFilteredLogStream: UpdateFilterSettings RECEIVED. Filter='{filterTypeName}', Context={contextLines}"); // <<< MODIFIED existing log
+
         var filterToUse = newFilter ?? new TrueFilter();
         var contextToUse = Math.Max(0, contextLines);
 
         // Trigger the pipeline responsible for settings changes
         _filterChangeTriggerSubject.OnNext((filterToUse, contextToUse));
-        Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: UpdateFilterSettings PUSHED to _filterChangeTriggerSubject.");
+
+        // --- Log after pushing ---
+        Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> ReactiveFilteredLogStream: UpdateFilterSettings PUSHED '{filterToUse.GetType().Name}' to _filterChangeTriggerSubject."); // <<< MODIFIED existing log
     }
 
     public void Reset()

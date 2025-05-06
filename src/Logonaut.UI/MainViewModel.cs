@@ -12,6 +12,7 @@ using Logonaut.Common;
 using Logonaut.Core;
 using Logonaut.Filters;
 using Logonaut.UI.Services;
+using Logonaut.UI.Commands;
 using ICSharpCode.AvalonEdit;
 
 namespace Logonaut.UI.ViewModels;
@@ -43,7 +44,7 @@ namespace Logonaut.UI.ViewModels;
  * It utilizes the CommunityToolkit.Mvvm for observable properties and commands and manages
  * its lifecycle and resources via IDisposable.
  */
-public partial class MainViewModel : ObservableObject, IDisposable
+public partial class MainViewModel : ObservableObject, IDisposable, ICommandExecutor
 {
     #region Fields
 
@@ -106,6 +107,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _reactiveFilteredLogStream = CreateFilteredStream(CurrentActiveLogSource);
         _disposables.Add(_reactiveFilteredLogStream); // Add processor to disposables
         SubscribeToFilteredStream(); // Subscribe to the initial processor
+
+        UndoCommand = new RelayCommand(Undo, CanUndo);
+        RedoCommand = new RelayCommand(Redo, CanRedo);
 
         CurrentBusyStates.CollectionChanged += CurrentBusyStates_CollectionChanged;
         _disposables.Add(Disposable.Create(() => {
@@ -417,7 +421,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     // === Filter Node Manipulation Commands (Operate on Active Profile's Tree) ===
 
-        // Combined Add Filter command - type determined by parameter
+    // Combined Add Filter command - type determined by parameter
     [RelayCommand(CanExecute = nameof(CanAddFilterNode))]
     private void AddFilter(object? filterTypeParam) // Parameter likely string like "Substring", "And", etc.
     {
@@ -432,44 +436,70 @@ public partial class MainViewModel : ObservableObject, IDisposable
             case "And": newFilterNodeModel = new AndFilter(); break;
             case "Or": newFilterNodeModel = new OrFilter(); break;
             case "Nor": newFilterNodeModel = new NorFilter(); break;
-            default: return; // Unknown type
+            default: throw new ArgumentException($"Unknown filter type: {type}", nameof(filterTypeParam));
         }
 
-        // Note: The callback passed down when creating FilterViewModel ensures TriggerFilterUpdate is called
-        FilterViewModel newFilterNodeVM = new FilterViewModel(newFilterNodeModel, TriggerFilterUpdate);
-        FilterViewModel? targetParentVM = SelectedFilterNode ?? ActiveFilterProfile.RootFilterViewModel;
+
+        FilterViewModel? targetParentVM = null;
+        int? targetIndex = null; // Use null to add at the end by default
 
         // Case 1: Active profile's tree is currently empty
         if (ActiveFilterProfile.RootFilterViewModel == null)
         {
-                ActiveFilterProfile.SetModelRootFilter(newFilterNodeModel); // This sets model and refreshes RootFilterViewModel
-                UpdateActiveTreeRootNodes(ActiveFilterProfile); // Explicitly update the collection bound to the TreeView
-                SelectedFilterNode = ActiveFilterProfile.RootFilterViewModel; // Select the new root
+            // Cannot add to null root via AddFilterAction directly.
+            // We need to set the root first, which isn't easily undoable in the current structure.
+            // Let's handle setting the root OUTSIDE the undo system for now, or create a dedicated SetRootFilterAction.
+            // Simple approach: Set root directly, bypass Undo for this specific case.
+            ActiveFilterProfile.SetModelRootFilter(newFilterNodeModel);
+            UpdateActiveTreeRootNodes(ActiveFilterProfile); // Update TreeView source
+            SelectedFilterNode = ActiveFilterProfile.RootFilterViewModel; // Select the new root
+            TriggerFilterUpdate(); // Explicitly trigger updates since ExecuteAction wasn't called
+            SaveCurrentSettingsDelayed();
+            Debug.WriteLine("AddFilter: Set new root node (outside Undo system).");
         }
-            // Case 2: A composite node is selected - add as child
+        // Case 2: A composite node is selected - add as child
         else if (SelectedFilterNode != null && SelectedFilterNode.Filter is CompositeFilter)
         {
-                // AddChildFilter takes the MODEL, adds it, creates the child VM, and adds to Children collection
-            SelectedFilterNode.AddChildFilter(newFilterNodeModel);
-                SelectedFilterNode.IsExpanded = true; // Expand parent
-
-                // Find and select the newly created child VM
-            var addedVM = SelectedFilterNode.Children.LastOrDefault(vm => vm.Filter == newFilterNodeModel);
-            if (addedVM != null) SelectedFilterNode = addedVM;
+            targetParentVM = SelectedFilterNode;
+            targetIndex = targetParentVM.Children.Count; // Add at end
         }
-            // Case 3: No node selected (but tree exists), or non-composite selected - Replace root? Show Error?
-            // Current Requirement: Select a composite node first. Let's enforce this.
-            else // No node selected or non-composite selected
+        // Case 3: No node selected (but tree exists), or non-composite selected - Add to the root if it's composite
+        else if (ActiveFilterProfile.RootFilterViewModel != null && ActiveFilterProfile.RootFilterViewModel.Filter is CompositeFilter)
         {
-            throw new InvalidOperationException("Unexpected state: No node selected or non-composite selected. This should not happen with current logic.");
+             targetParentVM = ActiveFilterProfile.RootFilterViewModel;
+             targetIndex = targetParentVM.Children.Count; // Add at end of root
+             Debug.WriteLine("AddFilter: No selection or non-composite selected, adding to root.");
+        }
+        else // Root exists but isn't composite, and nothing valid is selected
+        {
+             Debug.WriteLine("AddFilter: Cannot add filter. Select a composite node or ensure root is composite.");
+             // Optionally show a message to the user
+             // MessageBox.Show("Please select a composite filter node (AND, OR, NOR) to add a child to.", "Add Filter", MessageBoxButton.OK, MessageBoxImage.Information);
+             return;
         }
 
-        // Editing logic: If the new node is editable, start editing
-        if (SelectedFilterNode != null && SelectedFilterNode.IsEditable)
+        // If we determined a valid parent, execute the action
+        if(targetParentVM != null)
         {
-           SelectedFilterNode.BeginEditCommand.Execute(null);
+            var action = new AddFilterAction(targetParentVM, newFilterNodeModel, targetIndex);
+            Execute(action); // Use the ICommandExecutor method
+
+            // Try to select the newly added node AFTER execution
+            // AddFilterAction's Execute should have added the VM
+            var addedVM = targetParentVM.Children.LastOrDefault(vm => vm.Filter == newFilterNodeModel);
+            if (addedVM is null)
+                throw new InvalidOperationException("Failed to find the newly added VM in the parent's children.");
+
+            targetParentVM.IsExpanded = true;
+            SelectedFilterNode = addedVM; // Update selection
+
+            // Editing logic: If the new node is editable, start editing
+            if (SelectedFilterNode.IsEditable)
+            {
+                // Execute BeginEdit directly on the selected VM
+                SelectedFilterNode.BeginEditCommand.Execute(null);
+            }
         }
-        SaveCurrentSettingsDelayed();
     }
 
     private bool CanAddFilterNode()
@@ -477,30 +507,38 @@ public partial class MainViewModel : ObservableObject, IDisposable
         if (ActiveFilterProfile == null) return false;
         bool isTreeEmpty = ActiveFilterProfile.RootFilterViewModel == null;
         bool isCompositeNodeSelected = SelectedFilterNode != null && SelectedFilterNode.Filter is CompositeFilter;
-        return isTreeEmpty || isCompositeNodeSelected;
+        // Allow adding if tree is empty OR composite selected OR root is composite (allows adding to root when nothing/leaf selected)
+        bool isRootComposite = ActiveFilterProfile.RootFilterViewModel?.Filter is CompositeFilter;
+        return isTreeEmpty || isCompositeNodeSelected || (ActiveFilterProfile.RootFilterViewModel != null && isRootComposite);
     }
 
     [RelayCommand(CanExecute = nameof(CanRemoveFilterNode))]
     private void RemoveFilterNode()
     {
         if (SelectedFilterNode == null || ActiveFilterProfile?.RootFilterViewModel == null) return;
-        FilterViewModel? parent = SelectedFilterNode.Parent;
 
-        // Case 1: Removing the root node of the active profile
-        if (SelectedFilterNode == ActiveFilterProfile.RootFilterViewModel)
+        FilterViewModel nodeToRemove = SelectedFilterNode;
+        FilterViewModel? parent = nodeToRemove.Parent;
+
+        // Case 1: Removing the root node
+        if (nodeToRemove == ActiveFilterProfile.RootFilterViewModel)
         {
+            // This action is hard to undo cleanly with the current structure.
+            // Bypass Undo system for root removal for now.
             ActiveFilterProfile.SetModelRootFilter(null);
             UpdateActiveTreeRootNodes(ActiveFilterProfile);
             SelectedFilterNode = null;
+            TriggerFilterUpdate();
+            SaveCurrentSettingsDelayed();
+            Debug.WriteLine("RemoveFilterNode: Removed root node (outside Undo system).");
         }
         // Case 2: Removing a child node
         else if (parent != null)
         {
-            var nodeToRemove = SelectedFilterNode;
-            SelectedFilterNode = parent;
-            parent.RemoveChild(nodeToRemove);
+            var action = new RemoveFilterAction(parent, nodeToRemove);
+            Execute(action); // Use the ICommandExecutor method
+            SelectedFilterNode = parent; // Select the parent after removal
         }
-        SaveCurrentSettingsDelayed();
     }
     private bool CanRemoveFilterNode() => SelectedFilterNode != null && ActiveFilterProfile != null;
 
@@ -509,9 +547,15 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         if (SelectedFilterNode?.IsEditable ?? false)
         {
-            if (SelectedFilterNode.IsNotEditing) SelectedFilterNode.BeginEditCommand.Execute(null);
-            else SelectedFilterNode.EndEditCommand.Execute(null);
-            SaveCurrentSettingsDelayed(); // Save potentially after EndEdit completes
+            if (SelectedFilterNode.IsNotEditing)
+            {
+                SelectedFilterNode.BeginEditCommand.Execute(null);
+            }
+            else
+            {
+                SelectedFilterNode.EndEditCommand.Execute(null);
+                // ExecuteAction called within EndEdit will handle save/update
+            }
         }
     }
     
@@ -670,13 +714,29 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private void TriggerFilterUpdate()
     {
+        Debug.WriteLine($"---> TriggerFilterUpdate START"); // <<< ADDED
+
         // Ensure token isn't added multiple times if trigger fires rapidly
-        _uiContext.Post(_ => { if (!CurrentBusyStates.Contains(FilteringToken)) CurrentBusyStates.Add(FilteringToken); }, null);
         _uiContext.Post(_ => {
-            IFilter? filterToApply = ActiveFilterProfile?.Model?.RootFilter ?? new TrueFilter();
-            _reactiveFilteredLogStream.UpdateFilterSettings(filterToApply, ContextLines);
-            UpdateFilterSubstrings();
+            if (!CurrentBusyStates.Contains(FilteringToken))
+            {
+                CurrentBusyStates.Add(FilteringToken);
+                Debug.WriteLine($"---> TriggerFilterUpdate: Added FilteringToken"); // <<< ADDED
+            }
         }, null);
+
+        _uiContext.Post(_ => {
+            // --- Log the filter being sent ---
+            IFilter? filterToApply = ActiveFilterProfile?.Model?.RootFilter; // Get filter from model
+            string filterTypeName = filterToApply?.GetType().Name ?? "null (TrueFilter assumed)";
+            Debug.WriteLine($"---> TriggerFilterUpdate: Posting call to UpdateFilterSettings. Filter Type: {filterTypeName}, Context: {ContextLines}"); // <<< ADDED
+            // ---
+
+            _reactiveFilteredLogStream.UpdateFilterSettings(filterToApply ?? new TrueFilter(), ContextLines);
+            UpdateFilterSubstrings(); // This reads the tree, might be good to log its result too if needed
+        }, null);
+
+        Debug.WriteLine($"---> TriggerFilterUpdate END"); // <<< ADDED
     }
 
     private string GetCurrentDocumentText()
@@ -994,6 +1054,66 @@ public partial class MainViewModel : ObservableObject, IDisposable
         Dispose(true);
         GC.SuppressFinalize(this);
     }
+
+    #region Undo/Redo Logic
+
+    // --- Undo/Redo Stacks ---
+    private readonly Stack<IUndoableAction> _undoStack = new();
+    private readonly Stack<IUndoableAction> _redoStack = new();
+
+    // --- Undo/Redo Commands ---
+    public IRelayCommand UndoCommand { get; }
+    public IRelayCommand RedoCommand { get; }
+
+    // --- ICommandExecutor Implementation ---
+    public void Execute(IUndoableAction action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+
+        action.Execute();
+        _undoStack.Push(action);
+        _redoStack.Clear(); // Clear redo stack on new action
+
+        // Update CanExecute state for UI buttons
+        UndoCommand.NotifyCanExecuteChanged();
+        RedoCommand.NotifyCanExecuteChanged();
+
+        // Trigger necessary updates AFTER the action is executed
+        TriggerFilterUpdate(); // Re-filter based on the new state
+        SaveCurrentSettingsDelayed(); // Save the new state
+    }
+
+    private void Undo()
+    {
+        if (_undoStack.TryPop(out var action))
+        {
+            action.Undo();
+            _redoStack.Push(action);
+            UndoCommand.NotifyCanExecuteChanged();
+            RedoCommand.NotifyCanExecuteChanged();
+
+            TriggerFilterUpdate(); // Re-filter based on the restored state
+            SaveCurrentSettingsDelayed(); // Save the restored state
+        }
+    }
+    private bool CanUndo() => _undoStack.Count > 0;
+
+    private void Redo()
+    {
+        if (_redoStack.TryPop(out var action))
+        {
+            action.Execute(); // Re-execute the action
+            _undoStack.Push(action);
+            UndoCommand.NotifyCanExecuteChanged();
+            RedoCommand.NotifyCanExecuteChanged();
+
+            TriggerFilterUpdate(); // Re-filter based on the re-applied state
+            SaveCurrentSettingsDelayed(); // Save the re-applied state
+        }
+    }
+    private bool CanRedo() => _redoStack.Count > 0;
+
+    #endregion
 
     protected virtual void Dispose(bool disposing)
     {

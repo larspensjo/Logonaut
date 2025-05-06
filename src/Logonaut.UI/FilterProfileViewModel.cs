@@ -2,16 +2,26 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Logonaut.Common;
 using Logonaut.Filters;
-using System.Diagnostics; // For Debug.WriteLine
+using Logonaut.UI.Commands;
+using System.Diagnostics;
 
 namespace Logonaut.UI.ViewModels;
 
-/// <summary>
-/// ViewModel wrapper for a FilterProfile, used for display in lists (like ComboBox)
-/// and potentially holding the root FilterViewModel for the tree.
-/// </summary>
+/*
+ * ViewModel for a FilterProfile model, displayed in UI lists (e.g., ComboBox).
+ *
+ * Purpose/Role:
+ * Wraps a FilterProfile, exposing its name for display/editing and holding the
+ * root FilterViewModel for the profile's rule tree. Manages inline renaming UI state.
+ * Decouples profile selection UI from the model.
+ *
+ * Implementation Notes:
+ * Uses CommunityToolkit.Mvvm. Requires ICommandExecutor injection for child VMs.
+ */
 public partial class FilterProfileViewModel : ObservableObject
 {
+    private readonly ICommandExecutor _commandExecutor;
+
     public FilterProfile Model { get; }
 
     // The root ViewModel for the filter tree displayed when this profile is active.
@@ -22,9 +32,6 @@ public partial class FilterProfileViewModel : ObservableObject
     // Name property for binding
     [ObservableProperty]
     private string _name;
-
-    // Callback to notify MainViewModel of configuration changes needing refilter/save
-    private readonly Action? _filterConfigurationChangedCallback;
 
     // Editing state properties
     [ObservableProperty]
@@ -41,15 +48,15 @@ public partial class FilterProfileViewModel : ObservableObject
     public IRelayCommand EndRenameCommand { get; }
     public IRelayCommand CancelRenameCommand { get; } // New command for cancellation
 
-    public FilterProfileViewModel(FilterProfile model, Action? filterConfigurationChangedCallback)
+    public FilterProfileViewModel(FilterProfile model, ICommandExecutor commandExecutor)
     {
         Model = model ?? throw new ArgumentNullException(nameof(model));
         _name = Model.Name ?? "Unnamed Profile"; // Ensure name is not null for display
-        _filterConfigurationChangedCallback = filterConfigurationChangedCallback;
+        _commandExecutor = commandExecutor;
 
         if (Model.RootFilter != null)
         {
-            _rootFilterViewModel = new FilterViewModel(Model.RootFilter, _filterConfigurationChangedCallback);
+            _rootFilterViewModel = new FilterViewModel(Model.RootFilter, _commandExecutor);
         }
 
         BeginRenameCommand = new RelayCommand(() =>
@@ -129,26 +136,22 @@ public partial class FilterProfileViewModel : ObservableObject
         Debug.WriteLine($"OnNameChanged: New value='{value}', IsEditing={IsEditing}, Model.Name='{Model.Name}'");
     }
 
-    // Method to rebuild the RootFilterViewModel if the underlying model changes externally
-    // (e.g., after deserialization or if model is modified directly - though modifying via VM is preferred)
+    // Method to rebuild the RootFilterViewModel needs to pass the executor
     public void RefreshRootViewModel()
     {
         if (Model.RootFilter != null)
-        {
-                // Pass the *same* callback down
-            RootFilterViewModel = new FilterViewModel(Model.RootFilter, _filterConfigurationChangedCallback);
-        }
+            RootFilterViewModel = new FilterViewModel(Model.RootFilter, _commandExecutor);
         else
-        {
             RootFilterViewModel = null;
-        }
     }
 
     // Helper to update the model's root filter (e.g., when adding the first filter node)
     public void SetModelRootFilter(IFilter? filter)
     {
         Model.RootFilter = filter;
-        RefreshRootViewModel(); // Rebuild the VM tree
-        _filterConfigurationChangedCallback?.Invoke(); // Notify that structure changed
+        RefreshRootViewModel();
+
+        // Maybe trigger filter update via executor? Or let caller handle it.
+        // For now, let MainViewModel handle the TriggerFilterUpdate after calling this.
     }
 }

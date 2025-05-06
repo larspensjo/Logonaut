@@ -19,7 +19,7 @@ namespace Logonaut.UI.Tests.ViewModels;
     {
         // Arrange
         int initialCount = _viewModel.AvailableProfiles.Count;
-        _mockSettings.ResetSettings(); // Clear save status
+        _mockSettings.Reset(); // Clear save status
 
         // Act
         _viewModel.CreateNewProfileCommand.Execute(null);
@@ -69,7 +69,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         Assert.IsNotNull(activeProfile, "Need an active profile to test rename.");
         string oldName = activeProfile.Name;
         string newValidName = "Renamed Profile";
-        _mockSettings.ResetSettings(); // Clear previous save status
+        _mockSettings.Reset(); // Clear previous save status
 
         // Act: Simulate the Name property being changed via binding (which triggers internal handler)
         activeProfile.Name = newValidName;
@@ -100,7 +100,7 @@ namespace Logonaut.UI.Tests.ViewModels;
 
         string originalName = profileToRename.Name;
         string duplicateName = "Default"; // Name of the first profile
-        _mockSettings.ResetSettings();
+        _mockSettings.Reset();
 
         // Act: Simulate setting the Name property to a duplicate value
         profileToRename.Name = duplicateName;
@@ -122,7 +122,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         var activeProfile = _viewModel.ActiveFilterProfile;
         Assert.IsNotNull(activeProfile);
         string originalName = activeProfile.Name;
-        _mockSettings.ResetSettings();
+        _mockSettings.Reset();
 
         // Act: Simulate setting the Name property to an empty/whitespace value
         activeProfile.Name = "   "; // Whitespace
@@ -148,7 +148,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         Assert.IsNotNull(profileToDelete);
         Assert.AreEqual("New Profile 2", profileToDelete.Name);
         var expectedNextActive = _viewModel.AvailableProfiles[initialCount - 2]; // Should be NP1
-        _mockSettings.ResetSettings();
+        _mockSettings.Reset();
 
         // Act
         _viewModel.DeleteProfileCommand.Execute(null); // Assumes user confirms MessageBox
@@ -182,7 +182,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         var lastProfile = _viewModel.ActiveFilterProfile;
         Assert.IsNotNull(lastProfile);
         Assert.AreEqual("Default", lastProfile.Name);
-        _mockSettings.ResetSettings();
+        _mockSettings.Reset();
 
         // Act
         _viewModel.DeleteProfileCommand.Execute(null); // Assumes user confirms MessageBox
@@ -220,7 +220,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         var profile2 = _viewModel.ActiveFilterProfile; // Currently "New Profile 1"
         Assert.IsNotNull(profile2);
         Assert.AreEqual("New Profile 1", profile2.Name);
-        _mockSettings.ResetSettings();
+        _mockSettings.Reset();
 
         // Act: Select the first profile ("Default")
         _viewModel.ActiveFilterProfile = profile1;

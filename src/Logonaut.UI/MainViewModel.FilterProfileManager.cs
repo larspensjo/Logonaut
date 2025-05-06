@@ -3,14 +3,16 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.Input;
 using Logonaut.Common;
+using Logonaut.UI.Commands;
 using System.Reactive.Linq;
 using System.ComponentModel;
+using System.Diagnostics;
 
 // TODO: Should we move all filter management here?
 
 namespace Logonaut.UI.ViewModels;
 
-public partial class MainViewModel : ObservableObject, IDisposable
+public partial class MainViewModel : ObservableObject, IDisposable, ICommandExecutor
 {
     private FilterProfileViewModel? _observedActiveProfile;
     private IDisposable? _activeProfileNameSubscription;
@@ -35,10 +37,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
         FilterProfileViewModel? profileToSelect = null;
         foreach (var profileModel in settings.FilterProfiles)
         {
-            // Pass the TriggerFilterUpdate method as the callback for changes *within* the profile tree
-            var profileVM = new FilterProfileViewModel(profileModel, TriggerFilterUpdate);
+            // Pass 'this' as the ICommandExecutor
+            var profileVM = new FilterProfileViewModel(profileModel, this);
             AvailableProfiles.Add(profileVM);
-            // Identify the one to select based on the saved name
             if (profileModel.Name == settings.LastActiveProfileName)
             {
                 profileToSelect = profileVM;
@@ -56,8 +57,31 @@ public partial class MainViewModel : ObservableObject, IDisposable
             throw new InvalidOperationException("No active filter profile to save.");
 
         // Extract the models from the ViewModels
-        settings.LastActiveProfileName = ActiveFilterProfile.Name;
-        settings.FilterProfiles = AvailableProfiles.Select(vm => vm.Model).ToList();
+        settings.LastActiveProfileName = ActiveFilterProfile?.Name ?? AvailableProfiles.FirstOrDefault()?.Name ?? "Default";
+
+        // Add detailed logging within the Select statement
+        settings.FilterProfiles = AvailableProfiles.Select(vm => {
+            if (vm == null) {
+                Debug.WriteLine($"---> SaveFilterProfiles: Encountered NULL FilterProfileViewModel!");
+                return null; // Should not happen, but guard
+            }
+            var model = vm.Model; // Get the model reference
+            if (model == null) {
+                Debug.WriteLine($"---> SaveFilterProfiles: Profile VM '{vm.Name}' has NULL Model!");
+                return null; // Should not happen
+            }
+            var rootFilter = model.RootFilter; // Get the root filter reference
+            string rootTypeName = rootFilter?.GetType().Name ?? "null";
+            int subFilterCount = -1;
+            if (rootFilter is Logonaut.Filters.CompositeFilter cf) {
+                subFilterCount = cf.SubFilters.Count; // Get count directly from the model's property
+            }
+            Debug.WriteLine($"---> SaveFilterProfiles: Processing Profile '{vm.Name}'. RootFilter Type: {rootTypeName}, SubFilter Count: {subFilterCount}");
+
+            return model; // Return the model
+        }).Where(m => m != null).ToList()!; // Filter out potential nulls and use null-forgiving operator
+
+        Debug.WriteLine($"---> SaveFilterProfiles: Finished processing profiles for saving.");
     }
 
     [RelayCommand] private void CreateNewProfile()
@@ -74,7 +98,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
         // Create the underlying model and its ViewModel wrapper
         var newProfileModel = new FilterProfile(newName, null); // Start with a simple root
-        var newProfileVM = new FilterProfileViewModel(newProfileModel, TriggerFilterUpdate);
+        var newProfileVM = new FilterProfileViewModel(newProfileModel, this);
 
         AvailableProfiles.Add(newProfileVM);
         ActiveFilterProfile = newProfileVM; // Select the new profile (this triggers update via OnChanged)
@@ -111,7 +135,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             // If the list is now empty, create and add a new default profile
             var defaultModel = new FilterProfile("Default", null); // Use default name and no filter
-            var defaultVM = new FilterProfileViewModel(defaultModel, TriggerFilterUpdate);
+            var defaultVM = new FilterProfileViewModel(defaultModel, this);
             AvailableProfiles.Add(defaultVM);
 
             // Set the new default profile as the active one

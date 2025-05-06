@@ -13,6 +13,45 @@ namespace Logonaut.UI.Tests.ViewModels;
 /// </summary>
 [TestClass] public class MainViewModel_InteractionTests : MainViewModelTestBase
 {
+    [TestInitialize] public override void TestInitialize()
+    {
+        base.TestInitialize(); // Call the base TestInitialize - this loads the initial "Default" profile
+
+        var defaultProfileVM = _viewModel.AvailableProfiles.FirstOrDefault(p => p.Name == "Default");
+
+        if (defaultProfileVM == null)
+        {
+            // If base.TestInitialize() doesn't guarantee a "Default" profile, create one.
+            // For consistency, ensure it starts with a clean AndFilter root.
+            var defaultProfileModel = new FilterProfile("Default", new Logonaut.Filters.AndFilter());
+            defaultProfileVM = new FilterProfileViewModel(defaultProfileModel, _viewModel);
+            _viewModel.AvailableProfiles.Add(defaultProfileVM);
+            // No need to set _viewModel.ActiveFilterProfile here if the constructor/base does it
+            // or if the following SetModelRootFilter ensures it's correct.
+        }
+        else
+        {
+            // Ensure the existing default profile's model has a NEW, EMPTY AndFilter root for these tests.
+            // This guarantees no pre-existing children.
+            defaultProfileVM.SetModelRootFilter(new Logonaut.Filters.AndFilter());
+        }
+
+        // Ensure this profile is active.
+        // This might trigger saves if the profile was different or if SetModelRootFilter caused observable changes.
+        if (_viewModel.ActiveFilterProfile != defaultProfileVM)
+        {
+            _viewModel.ActiveFilterProfile = defaultProfileVM;
+        }
+
+        // Crucial: Flush any synchronization context posted actions (like saves from profile setup)
+        // BEFORE resetting the mock settings service.
+        _testContext?.Send(_ => { }, null);
+
+        // Reset mock settings AFTER the profile state is stabilized for the tests.
+        // This ensures SaveCalledCount and SavedSettings only reflect actions performed by the test method itself.
+        _mockSettings?.Reset();
+    }
+
     // Verifies: [ReqFileMonitorLiveUpdatev1] (Opening), [ReqLoadingOverlayIndicatorv1] (Trigger)
     [TestMethod] public async Task OpenLogFileCommand_CallsSourcePrepareStart_AndUpdatesViewModel()
     {
@@ -85,18 +124,19 @@ namespace Logonaut.UI.Tests.ViewModels;
     {
         // Arrange
         await SetupWithInitialLines(new List<string> { "Line 1", "Line 2 FilterMe" });
+        var doc = _viewModel.LogDoc;
         _viewModel.IsAutoScrollEnabled = true;
         _requestScrollToEndEventFired = false;
+        Assert.AreEqual(2, _viewModel.FilteredLogLines.Count, "Pre-condition failed: Initial lines not loaded.");
 
         // Act
-        _viewModel.ActiveFilterProfile?.SetModelRootFilter(new Filters.SubstringFilter("FilterMe"));
-        _testContext.Send(_ => { }, null); // Process UI queue posts
-        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks);
+        Assert.IsNotNull(_viewModel.ActiveFilterProfile, "Active filter profile should not be null.");
+        _viewModel.ActiveFilterProfile.SetModelRootFilter(new Filters.SubstringFilter("FilterMe"));
+        InjectTriggerFilterUpdate();
 
         // Assert
         Assert.IsFalse(_requestScrollToEndEventFired, "Event should NOT fire for replace updates.");
-         // <<<< FIX: Now expect 1 line >>>>
-        Assert.AreEqual(1, _viewModel.FilteredLogLines.Count, "Filtered lines count after replace mismatch.");
+        Assert.AreEqual(1, _viewModel.FilteredLogLines.Count, "Filtered lines count after replace mismatch."); // Expect 1 line
     }
 
     // Verifies: [ReqAutoScrollOptionv2]
@@ -106,16 +146,15 @@ namespace Logonaut.UI.Tests.ViewModels;
         await SetupWithInitialLines(new List<string> { "Line 1", "Line 2 FilterMe" });
         _viewModel.IsAutoScrollEnabled = false;
         _requestScrollToEndEventFired = false;
+         Assert.AreEqual(2, _viewModel.FilteredLogLines.Count, "Pre-condition failed: Initial lines not loaded.");
 
         // Act
         _viewModel.ActiveFilterProfile?.SetModelRootFilter(new Filters.SubstringFilter("FilterMe"));
-        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks);
-        _testContext.Send(_ => { }, null); // Process UI queue posts
+        InjectTriggerFilterUpdate();
 
         // Assert
         Assert.IsFalse(_requestScrollToEndEventFired, "Event should NOT fire for replace updates when disabled.");
-        // <<<< FIX: Now expect 1 line >>>>
-        Assert.AreEqual(1, _viewModel.FilteredLogLines.Count, "Filtered lines count after replace mismatch.");
+        Assert.AreEqual(1, _viewModel.FilteredLogLines.Count, "Filtered lines count after replace mismatch."); // Expect 1 line
     }
 
     // Verifies cleanup logic, indirectly related to [ReqSettingsLoadSavev1]
@@ -128,7 +167,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks);
         Assert.IsTrue(_mockSimulatorSource.IsRunning, "Arrange failure: Simulator source not monitoring.");
 
-        _mockSettings.ResetSettings();
+        _mockSettings.Reset();
         _viewModel.CurrentBusyStates.Clear();
         _viewModel.CurrentBusyStates.Add(MainViewModel.LoadingToken);
         _viewModel.CurrentBusyStates.Add(MainViewModel.FilteringToken);

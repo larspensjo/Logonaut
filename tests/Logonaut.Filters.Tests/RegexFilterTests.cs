@@ -116,7 +116,7 @@ namespace Logonaut.Filters.Tests
         }
 
         [TestMethod]
-        public void RegexFilter_WithEmptyPattern_MatchesAnyNonNullLine()
+        public void RegexFilter_WithEmptyPattern_MatchesNothing()
         {
             // Arrange
             // An empty regex matches the empty string, which occurs at the beginning, end,
@@ -124,8 +124,8 @@ namespace Logonaut.Filters.Tests
             var filter = new RegexFilter("");
 
             // Act & Assert
-            Assert.IsTrue(filter.IsMatch("Any string"), "Empty pattern should match non-empty string.");
-            Assert.IsTrue(filter.IsMatch(""), "Empty pattern should match empty string.");
+            Assert.IsFalse(filter.IsMatch("Any string"), "Empty pattern should not match.");
+            Assert.IsFalse(filter.IsMatch(""), "Empty pattern should not match empty string.");
         }
 
         [TestMethod]

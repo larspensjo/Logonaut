@@ -215,5 +215,16 @@ namespace Logonaut.UI.Tests.ViewModels;
         if (threadException != null) throw threadException; // Re-throw exception from STA thread
     }
 
+    protected void InjectTriggerFilterUpdate()
+    {
+        // --- Trigger update indirectly ---
+        var oldContext = _viewModel.ContextLines;
+        // This is a hack. Changing number of conext lines will call OnContextLinesChanged -> TriggerFilterUpdate. Maybe twie, but that is fine
+        _viewModel.ContextLines = oldContext+1;
+        _viewModel.ContextLines = oldContext;
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Allow debounced filter to run
+        _testContext.Send(_ => { }, null); // Process the filter result update posted back. This is probably not really needed for a mock context.
+    }
+
     #endregion // Helper Methods
 }

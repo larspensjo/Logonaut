@@ -170,6 +170,10 @@
                 <MenuItem Header="Dark Mode" Command="{Binding Theme.SwitchToDarkCommand}" />
                 <MenuItem Header="Light Mode" Command="{Binding Theme.SwitchToLightCommand}" />
             </MenuItem>
+            <MenuItem Header="_Edit">
+                <MenuItem Header="_Undo" Command="{Binding UndoCommand}" InputGestureText="Ctrl+Z"/>
+                <MenuItem Header="_Redo" Command="{Binding RedoCommand}" InputGestureText="Ctrl+Y"/>
+            </MenuItem>
             <MenuItem Header="E_xit" Click="ExitMenuItem_Click"/>
         </Menu>
 
