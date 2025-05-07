@@ -75,7 +75,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         _mockSettings.Reset(); // Use Reset from base class
 
         // Act
-        _viewModel.AddFilterCommand.Execute("Substring"); // This sets root directly
+        _viewModel.AddFilterCommand.Execute("SubstringType"); // This sets root directly
         _testContext.Send(_ => { }, null); // Flush context queue for update and save
 
         // Assert ViewModel State
@@ -112,7 +112,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         _mockSettings.Reset();
 
         // Act: Add Regex as child (this uses Execute)
-        _viewModel.AddFilterCommand.Execute("Regex");
+        _viewModel.AddFilterCommand.Execute("RegexType");
         _testContext.Send(_ => { }, null); // Flush context queue
 
         // Assert ViewModel State
@@ -185,7 +185,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         // Arrange: Add a child to the root from TestInitialize
         var root = _viewModel.ActiveFilterProfile?.RootFilterViewModel; Assert.IsNotNull(root);
         _viewModel.SelectedFilterNode = root;
-        _viewModel.AddFilterCommand.Execute("Substring"); // Uses Execute
+        _viewModel.AddFilterCommand.Execute("SubstringType"); // Uses Execute
         _testContext.Send(_ => { }, null); // Flush add action updates
         var child = root.Children[0];
         _viewModel.SelectedFilterNode = child; // Select the child
@@ -222,7 +222,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         var emptyProfileVM = new FilterProfileViewModel(emptyProfileModel, _viewModel);
         _viewModel.AvailableProfiles.Clear(); _viewModel.AvailableProfiles.Add(emptyProfileVM);
         _viewModel.ActiveFilterProfile = emptyProfileVM;
-        _viewModel.AddFilterCommand.Execute("Substring"); // Sets root directly
+        _viewModel.AddFilterCommand.Execute("SubstringType"); // Sets root directly
         _testContext.Send(_ => { }, null);
         var node = _viewModel.ActiveFilterProfile?.RootFilterViewModel; Assert.IsNotNull(node);
         _viewModel.SelectedFilterNode = node;
@@ -262,7 +262,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         var toggleProfileVM = new FilterProfileViewModel(toggleProfileModel, _viewModel);
         _viewModel.AvailableProfiles.Clear(); _viewModel.AvailableProfiles.Add(toggleProfileVM);
         _viewModel.ActiveFilterProfile = toggleProfileVM;
-        _viewModel.AddFilterCommand.Execute("Substring"); // Sets root directly
+        _viewModel.AddFilterCommand.Execute("SubstringType"); // Sets root directly
         _testContext.Send(_ => { }, null);
         var node = _viewModel.ActiveFilterProfile?.RootFilterViewModel; Assert.IsNotNull(node);
         _viewModel.SelectedFilterNode = node;
@@ -297,7 +297,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         Assert.IsFalse(_viewModel.RedoCommand.CanExecute(null), "Redo should initially be disabled.");
 
         // Act
-        _viewModel.AddFilterCommand.Execute("Substring"); // Executes an AddFilterAction via _viewModel.Execute
+        _viewModel.AddFilterCommand.Execute("SubstringType"); // Executes an AddFilterAction via _viewModel.Execute
 
         // Assert
         Assert.IsTrue(_viewModel.UndoCommand.CanExecute(null), "Undo should be enabled after execute.");
@@ -309,7 +309,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         // Arrange
         var rootVm = _viewModel.ActiveFilterProfile!.RootFilterViewModel!;
         var initialChildCount = rootVm.Children.Count;
-        _viewModel.AddFilterCommand.Execute("Substring"); // Execute the action first
+        _viewModel.AddFilterCommand.Execute("SubstringType"); // Execute the action first
         var childCountAfterAdd = rootVm.Children.Count;
         Assert.IsTrue(_viewModel.UndoCommand.CanExecute(null));
         Assert.IsFalse(_viewModel.RedoCommand.CanExecute(null));
@@ -329,7 +329,7 @@ namespace Logonaut.UI.Tests.ViewModels;
     {
         // Arrange
         var rootVm = _viewModel.ActiveFilterProfile!.RootFilterViewModel!;
-        _viewModel.AddFilterCommand.Execute("Substring"); // Add
+        _viewModel.AddFilterCommand.Execute("SubstringType"); // Add
         var addedFilterModel = ((AndFilter)rootVm.Filter).SubFilters.Last(); // Get the added model
         var childCountAfterAdd = rootVm.Children.Count;
         _viewModel.UndoCommand.Execute(null); // Undo
@@ -351,13 +351,13 @@ namespace Logonaut.UI.Tests.ViewModels;
     {
         // Arrange
         var rootVm = _viewModel.ActiveFilterProfile!.RootFilterViewModel!;
-        _viewModel.AddFilterCommand.Execute("Substring"); // Action 1
-        _viewModel.AddFilterCommand.Execute("Regex");     // Action 2
+        _viewModel.AddFilterCommand.Execute("SubstringType"); // Action 1
+        _viewModel.AddFilterCommand.Execute("RegexType");     // Action 2
         _viewModel.UndoCommand.Execute(null); // Undo Action 2
         Assert.IsTrue(_viewModel.RedoCommand.CanExecute(null), "Redo should be enabled before new action.");
 
         // Act
-        _viewModel.AddFilterCommand.Execute("And"); // Action 3 (New action after Undo)
+        _viewModel.AddFilterCommand.Execute("AndType"); // Action 3 (New action after Undo)
 
         // Assert
         Assert.IsFalse(_viewModel.RedoCommand.CanExecute(null), "Redo stack should be cleared after new action.");
@@ -371,7 +371,7 @@ namespace Logonaut.UI.Tests.ViewModels;
     {
         // Arrange
         var rootVm = _viewModel.ActiveFilterProfile!.RootFilterViewModel!;
-        _viewModel.AddFilterCommand.Execute("Substring");
+        _viewModel.AddFilterCommand.Execute("SubstringType");
         var subVm = rootVm.Children.First();
         string oldValue = "Initial Value";
         string newValue = "Changed Value";
@@ -398,7 +398,7 @@ namespace Logonaut.UI.Tests.ViewModels;
     {
         // Arrange
         var rootVm = _viewModel.ActiveFilterProfile!.RootFilterViewModel!;
-        _viewModel.AddFilterCommand.Execute("Substring");
+        _viewModel.AddFilterCommand.Execute("SubstringType");
         var subVm = rootVm.Children.First();
         bool originalState = subVm.Enabled; // Typically true initially
         bool newState = !originalState;
@@ -423,9 +423,9 @@ namespace Logonaut.UI.Tests.ViewModels;
         var rootVm = _viewModel.ActiveFilterProfile!.RootFilterViewModel!; // Should be AND filter
 
         // Act: Add 3 nodes
-        _viewModel.AddFilterCommand.Execute("Substring"); // Node 0 (Sub)
-        _viewModel.AddFilterCommand.Execute("Regex");     // Node 1 (Regex)
-        _viewModel.AddFilterCommand.Execute("And");       // Node 2 (And)
+        _viewModel.AddFilterCommand.Execute("SubstringType"); // Node 0 (Sub)
+        _viewModel.AddFilterCommand.Execute("RegexType");     // Node 1 (Regex)
+        _viewModel.AddFilterCommand.Execute("AndType");       // Node 2 (And)
 
         Assert.AreEqual(3, rootVm.Children.Count);
         Assert.IsTrue(_viewModel.UndoCommand.CanExecute(null));
