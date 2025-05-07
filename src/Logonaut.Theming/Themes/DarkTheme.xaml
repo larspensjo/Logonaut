@@ -152,6 +152,17 @@
         </Border>
     </DataTemplate>
 
+    <Style x:Key="PaletteGroupBoxStyle" TargetType="GroupBox">
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/> 
+        <Setter Property="Padding" Value="5"/> <!-- Padding inside the GroupBox, around the ItemsControl -->
+        <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}"/> <!-- For the header text -->
+        <Setter Property="Background" Value="Transparent"/> 
+        <Setter Property="Margin" Value="0,5,0,5"/>
+        <!-- Optional: If you want a custom template for the header appearance (e.g., different background) -->
+        <!-- You could add a Setter for Property="Template" here, similar to what was shown for light theme if desired -->
+    </Style>
+
     <Style x:Key="SimulatorToggleButtonStyle" TargetType="ToggleButton">
         <!-- Set default visual properties using DynamicResource - MIMIC BUTTON -->
         <Setter Property="Background" Value="{StaticResource ButtonRestingGradientBrush}"/>
