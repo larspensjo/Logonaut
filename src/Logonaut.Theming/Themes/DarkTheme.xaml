@@ -133,8 +133,9 @@
         <Setter Property="Margin" Value="2"/>
     </Style>
 
-    <DataTemplate x:Key="FilterPaletteItemTemplate" DataType="{x:Type common:FilterTypeDescriptor}">
+    <DataTemplate x:Key="FilterPaletteItemTemplate" DataType="{x:Type common:PaletteItemDescriptor}">
         <Border x:Name="PaletteItemBorder"
+                IsEnabled="{Binding IsEnabled}"
                 Background="{DynamicResource ControlBackgroundBrush}"
                 BorderBrush="{DynamicResource BorderBrush}"
                 BorderThickness="1" CornerRadius="5" Padding="8,5" MinWidth="90"
@@ -146,6 +147,9 @@
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
                             <Setter Property="Effect" Value="{StaticResource FocusGlowEffect}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5"/> 
                         </Trigger>
                     </Style.Triggers>
                 </Style>

@@ -1,8 +1,38 @@
+using CommunityToolkit.Mvvm.ComponentModel;
+
 namespace Logonaut.Common;
 
-/// <summary>
-/// Describes a filter type for display in the UI, typically in a palette.
-/// </summary>
-/// <param name="DisplayName">User-friendly name for the filter type (e.g., "Substring", "AND Group").</param>
-/// <param name="TypeIdentifier">A string identifier corresponding to IFilter.TypeText, used for creating the model and for icon conversion.</param>
-public record FilterTypeDescriptor(string DisplayName, string TypeIdentifier);
+public partial class PaletteItemDescriptor : ObservableObject
+{
+    [ObservableProperty]
+    private string _displayName;
+
+    public string TypeIdentifier { get; } // Used to create the IFilter and find icon
+
+    [ObservableProperty]
+    private bool _isEnabled;
+
+    [ObservableProperty]
+    private string? _initialValue; // The selected text, or null
+
+    public bool IsDynamic { get; } // True for "Initialized Substring"
+
+    // Constructor for static items
+    public PaletteItemDescriptor(string displayName, string typeIdentifier, bool isEnabled = true)
+    {
+        _displayName = displayName;
+        TypeIdentifier = typeIdentifier;
+        _isEnabled = isEnabled;
+        IsDynamic = false;
+    }
+
+    // Constructor for dynamic item
+    public PaletteItemDescriptor(string initialDisplayName, string typeIdentifier, bool isDynamic, string? initialValue = null)
+    {
+        _displayName = initialDisplayName;
+        TypeIdentifier = typeIdentifier;
+        IsDynamic = isDynamic;
+        _initialValue = initialValue;
+        _isEnabled = false; // Dynamic item starts disabled
+    }
+}

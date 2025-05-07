@@ -417,10 +417,15 @@ public partial class MainWindow : Window, IDisposable
         // --- Subscribe to Caret Position Changes ---
         _logOutputEditor.TextArea.Caret.PositionChanged += Caret_PositionChanged;
         _lastKnownCaretLine = _logOutputEditor.TextArea.Caret.Line; // Initialize
+
+        _logOutputEditor.TextArea.SelectionChanged += LogOutputEditor_SelectionChanged;
     }
 
     private void LogOutputEditor_Unloaded(object? sender, RoutedEventArgs? e)
     {
+        if (_logOutputEditor?.TextArea != null)
+            _logOutputEditor.TextArea.SelectionChanged -= LogOutputEditor_SelectionChanged;
+
         // Clean up Overview Ruler binding
         if (_overviewRuler != null) {
             _overviewRuler.RequestScrollOffset -= OverviewRuler_RequestScrollOffset;
@@ -769,12 +774,30 @@ public partial class MainWindow : Window, IDisposable
     }
 
     // Update SelectedFilter in ViewModel when TreeView selection changes
+    // TOOD: This is unused? That is maybe a bug.
     private void TreeView_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
     {
         if (DataContext is MainViewModel viewModel)
         {
             // The TreeView's SelectedItem is the data item (FilterViewModel)
             viewModel.SelectedFilterNode = e.NewValue as FilterViewModel;
+        }
+    }
+
+    private void LogOutputEditor_SelectionChanged(object? sender, EventArgs e) // Hook this up to editor.TextArea.SelectionChanged
+    {
+        if (DataContext is MainViewModel viewModel && sender is TextArea textArea)
+        {
+            string selectedText = textArea.Selection.GetText();
+            // Check for multi-line. SegmentTree.GetText() gives raw text.
+            if (!string.IsNullOrEmpty(selectedText) && (selectedText.Contains('\r') || selectedText.Contains('\n')))
+            {
+                viewModel.SelectedLogTextForFilter = null; // Multi-line, invalidate
+            }
+            else
+            {
+                viewModel.SelectedLogTextForFilter = string.IsNullOrEmpty(selectedText) ? null : selectedText;
+            }
         }
     }
 
@@ -804,7 +827,7 @@ public partial class MainWindow : Window, IDisposable
 
         while (originalSource != null && originalSource != sender as ItemsControl)
         {
-            if (originalSource is ContentPresenter cp && cp.DataContext is Logonaut.Common.FilterTypeDescriptor)
+            if (originalSource is ContentPresenter cp && cp.DataContext is Logonaut.Common.PaletteItemDescriptor)
             {
                 paletteItemContainer = cp;
                 break;
@@ -812,9 +835,23 @@ public partial class MainWindow : Window, IDisposable
             originalSource = VisualTreeHelper.GetParent(originalSource);
         }
 
-        if (paletteItemContainer != null && paletteItemContainer.DataContext is Logonaut.Common.FilterTypeDescriptor descriptor)
+        if (paletteItemContainer != null && paletteItemContainer.DataContext is Logonaut.Common.PaletteItemDescriptor descriptor)
         {
-            DataObject dragData = new DataObject(DragDropDataFormatFilterType, descriptor.TypeIdentifier);
+            if (!descriptor.IsEnabled) // If the item itself is disabled, do not start drag
+            {
+                e.Handled = true;
+                return;
+            }
+
+            DataObject dragData = new DataObject();
+            dragData.SetData(DragDropDataFormatFilterType, descriptor.TypeIdentifier);
+
+            if (descriptor.IsDynamic && !string.IsNullOrEmpty(descriptor.InitialValue))
+            {
+                // Add a new format for the initial value
+                dragData.SetData("LogonautFilterInitialValue", descriptor.InitialValue);
+            }
+
             DragDrop.DoDragDrop(paletteItemContainer, dragData, DragDropEffects.Copy);
             e.Handled = true;
         }
@@ -893,6 +930,10 @@ public partial class MainWindow : Window, IDisposable
         string? filterTypeIdentifier = e.Data.GetData(DragDropDataFormatFilterType) as string;
         if (string.IsNullOrEmpty(filterTypeIdentifier)) return;
 
+        string? initialValue = null;
+        if (e.Data.GetDataPresent("LogonautFilterInitialValue"))
+            initialValue = e.Data.GetData("LogonautFilterInitialValue") as string;
+
         FilterViewModel? targetParentVM = null;
         int? dropIndex = null; // For future precise insertion; null means append for now.
 
@@ -920,7 +961,7 @@ public partial class MainWindow : Window, IDisposable
         // mainViewModel.ExecuteAddFilterFromDrop will handle logic for adding to root or empty tree.
         // In this case, targetParentVM remains null, and ExecuteAddFilterFromDrop will figure it out.
 
-        mainViewModel.ExecuteAddFilterFromDrop(filterTypeIdentifier, targetParentVM, dropIndex);
+        mainViewModel.ExecuteAddFilterFromDrop(filterTypeIdentifier, targetParentVM, dropIndex, initialValue);
         e.Handled = true;
     }
 

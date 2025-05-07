@@ -58,6 +58,7 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
     private readonly IFileDialogService _fileDialogService;
     private readonly ISettingsService _settingsService;
     [ObservableProperty] private ILogSource _currentActiveLogSource;
+    [ObservableProperty] private string? _selectedLogTextForFilter; // Will be set from MainWindow.xaml.cs
 
     private readonly SynchronizationContext _uiContext;
     private IReactiveFilteredLogStream _reactiveFilteredLogStream; // This will be recreated when switching sources
@@ -74,7 +75,8 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
     public event EventHandler? RequestScrollToEnd; // Triggered when Auto Scroll is enabled
     public event EventHandler<int>? RequestScrollToLineIndex; // Event passes the 0-based index to scroll to
 
-    public ObservableCollection<FilterTypeDescriptor> FilterPaletteItems { get; } = new();
+    public ObservableCollection<PaletteItemDescriptor> FilterPaletteItems { get; } = new();
+    public PaletteItemDescriptor? InitializedSubstringPaletteItem { get; private set; }
 
     #endregion // --- Fields ---
 
@@ -126,11 +128,37 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
 
     private void PopulateFilterPalette()
     {
-        FilterPaletteItems.Add(new FilterTypeDescriptor("Substring", "SubstringType"));
-        FilterPaletteItems.Add(new FilterTypeDescriptor("Regex", "RegexType"));
-        FilterPaletteItems.Add(new FilterTypeDescriptor("AND Group", "AndType"));
-        FilterPaletteItems.Add(new FilterTypeDescriptor("OR Group", "OrType"));
-        FilterPaletteItems.Add(new FilterTypeDescriptor("NOR Group", "NorType"));
+        InitializedSubstringPaletteItem = new PaletteItemDescriptor("<Selection>", "SubstringType", isDynamic: true); // "SubstringType" is key
+        FilterPaletteItems.Add(InitializedSubstringPaletteItem);
+        FilterPaletteItems.Add(new PaletteItemDescriptor("Substring: \"\"", "SubstringType"));
+        FilterPaletteItems.Add(new PaletteItemDescriptor("Regex", "RegexType"));
+        FilterPaletteItems.Add(new PaletteItemDescriptor("AND Group", "AndType"));
+        FilterPaletteItems.Add(new PaletteItemDescriptor("OR Group", "OrType"));
+        FilterPaletteItems.Add(new PaletteItemDescriptor("NOR Group", "NorType"));
+    }
+
+    const int MaxPaletteDisplayTextLength = 20; // Or whatever fits your UI
+    partial void OnSelectedLogTextForFilterChanged(string? oldValue, string? newValue)
+    {
+        if (InitializedSubstringPaletteItem is null)
+            throw new InvalidOperationException("InitializedSubstringPaletteItem is not initialized.");
+
+        if (string.IsNullOrEmpty(newValue))
+        {
+            InitializedSubstringPaletteItem.IsEnabled = false;
+            InitializedSubstringPaletteItem.DisplayName = "<Selection>"; // Reset display name
+            InitializedSubstringPaletteItem.InitialValue = null;
+        }
+        else
+        {
+            // Ignore multi-line (Mainwindow.xaml.cs should pre-filter this)
+            InitializedSubstringPaletteItem.InitialValue = newValue;
+            string displayText = newValue;
+            if (displayText.Length > MaxPaletteDisplayTextLength)
+                displayText = displayText.Substring(0, MaxPaletteDisplayTextLength - 3) + "..."; // TODO: Use a more advanced one with '...' in the middle
+            InitializedSubstringPaletteItem.DisplayName = $"Substring: \"{displayText}\"";
+            InitializedSubstringPaletteItem.IsEnabled = true;
+        }
     }
 
     private IReactiveFilteredLogStream CreateFilteredStream(ILogSource source)
@@ -508,9 +536,9 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
 
     // Central method to handle adding a new filter node, typically initiated by a Drag-and-Drop operation.
     // This method determines the correct placement (root or child) and uses the Undo/Redo system.
-    public void ExecuteAddFilterFromDrop(string filterTypeIdentifier, FilterViewModel? targetParentInDrop, int? dropIndexInTarget)
+    public void ExecuteAddFilterFromDrop(string filterTypeIdentifier, FilterViewModel? targetParentInDrop, int? dropIndexInTarget, string? initialValue = null)
     {
-        IFilter newFilterNodeModel = CreateFilterModelFromType(filterTypeIdentifier);
+        IFilter newFilterNodeModel = CreateFilterModelFromType(filterTypeIdentifier, initialValue);
 
         FilterViewModel? actualTargetParentVM = targetParentInDrop;
         int? actualDropIndex = dropIndexInTarget;
@@ -589,12 +617,12 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
     }
 
     // Helper method to create an IFilter model instance from a type identifier string.
-    private IFilter CreateFilterModelFromType(string typeIdentifier)
+    private IFilter CreateFilterModelFromType(string typeIdentifier, string? initialValue = null)
     {
         return typeIdentifier switch
         {
-            "SubstringType" => new SubstringFilter(""), // Default empty value
-            "RegexType" => new RegexFilter(".*"),      // Default "match all" regex
+            "SubstringType" => new SubstringFilter(initialValue ?? ""), 
+            "RegexType" => new RegexFilter(initialValue ?? ".*"),
             "AndType" => new AndFilter(),
             "OrType" => new OrFilter(),
             "NorType" => new NorFilter(),
