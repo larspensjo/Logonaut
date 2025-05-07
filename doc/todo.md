@@ -23,3 +23,9 @@
 * **SimulatorLogSource UI overlay**
 *   6. Sliders or percentage inputs for INFO, WARN, ERROR, DEBUG, TRACE (could enforce sum=100%).
 *   7. TextBox for keywords (comma-separated?), Checkbox "Inject Keywords Randomly". Slider for injection probability. Randomly inserts specified keywords into generated messages. Useful for testing filters.
+
+* Enhanced dynamic substring
+    * A quick, subtle animation (e.g., a brief pulse or a quick color fade-in) when it enables could make the transition more engaging.
+    * Ellipsis Placement: Middle ellipsis (FirstPart...LastPart) is often better for recognizable strings than just trailing ellipsis if the beginning and end are important.
+    * Tooltip Disabled: "Select single-line text in the log to create a filter from it."
+    * Tooltip Enabled: "Drag to create a Substring filter: '[full selected text]'" (tooltip can show the full text even if the palette item shows a shortened one).
