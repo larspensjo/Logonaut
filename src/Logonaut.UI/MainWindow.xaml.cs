@@ -11,6 +11,7 @@ using ICSharpCode.AvalonEdit.Editing; // Required for Caret
 using ICSharpCode.AvalonEdit.Document; // Required for DocumentLine
 using Logonaut.UI.Helpers;
 using Logonaut.UI.ViewModels;
+using Logonaut.Filters;
 using System.Diagnostics;
 
 namespace Logonaut.UI;
@@ -134,6 +135,11 @@ public partial class MainWindow : Window, IDisposable
     private SelectedIndexHighlightTransformer? _selectedIndexTransformer;
 
     private static Logonaut.Core.FileSystemSettingsService _settingsService = new();
+
+    // Field for DnD visual feedback +++
+    private TreeViewItem? _dragOverTreeViewItem = null;
+    private Brush? _originalDragOverItemBrush = null;
+    private const string DragDropDataFormatFilterType = "LogonautFilterTypeIdentifier"; // Custom data format key
 
     // Enable injection of the ViewModel for testing purposes
     public MainWindow(MainViewModel viewModel)
@@ -753,4 +759,179 @@ public partial class MainWindow : Window, IDisposable
     {
         this.Close(); // Trigger the Window_Closing event
     }
+
+    #region Drag-and-Drop Handlers for Filter Palette and TreeView
+
+    // --- Drag Source: Filter Palette Item ---
+    // Initiates a drag operation when a filter type is dragged from the palette.
+    private void PaletteItemsControl_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        DependencyObject? originalSource = e.OriginalSource as DependencyObject;
+        ContentPresenter? paletteItemContainer = null;
+
+        while (originalSource != null && originalSource != sender as ItemsControl)
+        {
+            if (originalSource is ContentPresenter cp && cp.DataContext is Logonaut.Common.FilterTypeDescriptor)
+            {
+                paletteItemContainer = cp;
+                break;
+            }
+            originalSource = VisualTreeHelper.GetParent(originalSource);
+        }
+
+        if (paletteItemContainer != null && paletteItemContainer.DataContext is Logonaut.Common.FilterTypeDescriptor descriptor)
+        {
+            DataObject dragData = new DataObject(DragDropDataFormatFilterType, descriptor.TypeIdentifier);
+            DragDrop.DoDragDrop(paletteItemContainer, dragData, DragDropEffects.Copy);
+            e.Handled = true;
+        }
+    }
+
+    // --- Drop Target: FilterTreeView ---
+    private void FilterTreeView_DragEnter(object sender, DragEventArgs e)
+    {
+        UpdateDragDropEffects(e);
+    }
+
+    private void FilterTreeView_DragOver(object sender, DragEventArgs e)
+    {
+        UpdateDragDropEffects(e);
+    }
+
+    // Determines the effect of a drag operation over the TreeView and provides visual feedback.
+    private void UpdateDragDropEffects(DragEventArgs e)
+    {
+        e.Effects = DragDropEffects.None; // Default to no drop
+        ClearDropTargetAdornment();       // Clear previous highlight
+
+        if (e.Data.GetDataPresent(DragDropDataFormatFilterType))
+        {
+            Point pt = e.GetPosition(FilterTreeView);
+            // Hit test for TreeViewItem directly under mouse
+            TreeViewItem? targetTVI = GetVisualAncestor<TreeViewItem>(FilterTreeView.InputHitTest(pt) as DependencyObject);
+            FilterViewModel? targetVM = (targetTVI?.DataContext) as FilterViewModel;
+
+            var mainViewModel = DataContext as MainViewModel;
+            if (mainViewModel == null || mainViewModel.ActiveFilterProfile == null)
+            {
+                e.Effects = DragDropEffects.None;
+                e.Handled = true;
+                return;
+            }
+
+            // Check if dropping onto a valid composite item
+            if (targetVM != null && targetVM.Filter is CompositeFilter)
+            {
+                e.Effects = DragDropEffects.Copy; // Allow copy (add)
+                ApplyDropTargetAdornment(targetTVI);
+            }
+            // Allow drop onto empty TreeView space if:
+            // 1. The active profile's root is null (tree is completely empty)
+            // OR 2. The active profile's root is a composite filter (can add to root)
+            else if (targetVM == null && 
+                     (mainViewModel.ActiveFilterProfile.RootFilterViewModel == null ||
+                      mainViewModel.ActiveFilterProfile.RootFilterViewModel.Filter is CompositeFilter))
+            {
+                e.Effects = DragDropEffects.Copy; // Allow copy (add to root or as new root)
+                // No specific TreeViewItem to highlight for empty space drop
+            }
+        }
+        e.Handled = true;
+    }
+    
+    private void FilterTreeView_DragLeave(object sender, DragEventArgs e)
+    {
+        ClearDropTargetAdornment();
+        e.Handled = true;
+    }
+
+    // Handles the drop action on the FilterTreeView.
+    private void FilterTreeView_Drop(object sender, DragEventArgs e)
+    {
+        ClearDropTargetAdornment(); // Clear highlight after drop
+        var mainViewModel = DataContext as MainViewModel;
+        if (mainViewModel == null) return;
+
+        string? filterTypeIdentifier = e.Data.GetData(DragDropDataFormatFilterType) as string;
+        if (string.IsNullOrEmpty(filterTypeIdentifier)) return;
+
+        FilterViewModel? targetParentVM = null;
+        int? dropIndex = null; // For future precise insertion; null means append for now.
+
+        Point pt = e.GetPosition(FilterTreeView);
+        TreeViewItem? targetTVI = GetVisualAncestor<TreeViewItem>(FilterTreeView.InputHitTest(pt) as DependencyObject);
+        FilterViewModel? hitTestVM = (targetTVI?.DataContext) as FilterViewModel;
+
+        if (hitTestVM != null) // Dropped on an existing item
+        {
+            if (hitTestVM.Filter is CompositeFilter)
+            {
+                targetParentVM = hitTestVM;
+                // For Step 1, always append. Index calculation for specific position comes later.
+                dropIndex = targetParentVM.Children.Count; 
+            }
+            else
+            {
+                // Dropping on a non-composite leaf is handled by DragOver setting Effects to None.
+                // If it still reaches here, do nothing.
+                e.Effects = DragDropEffects.None;
+                return;
+            }
+        }
+        // If hitTestVM is null, it implies a drop on empty TreeView space.
+        // mainViewModel.ExecuteAddFilterFromDrop will handle logic for adding to root or empty tree.
+        // In this case, targetParentVM remains null, and ExecuteAddFilterFromDrop will figure it out.
+
+        mainViewModel.ExecuteAddFilterFromDrop(filterTypeIdentifier, targetParentVM, dropIndex);
+        e.Handled = true;
+    }
+
+    // --- Visual Feedback Helpers ---
+
+    // Applies a temporary background highlight to a TreeViewItem during drag-over.
+    private void ApplyDropTargetAdornment(TreeViewItem? tvi)
+    {
+        if (tvi != null)
+        {
+            _dragOverTreeViewItem = tvi;
+            _originalDragOverItemBrush = tvi.Background;
+            // Use a theme-aware highlight brush if possible, or fallback
+            var highlightBrush = TryFindResource("AccentBrush") as Brush ?? SystemColors.HighlightBrush; // Using AccentBrush for highlight
+            tvi.Background = highlightBrush;
+        }
+    }
+
+    // Clears any temporary background highlight from a TreeViewItem.
+    private void ClearDropTargetAdornment()
+    {
+        if (_dragOverTreeViewItem != null && _originalDragOverItemBrush != null)
+        {
+            _dragOverTreeViewItem.Background = _originalDragOverItemBrush;
+        }
+        _dragOverTreeViewItem = null;
+        _originalDragOverItemBrush = null;
+    }
+    
+    // --- Helper Methods ---
+
+    // Gets the FilterViewModel associated with a DependencyObject (typically a UI element within a TreeViewItem).
+    private FilterViewModel? GetFilterViewModelFromElement(DependencyObject? element)
+    {
+        // Traverse up to find TreeViewItem and get its DataContext
+        TreeViewItem? tvi = GetVisualAncestor<TreeViewItem>(element);
+        return tvi?.DataContext as FilterViewModel;
+    }
+
+    // Finds the first visual ancestor of a specific type.
+    public static T? GetVisualAncestor<T>(DependencyObject? d) where T : class
+    {
+        while (d != null)
+        {
+            if (d is T tItem) return tItem;
+            d = VisualTreeHelper.GetParent(d);
+        }
+        return null;
+    }
+
+    #endregion
 }

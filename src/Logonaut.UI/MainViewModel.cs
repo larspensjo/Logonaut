@@ -74,6 +74,8 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
     public event EventHandler? RequestScrollToEnd; // Triggered when Auto Scroll is enabled
     public event EventHandler<int>? RequestScrollToLineIndex; // Event passes the 0-based index to scroll to
 
+    public ObservableCollection<FilterTypeDescriptor> FilterPaletteItems { get; } = new();
+
     #endregion // --- Fields ---
 
     #region Stats Properties
@@ -118,6 +120,17 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
 
         Theme = new ThemeViewModel();
         LoadPersistedSettings(); // Loads basic settings, not files yet
+
+        PopulateFilterPalette();
+    }
+
+    private void PopulateFilterPalette()
+    {
+        FilterPaletteItems.Add(new FilterTypeDescriptor("Substring", "SubstringType"));
+        FilterPaletteItems.Add(new FilterTypeDescriptor("Regex", "RegexType"));
+        FilterPaletteItems.Add(new FilterTypeDescriptor("AND Group", "AndType"));
+        FilterPaletteItems.Add(new FilterTypeDescriptor("OR Group", "OrType"));
+        FilterPaletteItems.Add(new FilterTypeDescriptor("NOR Group", "NorType"));
     }
 
     private IReactiveFilteredLogStream CreateFilteredStream(ILogSource source)
@@ -422,24 +435,13 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
     // === Filter Node Manipulation Commands (Operate on Active Profile's Tree) ===
 
     // Combined Add Filter command - type determined by parameter
+    // TODO: This will be replaced by the DnD functionality in the future.
     [RelayCommand(CanExecute = nameof(CanAddFilterNode))]
     private void AddFilter(object? filterTypeParam) // Parameter likely string like "Substring", "And", etc.
     {
         if (ActiveFilterProfile == null) throw new InvalidOperationException("No active profile");
 
-        IFilter newFilterNodeModel;
-        string type = filterTypeParam as string ?? string.Empty;
-        switch(type)
-        {
-            case "Substring": newFilterNodeModel = new SubstringFilter(""); break;
-            case "Regex": newFilterNodeModel = new RegexFilter(".*"); break;
-            case "And": newFilterNodeModel = new AndFilter(); break;
-            case "Or": newFilterNodeModel = new OrFilter(); break;
-            case "Nor": newFilterNodeModel = new NorFilter(); break;
-            default: throw new ArgumentException($"Unknown filter type: {type}", nameof(filterTypeParam));
-        }
-
-
+        IFilter newFilterNodeModel = CreateFilterModelFromType(filterTypeParam as string ?? string.Empty);
         FilterViewModel? targetParentVM = null;
         int? targetIndex = null; // Use null to add at the end by default
 
@@ -456,6 +458,9 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
             TriggerFilterUpdate(); // Explicitly trigger updates since ExecuteAction wasn't called
             SaveCurrentSettingsDelayed();
             Debug.WriteLine("AddFilter: Set new root node (outside Undo system).");
+            if (SelectedFilterNode != null && SelectedFilterNode.IsEditable)
+                 SelectedFilterNode.BeginEditCommand.Execute(null);
+            return;
         }
         // Case 2: A composite node is selected - add as child
         else if (SelectedFilterNode != null && SelectedFilterNode.Filter is CompositeFilter)
@@ -478,28 +483,124 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
              return;
         }
 
-        // If we determined a valid parent, execute the action
-        if(targetParentVM != null)
+        if (targetParentVM == null)
+            throw new InvalidOperationException("Failed to determine a valid parent for the new filter node.");
+
+        var action = new AddFilterAction(targetParentVM, newFilterNodeModel, targetIndex);
+        Execute(action); // Use the ICommandExecutor method
+
+        // Try to select the newly added node AFTER execution
+        // AddFilterAction's Execute should have added the VM
+        var addedVM = targetParentVM.Children.LastOrDefault(vm => vm.Filter == newFilterNodeModel);
+        if (addedVM is null)
+            throw new InvalidOperationException("Failed to find the newly added VM in the parent's children.");
+
+        targetParentVM.IsExpanded = true;
+        SelectedFilterNode = addedVM; // Update selection
+
+        // Editing logic: If the new node is editable, start editing
+        if (SelectedFilterNode.IsEditable)
         {
-            var action = new AddFilterAction(targetParentVM, newFilterNodeModel, targetIndex);
-            Execute(action); // Use the ICommandExecutor method
+            // Execute BeginEdit directly on the selected VM
+            SelectedFilterNode.BeginEditCommand.Execute(null);
+        }
+    }
 
-            // Try to select the newly added node AFTER execution
-            // AddFilterAction's Execute should have added the VM
-            var addedVM = targetParentVM.Children.LastOrDefault(vm => vm.Filter == newFilterNodeModel);
-            if (addedVM is null)
-                throw new InvalidOperationException("Failed to find the newly added VM in the parent's children.");
+    // Central method to handle adding a new filter node, typically initiated by a Drag-and-Drop operation.
+    // This method determines the correct placement (root or child) and uses the Undo/Redo system.
+    public void ExecuteAddFilterFromDrop(string filterTypeIdentifier, FilterViewModel? targetParentInDrop, int? dropIndexInTarget)
+    {
+        IFilter newFilterNodeModel = CreateFilterModelFromType(filterTypeIdentifier);
 
-            targetParentVM.IsExpanded = true;
-            SelectedFilterNode = addedVM; // Update selection
+        FilterViewModel? actualTargetParentVM = targetParentInDrop;
+        int? actualDropIndex = dropIndexInTarget;
 
-            // Editing logic: If the new node is editable, start editing
+        if (ActiveFilterProfile == null) throw new InvalidOperationException("No active profile for drop.");
+
+        if (actualTargetParentVM == null) // Dropped on empty space in TreeView, not on a specific item
+        {
+            if (ActiveFilterProfile.RootFilterViewModel == null) // Case 1: Tree is empty, set as root
+            {
+                ActiveFilterProfile.SetModelRootFilter(newFilterNodeModel); // This updates the Model
+                ActiveFilterProfile.RefreshRootViewModel(); // This creates the VM for the new root
+                UpdateActiveTreeRootNodes(ActiveFilterProfile); // This updates the collection bound to the TreeView
+                SelectedFilterNode = ActiveFilterProfile.RootFilterViewModel;
+                // No "Action" executed for undo stack in this specific case (matches old button logic for setting initial root)
+                TriggerFilterUpdate();
+                SaveCurrentSettingsDelayed();
+                Debug.WriteLine("ExecuteAddFilterFromDrop: Set new root node (outside Undo system).");
+                if (SelectedFilterNode != null && SelectedFilterNode.IsEditable)
+                {
+                    SelectedFilterNode.BeginEditCommand.Execute(null);
+                }
+                return; // Action complete for setting root
+            }
+            else if (ActiveFilterProfile.RootFilterViewModel.Filter is CompositeFilter) // Case 2: Tree not empty, root is composite, add to root
+            {
+                actualTargetParentVM = ActiveFilterProfile.RootFilterViewModel;
+                actualDropIndex = actualTargetParentVM.Children.Count; // Add to end of root
+            }
+            else // Case 3: Tree not empty, root is not composite - invalid drop for adding to root
+            {
+                Debug.WriteLine("ExecuteAddFilterFromDrop: Cannot add. Root exists but is not composite, and drop was not on a composite item.");
+                return;
+            }
+        }
+        // If actualTargetParentVM was provided from drop, it should have already been validated as composite by the drop handler.
+
+        if (actualTargetParentVM == null || !(actualTargetParentVM.Filter is CompositeFilter))
+        {
+            Debug.WriteLine("ExecuteAddFilterFromDrop: No valid composite parent found for adding the filter.");
+            return;
+        }
+
+        int finalIndex = actualDropIndex ?? actualTargetParentVM.Children.Count;
+
+        var action = new AddFilterAction(actualTargetParentVM, newFilterNodeModel, finalIndex);
+        Execute(action); // Use the ICommandExecutor method (adds to undo stack, triggers save/update)
+
+        // Try to find the added VM more robustly
+        var addedVM = actualTargetParentVM.Children.FirstOrDefault(vm => vm.Filter == newFilterNodeModel);
+        if (addedVM == null && finalIndex < actualTargetParentVM.Children.Count) // Check specific index if not last
+        {
+             addedVM = actualTargetParentVM.Children[finalIndex];
+             if(addedVM.Filter != newFilterNodeModel) addedVM = null; // double check it's the one we added
+        }
+        // Fallback to LastOrDefault if specific index check failed or it was added at the end
+        if (addedVM == null) addedVM = actualTargetParentVM.Children.LastOrDefault(vm => vm.Filter == newFilterNodeModel);
+
+
+        if (addedVM != null)
+        {
+            actualTargetParentVM.IsExpanded = true;
+            SelectedFilterNode = addedVM;
+
             if (SelectedFilterNode.IsEditable)
             {
-                // Execute BeginEdit directly on the selected VM
                 SelectedFilterNode.BeginEditCommand.Execute(null);
             }
         }
+        else
+        {
+            throw new InvalidOperationException("Failed to find the newly added VM in the parent's children.");
+            // This might happen if the filter type already existed and was somehow merged, or an error in AddFilterAction.
+            // For now, just log. If it becomes a persistent issue, further investigation into AddFilterAction's interaction with collections is needed.
+        }
+    }
+
+    // Helper method to create an IFilter model instance from a type identifier string.
+    private IFilter CreateFilterModelFromType(string typeIdentifier)
+    {
+        return typeIdentifier switch
+        {
+            "SubstringType" => new SubstringFilter(""), // Default empty value
+            "RegexType" => new RegexFilter(".*"),      // Default "match all" regex
+            "AndType" => new AndFilter(),
+            "OrType" => new OrFilter(),
+            "NorType" => new NorFilter(),
+            // "TRUE" filter type isn't typically added from a palette.
+            _ => throw new ArgumentException($"Unknown filter type identifier: {typeIdentifier} in CreateFilterModelFromType"),
+        };
     }
 
     private bool CanAddFilterNode()

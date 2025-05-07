@@ -260,31 +260,39 @@
 
                         <!-- Buttons for NODE management (below TreeView) -->
                         <StackPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
-                            <TextBlock Text="Add Filter Node:" Margin="0,0,0,2" FontSize="10" Foreground="{DynamicResource SecondaryTextBrush}" HorizontalAlignment="Center"/>
-                            <WrapPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,10">
-                                <!-- Pass string parameter to identify filter type -->
-                                <Button Content="Substring" Command="{Binding AddFilterCommand}" CommandParameter="Substring" Margin="2"/>
-                                <Button Content="Regex" Command="{Binding AddFilterCommand}" CommandParameter="Regex" Margin="2"/>
-                                <Button Content="AND" Command="{Binding AddFilterCommand}" CommandParameter="And" Margin="2"/>
-                                <Button Content="OR" Command="{Binding AddFilterCommand}" CommandParameter="Or" Margin="2"/>
-                                <Button Content="NOR" Command="{Binding AddFilterCommand}" CommandParameter="Nor" Margin="2"/>
-                            </WrapPanel>
+                            <TextBlock Text="Drag to Add Filter Node:" Margin="0,0,0,2" FontSize="10" Foreground="{DynamicResource SecondaryTextBrush}" HorizontalAlignment="Center"/>
+                            <ItemsControl ItemsSource="{Binding FilterPaletteItems}"
+                                        ItemTemplate="{DynamicResource FilterPaletteItemTemplate}"
+                                        ItemContainerStyle="{DynamicResource FilterPaletteItemStyle}" 
+                                        Margin="0,0,0,10"
+                                        PreviewMouseLeftButtonDown="PaletteItemsControl_PreviewMouseLeftButtonDown">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel Orientation="Horizontal" HorizontalAlignment="Center"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                            </ItemsControl>
                             <!-- Edit/Remove operate on the selected NODE -->
                             <Button Content="Edit Node" Command="{Binding ToggleEditNodeCommand}" Margin="0,5,0,0" ToolTip="Edit the selected filter node's value"/>
                             <Button Content="Remove Node" Command="{Binding RemoveFilterNodeCommand}" Margin="0,5,0,0" ToolTip="Remove the selected filter node and its children"/>
+                            <!-- TODO: Add Trash Bin area for DnD delete later -->
                         </StackPanel>
 
                         <!-- TreeView now displays the ACTIVE profile's tree -->
-                        <TreeView x:Name="FilterTreeViewNameForTesting"
+                        <TreeView x:Name="FilterTreeView"
                                 ItemsSource="{Binding ActiveTreeRootNodes}"
                                 SelectedItemChanged="TreeView_SelectedItemChanged"
                                 Margin="0,0,0,0"
-                                Background="Transparent">
-                                <TreeView.ItemContainerStyle>
+                                Background="Transparent"
+                                AllowDrop="True"
+                                DragEnter="FilterTreeView_DragEnter"
+                                DragOver="FilterTreeView_DragOver"
+                                DragLeave="FilterTreeView_DragLeave"
+                                Drop="FilterTreeView_Drop">
+                            <TreeView.ItemContainerStyle>
                                 <!-- Apply the HierarchicalDataTemplate from FilterTemplates.xaml -->
                                 <Style TargetType="{x:Type TreeViewItem}" BasedOn="{StaticResource {x:Type TreeViewItem}}">
-                                    <!-- Bind IsSelected to the FilterViewModel's IsSelected property if needed -->
-                                    <!-- <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" /> -->
+                                    <!-- AllowDrop could be set here too if needed for item-specific drop zones later -->
                                 </Style>
                             </TreeView.ItemContainerStyle>
                         </TreeView>

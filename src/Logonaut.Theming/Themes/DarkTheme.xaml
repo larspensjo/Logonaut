@@ -1,6 +1,7 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:converters="clr-namespace:Logonaut.Theming.Converters">
+                    xmlns:converters="clr-namespace:Logonaut.Theming.Converters"
+                    xmlns:common="clr-namespace:Logonaut.Common;assembly=Logonaut.Common">
 
     <converters:TreeViewIndentConverter x:Key="TreeViewIndentConverter"/>
 
@@ -86,6 +87,24 @@
         <GradientStop Color="#FF444444" Offset="0.0"/> <!-- Slightly lighter top -->
         <GradientStop Color="#FF333333" Offset="1.0"/> <!-- Target resting color at bottom -->
     </LinearGradientBrush>
+
+    <Style x:Key="FilterPaletteItemStyle" TargetType="ContentPresenter">
+        <Setter Property="Margin" Value="2"/>
+    </Style>
+
+    <DataTemplate x:Key="FilterPaletteItemTemplate" DataType="{x:Type common:FilterTypeDescriptor}">
+        <Border Background="{DynamicResource ControlBackgroundBrush}"
+                BorderBrush="{DynamicResource BorderBrush}"
+                BorderThickness="1" CornerRadius="3" Padding="5,3" MinWidth="80"
+                Cursor="Hand">
+            <StackPanel Orientation="Horizontal">
+                <ContentControl Content="{Binding TypeIdentifier, Converter={StaticResource FilterTypeToIconConverter}}"
+                              VerticalAlignment="Center" Margin="0,0,4,0" Focusable="False"/>
+                <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center"
+                           Foreground="{DynamicResource TextForegroundBrush}"/>
+            </StackPanel>
+        </Border>
+    </DataTemplate>
 
     <Style x:Key="SimulatorToggleButtonStyle" TargetType="ToggleButton">
         <!-- Set default visual properties using DynamicResource - MIMIC BUTTON -->
