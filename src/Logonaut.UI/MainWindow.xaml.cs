@@ -5,6 +5,7 @@ using System.Windows.Data; // Required for Binding
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Input; // Required for RoutedUICommand
+using System.Windows.Documents; // Required for AdornerLayer
 using ICSharpCode.AvalonEdit;
 using ICSharpCode.AvalonEdit.Rendering;
 using ICSharpCode.AvalonEdit.Editing; // Required for Caret
@@ -50,6 +51,7 @@ namespace Logonaut.UI;
 public partial class MainWindow : Window, IDisposable
 {
     private int _lastKnownCaretLine = -1; // Field to track the last caret line
+    private EmptyDropTargetAdorner? _emptyDropAdorner;
 
     public static readonly RoutedUICommand ToggleSimulatorConfigCommand = new RoutedUICommand(
         "Toggle Simulator Configuration Panel", "ToggleSimulatorConfigCommand", typeof(MainWindow)
@@ -803,6 +805,7 @@ public partial class MainWindow : Window, IDisposable
     {
         e.Effects = DragDropEffects.None; // Default to no drop
         ClearDropTargetAdornment();       // Clear previous highlight
+        HideEmptyDropAdorner(); // Ensure it's hidden by default
 
         if (e.Data.GetDataPresent(DragDropDataFormatFilterType))
         {
@@ -811,13 +814,8 @@ public partial class MainWindow : Window, IDisposable
             TreeViewItem? targetTVI = GetVisualAncestor<TreeViewItem>(FilterTreeView.InputHitTest(pt) as DependencyObject);
             FilterViewModel? targetVM = (targetTVI?.DataContext) as FilterViewModel;
 
-            var mainViewModel = DataContext as MainViewModel;
-            if (mainViewModel == null || mainViewModel.ActiveFilterProfile == null)
-            {
-                e.Effects = DragDropEffects.None;
-                e.Handled = true;
-                return;
-            }
+            if (_viewModel.ActiveFilterProfile is not { } activeFilterProfile)
+                throw new InvalidOperationException("ActiveFilterProfile is null.");
 
             // Check if dropping onto a valid composite item
             if (targetVM != null && targetVM.Filter is CompositeFilter)
@@ -828,12 +826,22 @@ public partial class MainWindow : Window, IDisposable
             // Allow drop onto empty TreeView space if:
             // 1. The active profile's root is null (tree is completely empty)
             // OR 2. The active profile's root is a composite filter (can add to root)
-            else if (targetVM == null && 
-                     (mainViewModel.ActiveFilterProfile.RootFilterViewModel == null ||
-                      mainViewModel.ActiveFilterProfile.RootFilterViewModel.Filter is CompositeFilter))
+            // Case 2: Dragging over empty space
+            else if (targetTVI == null) 
             {
-                e.Effects = DragDropEffects.Copy; // Allow copy (add to root or as new root)
-                // No specific TreeViewItem to highlight for empty space drop
+                // Subcase 2a: Tree is completely empty - SHOW EMPTY ADORNER
+                if (activeFilterProfile.RootFilterViewModel == null)
+                {
+                    e.Effects = DragDropEffects.Copy;
+                    ShowEmptyDropAdorner();
+                }
+                // Subcase 2b: Tree has a root, and it's composite (dropping on space to add to root)
+                else if (activeFilterProfile.RootFilterViewModel.Filter is CompositeFilter)
+                {
+                    e.Effects = DragDropEffects.Copy;
+                    // Optional: Highlight the root TreeViewItem if possible, or just rely on cursor.
+                    // For now, no specific item highlight, but the "empty adorner" is NOT shown.
+                }
             }
         }
         e.Handled = true;
@@ -842,6 +850,7 @@ public partial class MainWindow : Window, IDisposable
     private void FilterTreeView_DragLeave(object sender, DragEventArgs e)
     {
         ClearDropTargetAdornment();
+        HideEmptyDropAdorner();
         e.Handled = true;
     }
 
@@ -849,6 +858,7 @@ public partial class MainWindow : Window, IDisposable
     private void FilterTreeView_Drop(object sender, DragEventArgs e)
     {
         ClearDropTargetAdornment(); // Clear highlight after drop
+        HideEmptyDropAdorner();
         var mainViewModel = DataContext as MainViewModel;
         if (mainViewModel == null) return;
 
@@ -887,6 +897,24 @@ public partial class MainWindow : Window, IDisposable
     }
 
     // --- Visual Feedback Helpers ---
+    private void ShowEmptyDropAdorner()
+    {
+        AdornerLayer? adornerLayer = AdornerLayer.GetAdornerLayer(FilterTreeView);
+        if (adornerLayer == null) return;
+
+        if (_emptyDropAdorner == null)
+        {
+            _emptyDropAdorner = new EmptyDropTargetAdorner(FilterTreeView);
+            adornerLayer.Add(_emptyDropAdorner);
+        }
+        _emptyDropAdorner.Visibility = Visibility.Visible;
+    }
+
+    private void HideEmptyDropAdorner()
+    {
+        if (_emptyDropAdorner != null)
+            _emptyDropAdorner.Visibility = Visibility.Collapsed;
+    }
 
     // Applies a temporary background highlight to a TreeViewItem during drag-over.
     private void ApplyDropTargetAdornment(TreeViewItem? tvi)
