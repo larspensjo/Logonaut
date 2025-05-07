@@ -21,9 +21,9 @@ public class EmptyDropTargetAdorner : Adorner
 
         if (adornedElement is FrameworkElement fe) // Check if it's a FrameworkElement
         {
-            fillBrushResource = fe.TryFindResource("PanelBackgroundBrush") as Brush;
-            borderBrushResource = fe.TryFindResource("AccentBrush") as Brush;
-            textBrushResource = fe.TryFindResource("SecondaryTextBrush") as Brush;
+            fillBrushResource = fe.TryFindResource("EmptyDropAdorner.BackgroundBrush") as Brush;
+            borderBrushResource = fe.TryFindResource("EmptyDropAdorner.BorderBrush") as Brush;
+            textBrushResource = fe.TryFindResource("EmptyDropAdorner.TextBrush") as Brush;
         }
 
         _fillBrush = fillBrushResource ?? new SolidColorBrush(Color.FromArgb(30, 128, 128, 128)); // Semi-transparent gray fallback

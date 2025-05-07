@@ -43,6 +43,11 @@
     <SolidColorBrush x:Key="DividerBrush" Color="{StaticResource BorderColor}" /> <!-- For VerticalLineMargin/Separators -->
     <SolidColorBrush x:Key="ChunkSeparatorBrush" Color="#307070"/>
 
+    <!-- Brushes for EmptyDropTargetAdorner -->
+    <SolidColorBrush x:Key="EmptyDropAdorner.BackgroundBrush" Color="#4C2C2C2E"/> <!-- Semi-transparent PanelBackground (Dark Theme: Lighter Dark Grey) -->
+    <SolidColorBrush x:Key="EmptyDropAdorner.BorderBrush" Color="{StaticResource NeonAccentColor}"/>
+    <SolidColorBrush x:Key="EmptyDropAdorner.TextBrush" Color="{StaticResource SecondaryForegroundColor}"/>
+
     <SolidColorBrush x:Key="AnchorButton.Static.Background" Color="#FF38383A"/> <!-- Slightly lighter than PanelBackground -->
     <SolidColorBrush x:Key="AnchorButton.Static.Border" Color="#FF4A4A4C"/>    <!-- Subtle border -->
     <SolidColorBrush x:Key="AnchorButton.Checked.Background" Color="#4C00BFFF"/> <!-- Semi-transparent Accent -->
