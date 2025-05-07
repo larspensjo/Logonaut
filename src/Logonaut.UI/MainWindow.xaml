@@ -19,6 +19,8 @@
         <KeyBinding Key="F3" Command="{Binding NextSearchCommand}" />
         <KeyBinding Key="F3" Modifiers="Shift" Command="{Binding PreviousSearchCommand}" />
         <KeyBinding Key="F12" Command="{x:Static local:MainWindow.ToggleSimulatorConfigCommand}"/>
+        <KeyBinding Modifiers="Ctrl" Key="Z" Command="{Binding UndoCommand}"/>
+        <KeyBinding Modifiers="Ctrl" Key="Y" Command="{Binding RedoCommand}"/>
     </Window.InputBindings>
 
     <Window.Resources>
