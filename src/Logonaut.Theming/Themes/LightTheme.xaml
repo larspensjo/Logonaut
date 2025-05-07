@@ -51,6 +51,9 @@
     <SolidColorBrush x:Key="EmptyDropAdorner.BackgroundBrush" Color="#33E0E0E0"/> <!-- Semi-transparent Light Grey (Light Theme) -->
     <SolidColorBrush x:Key="EmptyDropAdorner.BorderBrush" Color="{StaticResource NeonAccentColor}"/>
     <SolidColorBrush x:Key="EmptyDropAdorner.TextBrush" Color="{StaticResource SecondaryForegroundColor}"/>
+    <SolidColorBrush x:Key="EmptyDropAdorner.Resting.BackgroundBrush" Color="#1AE0E0E0"/> <!-- Even more transparent Light Grey -->
+    <SolidColorBrush x:Key="EmptyDropAdorner.Resting.BorderBrush" Color="{StaticResource BorderColor}"/> <!-- Less prominent border -->
+    <SolidColorBrush x:Key="EmptyDropAdorner.Resting.TextBrush" Color="#AA6D6D72"/> <!-- Dimmer SecondaryTextBrush (e.g., 66% alpha) -->
 
     <SolidColorBrush x:Key="AnchorButton.Static.Background" Color="#FFEFEFF4"/> <!-- Slightly darker than PanelBackground -->
     <SolidColorBrush x:Key="AnchorButton.Static.Border" Color="#FFC7C7CC"/>    <!-- Subtle border -->

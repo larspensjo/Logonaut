@@ -52,6 +52,7 @@ public partial class MainWindow : Window, IDisposable
 {
     private int _lastKnownCaretLine = -1; // Field to track the last caret line
     private EmptyDropTargetAdorner? _emptyDropAdorner;
+    private AdornerLayer? _adornerLayer;
 
     public static readonly RoutedUICommand ToggleSimulatorConfigCommand = new RoutedUICommand(
         "Toggle Simulator Configuration Panel", "ToggleSimulatorConfigCommand", typeof(MainWindow)
@@ -166,9 +167,8 @@ public partial class MainWindow : Window, IDisposable
         _logOutputEditor.Loaded += (s, e) =>
         {
             _viewModel.SetLogEditorInstance(_logOutputEditor);
-            // Any other logic previously in LogOutputEditor_Loaded that depends
-            // on the ViewModel knowing about the editor can go here or be
-            // triggered by SetLogEditorInstance if needed.
+            _adornerLayer = AdornerLayer.GetAdornerLayer(FilterTreeView); // Get layer once
+            UpdateEmptyTreeViewAdornerVisibility(); // Initial check
         };
 
         // Set up initial window state
@@ -179,16 +179,47 @@ public partial class MainWindow : Window, IDisposable
         // Add original line number and separator margins (code-behind approach)
         SetupCustomMargins();
 
-        // Hook up event handlers AFTER the template is applied
-        _logOutputEditor.Loaded += LogOutputEditor_Loaded;
-        
-        // Enable clipboard paste functionality. Only preview events seem to work here.
-        _logOutputEditor.TextArea.PreviewKeyDown += LogOutputEditor_PreviewKeyDown;
-
-        // Handle mouse clicks for search reference point. Only preview events seem to work here.
-        _logOutputEditor.TextArea.PreviewMouseDown += LogOutputEditor_PreviewMouseDown;
+        _logOutputEditor.Loaded += LogOutputEditor_Loaded; // Hook up event handlers AFTER the template is applied
+        _logOutputEditor.TextArea.PreviewKeyDown += LogOutputEditor_PreviewKeyDown; // Enable clipboard paste functionality. Only preview events seem to work here.
+        _logOutputEditor.TextArea.PreviewMouseDown += LogOutputEditor_PreviewMouseDown; // Handle mouse clicks for search reference point. Only preview events seem to work here.
+        _viewModel.ActiveTreeRootNodes.CollectionChanged += ActiveTreeRootNodes_CollectionChanged;
 
         Closing += MainWindow_Closing;
+    }
+
+    private void ActiveTreeRootNodes_CollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        UpdateEmptyTreeViewAdornerVisibility();
+    }
+
+    // Helper method to manage overall visibility and resting state
+    private void UpdateEmptyTreeViewAdornerVisibility()
+    {
+        if (_adornerLayer == null) _adornerLayer = AdornerLayer.GetAdornerLayer(FilterTreeView);
+        if (_adornerLayer == null) return;
+
+        bool isTreeEmpty = (_viewModel.ActiveFilterProfile?.RootFilterViewModel == null && _viewModel.ActiveTreeRootNodes.Count == 0);
+
+        if (isTreeEmpty)
+        {
+            if (_emptyDropAdorner == null)
+            {
+                _emptyDropAdorner = new EmptyDropTargetAdorner(FilterTreeView);
+                _adornerLayer.Add(_emptyDropAdorner);
+            }
+            _emptyDropAdorner.SetVisualState(false); // Set to resting state
+            _emptyDropAdorner.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            if (_emptyDropAdorner != null)
+            {
+                _emptyDropAdorner.Visibility = Visibility.Collapsed;
+                // Optionally remove and nullify if you prefer to recreate it always when tree becomes empty again
+                // _adornerLayer.Remove(_emptyDropAdorner);
+                // _emptyDropAdorner = null;
+            }
+        }
     }
 
     private void ViewModel_RequestScrollToLineIndex(object? sender, int lineIndex)
@@ -803,46 +834,43 @@ public partial class MainWindow : Window, IDisposable
     // Determines the effect of a drag operation over the TreeView and provides visual feedback.
     private void UpdateDragDropEffects(DragEventArgs e)
     {
-        e.Effects = DragDropEffects.None; // Default to no drop
-        ClearDropTargetAdornment();       // Clear previous highlight
-        HideEmptyDropAdorner(); // Ensure it's hidden by default
+        e.Effects = DragDropEffects.None; 
+        ClearDropTargetAdornment();    
+        // Don't immediately hide/set resting here. Let the logic below decide.
+        // The permanent adorner's resting state is managed by UpdateEmptyTreeViewAdornerVisibility
 
         if (e.Data.GetDataPresent(DragDropDataFormatFilterType))
         {
             Point pt = e.GetPosition(FilterTreeView);
-            // Hit test for TreeViewItem directly under mouse
             TreeViewItem? targetTVI = GetVisualAncestor<TreeViewItem>(FilterTreeView.InputHitTest(pt) as DependencyObject);
             FilterViewModel? targetVM = (targetTVI?.DataContext) as FilterViewModel;
 
             if (_viewModel.ActiveFilterProfile is not { } activeFilterProfile)
                 throw new InvalidOperationException("ActiveFilterProfile is null.");
 
-            // Check if dropping onto a valid composite item
-            if (targetVM != null && targetVM.Filter is CompositeFilter)
+            if (targetTVI != null && targetVM != null && targetVM.Filter is CompositeFilter)
             {
-                e.Effects = DragDropEffects.Copy; // Allow copy (add)
+                e.Effects = DragDropEffects.Copy;
                 ApplyDropTargetAdornment(targetTVI);
+                HideEmptyDropAdornerOrSetResting(); // If over an item, ensure empty adorner (if visible) is resting or hidden
             }
-            // Allow drop onto empty TreeView space if:
-            // 1. The active profile's root is null (tree is completely empty)
-            // OR 2. The active profile's root is a composite filter (can add to root)
-            // Case 2: Dragging over empty space
             else if (targetTVI == null) 
             {
-                // Subcase 2a: Tree is completely empty - SHOW EMPTY ADORNER
-                if (activeFilterProfile.RootFilterViewModel == null)
+                if (activeFilterProfile.RootFilterViewModel == null) // Tree is completely empty
                 {
                     e.Effects = DragDropEffects.Copy;
-                    ShowEmptyDropAdorner();
+                    ShowEmptyDropAdornerActiveState(); // Show in ACTIVE state during drag
                 }
-                // Subcase 2b: Tree has a root, and it's composite (dropping on space to add to root)
-                else if (activeFilterProfile.RootFilterViewModel.Filter is CompositeFilter)
+                else if (activeFilterProfile.RootFilterViewModel.Filter is CompositeFilter) // Tree has composite root
                 {
                     e.Effects = DragDropEffects.Copy;
-                    // Optional: Highlight the root TreeViewItem if possible, or just rely on cursor.
-                    // For now, no specific item highlight, but the "empty adorner" is NOT shown.
+                    // No specific item adornment, permanent empty adorner should be hidden by UpdateEmptyTreeViewAdornerVisibility
                 }
             }
+        }
+        else // No valid data
+        {
+             HideEmptyDropAdornerOrSetResting(); // Ensure it's resting if no valid data
         }
         e.Handled = true;
     }
@@ -850,7 +878,7 @@ public partial class MainWindow : Window, IDisposable
     private void FilterTreeView_DragLeave(object sender, DragEventArgs e)
     {
         ClearDropTargetAdornment();
-        HideEmptyDropAdorner();
+        HideEmptyDropAdornerOrSetResting();
         e.Handled = true;
     }
 
@@ -858,7 +886,7 @@ public partial class MainWindow : Window, IDisposable
     private void FilterTreeView_Drop(object sender, DragEventArgs e)
     {
         ClearDropTargetAdornment(); // Clear highlight after drop
-        HideEmptyDropAdorner();
+        HideEmptyDropAdornerOrSetResting();
         var mainViewModel = DataContext as MainViewModel;
         if (mainViewModel == null) return;
 
@@ -897,23 +925,33 @@ public partial class MainWindow : Window, IDisposable
     }
 
     // --- Visual Feedback Helpers ---
-    private void ShowEmptyDropAdorner()
+    private void ShowEmptyDropAdornerActiveState() // Renamed for clarity
     {
-        AdornerLayer? adornerLayer = AdornerLayer.GetAdornerLayer(FilterTreeView);
-        if (adornerLayer == null) return;
-
-        if (_emptyDropAdorner == null)
+        if (_emptyDropAdorner != null && _emptyDropAdorner.Visibility == Visibility.Visible)
         {
-            _emptyDropAdorner = new EmptyDropTargetAdorner(FilterTreeView);
-            adornerLayer.Add(_emptyDropAdorner);
+            _emptyDropAdorner.SetVisualState(true); // Switch to active state
         }
-        _emptyDropAdorner.Visibility = Visibility.Visible;
+        // If it wasn't visible, UpdateEmptyTreeViewAdornerVisibility should handle showing it in resting first.
+        // Or, if it should immediately appear active:
+        // else if (_viewModel.ActiveFilterProfile?.RootFilterViewModel == null) // Only if tree is truly empty
+        // {
+        //     UpdateEmptyTreeViewAdornerVisibility(); // This will show it in resting
+        //     _emptyDropAdorner?.SetVisualState(true); // Then immediately switch to active
+        // }
     }
 
-    private void HideEmptyDropAdorner()
+    private void HideEmptyDropAdornerOrSetResting() // Renamed and modified
     {
-        if (_emptyDropAdorner != null)
-            _emptyDropAdorner.Visibility = Visibility.Collapsed;
+        if (_emptyDropAdorner != null && _emptyDropAdorner.Visibility == Visibility.Visible)
+        {
+            // If the tree is still empty, revert to resting state, otherwise it will be hidden by UpdateEmptyTreeViewAdornerVisibility
+            bool isTreeEmpty = (_viewModel.ActiveFilterProfile?.RootFilterViewModel == null && _viewModel.ActiveTreeRootNodes.Count == 0);
+            if (isTreeEmpty)
+            {
+                 _emptyDropAdorner.SetVisualState(false); // Revert to resting
+            }
+            // If not empty, UpdateEmptyTreeViewAdornerVisibility (called after drop) will hide it.
+        }
     }
 
     // Applies a temporary background highlight to a TreeViewItem during drag-over.
