@@ -52,7 +52,6 @@
                                     HorizontalAlignment="Center"
                                     VerticalAlignment="Center"
                                     Margin="2">
-                                <!-- *** APPLY RENDER TRANSFORM TO VIEWBOX *** -->
                                 <Viewbox.RenderTransform>
                                     <TranslateTransform X="-2" />
                                 </Viewbox.RenderTransform>
@@ -81,7 +80,6 @@
         </Style>
 
         <Style TargetType="{x:Type avalonEdit:TextEditor}" x:Key="TextEditorWithOverviewRulerStyle">
-            <!-- Use DynamicResource for theme properties -->
             <Setter Property="Foreground" Value="{DynamicResource EditorForegroundBrush}" />
             <Setter Property="Background" Value="{DynamicResource EditorBackgroundBrush}" />
             <Setter Property="FontFamily" Value="Consolas" />
@@ -99,7 +97,6 @@
                                 <RowDefinition Height="Auto" />   <!-- Row 1: Button Area -->
                             </Grid.RowDefinitions>
 
-                            <!-- ScrollViewer remains in Column 0, spanning both rows conceptually -->
                             <ScrollViewer x:Name="PART_ScrollViewer"
                                           Grid.Column="0"
                                           Grid.Row="0"
@@ -111,12 +108,9 @@
                                           Content="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=TextArea}">
                             </ScrollViewer>
 
-                            <!-- OverviewRuler goes in Column 1, Row 0 (main area) -->
                             <helpers:OverviewRulerMargin
                                 x:Name="OverviewRuler"
-                                Grid.Column="1"
-                                Grid.Row="0"
-                                Width="18"
+                                Grid.Column="1" Grid.Row="0" Width="18"
                                 Background="{DynamicResource OverviewRuler.Background}"
                                 BorderBrush="{DynamicResource OverviewRuler.BorderBrush}"
                                 BorderThickness="1,0,0,0"
@@ -126,18 +120,14 @@
                                 DocumentLength="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=Document.TextLength, Mode=OneWay, FallbackValue=0}"
                                 SearchMarkers="{Binding DataContext.SearchMarkers, RelativeSource={RelativeSource AncestorType=Window}, Mode=OneWay}"
                                 SearchMarkerBrush="{DynamicResource OverviewRuler.SearchMarkerBrush}"
-                                ThumbBrush="{DynamicResource OverviewRuler.ThumbBrush}"
-                                />
+                                ThumbBrush="{DynamicResource OverviewRuler.ThumbBrush}"/>
 
-                            <!-- Anchor ToggleButton goes in Column 1, Row 1 (bottom corner) -->
                             <!-- Binding needs RelativeSource to find Window's DataContext (ViewModel) -->
                             <ToggleButton Style="{StaticResource AnchorToggleButtonStyle}"
-                                          Grid.Column="1"
-                                          Grid.Row="1"
+                                          Grid.Column="1" Grid.Row="1"
                                           IsChecked="{Binding DataContext.IsAutoScrollEnabled, RelativeSource={RelativeSource AncestorType=Window}, Mode=TwoWay}"
-                                          HorizontalAlignment="Center"
-                                          VerticalAlignment="Center"
-                                          Margin="0,1,0,1" /> <!-- Adjust margin as needed -->
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          Margin="0,1,0,1" />
                         </Grid>
                     </ControlTemplate>
                 </Setter.Value>
@@ -157,17 +147,18 @@
                         CanExecute="ToggleSimulatorConfig_CanExecute"/>
     </Window.CommandBindings>
 
-    <Grid>
+    <Grid> <!-- Outermost Grid -->
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/> <!-- Menu -->
+            <RowDefinition Height="*"/>    <!-- Main Content Area -->
+            <RowDefinition Height="Auto"/> <!-- Status Bar -->
         </Grid.RowDefinitions>
 
-        <!-- Menu - Use default style which should inherit from theme -->
+        <!-- Menu (Row 0) -->
         <Menu Grid.Row="0">
             <MenuItem Header="_File">
                 <MenuItem Header="Open Log File" Command="{Binding OpenLogFileCommand}" />
+                <Separator/>
                 <MenuItem Header="E_xit" Click="ExitMenuItem_Click"/>
             </MenuItem>
             <MenuItem Header="_Theme">
@@ -178,56 +169,54 @@
                 <MenuItem Header="_Undo" Command="{Binding UndoCommand}" InputGestureText="Ctrl+Z"/>
                 <MenuItem Header="_Redo" Command="{Binding RedoCommand}" InputGestureText="Ctrl+Y"/>
             </MenuItem>
+             <MenuItem Header="_Help">
+                <MenuItem Header="_About Logonaut" Command="{Binding ToggleAboutOverlayCommand}"/>
+             </MenuItem>
         </Menu>
 
-        <!-- Main content -->
+        <!-- Main content area (Row 1) -->
+        <!-- PARENT GRID FOR CONTENT + OVERLAY -->
         <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions>
-                <!-- Column 0: Left Panel (Resizable) -->
-                <ColumnDefinition Width="1*" MinWidth="200"/> <!-- Use * for resizing, add MinWidth -->
 
-                <!-- Column 1: Grid Splitter -->
-                <ColumnDefinition Width="5" />
+            <!-- CHILD 1: Grid that handles the COLUMNS for main content -->
+            <Grid x:Name="MainContentColumnsGrid">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="1*" MinWidth="200"/>
+                    <ColumnDefinition Width="5" />
+                    <ColumnDefinition Width="3*" MinWidth="300"/>
+                </Grid.ColumnDefinitions>
 
-                <!-- Column 2: Right Panel (Resizable) -->
-                <ColumnDefinition Width="3*" MinWidth="300"/> <!-- Use * for resizing, add MinWidth -->
-            </Grid.ColumnDefinitions>
-
-            <Grid Grid.Column="0">
-                <Border Style="{DynamicResource CardPanelStyle}">
-                    <DockPanel>
-                        <!-- ... (All existing filter panel content: TextBlock, Profile ComboBox/TextBox, Buttons, TreeView etc.) ... -->
-                        <TextBlock DockPanel.Dock="Top" Text="Filters" FontWeight="Bold" Margin="0,0,0,5"/>
-
-                        <!-- Profile Management Area -->
-                        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
-                            <TextBlock Text="Active Profile:"
-                                        Margin="0,0,0,2"
-                                        FontSize="10"
-                                        Foreground="{DynamicResource SecondaryTextBrush}"/>
-
-                            <Grid Margin="0,0,0,5" MinWidth="180">
-                                <!-- TextBox for inline rename. Set DataContext here so code-behind sees the profile VM directly -->
-                                <TextBox x:Name="ProfileNameTextBox"
-                                        DataContext="{Binding ActiveFilterProfile}"
-                                        Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}"
-                                        Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                        helpers:TextBoxHelper.FocusOnVisible="True"
-                                        VerticalAlignment="Center"
-                                        MinWidth="150">
-                                    <TextBox.InputBindings>
-                                        <!-- Commit on Enter -->
-                                        <KeyBinding Key="Enter" Command="{Binding EndRenameCommand}"/>
-                                        <!-- Cancel on Escape -->
-                                        <KeyBinding Key="Escape" Command="{Binding CancelRenameCommand}"/>
-                                    </TextBox.InputBindings>
-                                    <i:Interaction.Triggers>
+                <!-- Filter Panel Area (Column 0 of THIS grid) -->
+                <Grid Grid.Column="0">
+                    <!-- Border for Card Style -->
+                    <Border Style="{DynamicResource CardPanelStyle}">
+                        <!-- DockPanel for Filter Panel Contents -->
+                        <DockPanel>
+                            <!-- ... (All existing filter panel content: TextBlock, Profile ComboBox/TextBox, Buttons, TreeView etc.) ... -->
+                            <TextBlock DockPanel.Dock="Top" Text="Filters" FontWeight="Bold" Margin="0,0,0,5"/>
+                            <!-- Profile Management Area -->
+                            <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+                                <TextBlock Text="Active Profile:" Margin="0,0,0,2" FontSize="10" Foreground="{DynamicResource SecondaryTextBrush}"/>
+                                <Grid Margin="0,0,0,5" MinWidth="180">
+                                    <!-- TextBox for inline rename. Set DataContext here so code-behind sees the profile VM directly -->
+                                    <TextBox x:Name="ProfileNameTextBox"
+                                            DataContext="{Binding ActiveFilterProfile}"
+                                            Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}"
+                                            Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                            helpers:TextBoxHelper.FocusOnVisible="True"
+                                            VerticalAlignment="Center"
+                                            MinWidth="150">
+                                        <TextBox.InputBindings>
+                                            <KeyBinding Key="Enter" Command="{Binding EndRenameCommand}"/> <!-- Commit on Enter -->
+                                            <KeyBinding Key="Escape" Command="{Binding CancelRenameCommand}"/> <!-- Cancel on Escape -->
+                                        </TextBox.InputBindings>
+                                        <i:Interaction.Triggers>
                                         <i:EventTrigger EventName="LostFocus">
                                             <!-- Check if still editing before committing -->
                                             <i:InvokeCommandAction Command="{Binding EndRenameCommand}" />
                                         </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </TextBox>
+                                        </i:Interaction.Triggers>
+                                    </TextBox>
 
                                 <!-- ComboBox for selection (shows arrow) -->
                                 <ComboBox ItemsSource="{Binding AvailableProfiles}"
@@ -240,10 +229,10 @@
                                     <ComboBox.ToolTip>
                                         <ToolTip>Select the active filter profile.</ToolTip>
                                     </ComboBox.ToolTip>
-                                </ComboBox>
-                            </Grid>
+                                    </ComboBox>
+                                </Grid>
 
-                            <WrapPanel HorizontalAlignment="Center">
+                                <WrapPanel HorizontalAlignment="Center">
                                 <Button Content="New"
                                         Command="{Binding CreateNewProfileCommand}"
                                         Margin="2"
@@ -257,298 +246,218 @@
                                         Command="{Binding DeleteProfileCommand}"
                                         Margin="2"
                                         ToolTip="Delete the selected profile"/>
-                            </WrapPanel>
-                        </StackPanel>
+                                </WrapPanel>
+                            </StackPanel>
 
-                        <GroupBox DockPanel.Dock="Bottom" Header="Filter Palette" Margin="0,10,0,10" Style="{DynamicResource PaletteGroupBoxStyle}">
+                            <GroupBox DockPanel.Dock="Bottom" Header="Filter Palette" Margin="0,10,0,10" Style="{DynamicResource PaletteGroupBoxStyle}">
                             <ItemsControl ItemsSource="{Binding FilterPaletteItems}"
                                           ItemTemplate="{DynamicResource FilterPaletteItemTemplate}"
                                           ItemContainerStyle="{DynamicResource FilterPaletteItemStyle}" 
                                           PreviewMouseLeftButtonDown="PaletteItemsControl_PreviewMouseLeftButtonDown">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <WrapPanel Orientation="Horizontal" HorizontalAlignment="Center"/>
-                                    </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                            </ItemsControl>
-                        </GroupBox>
-
-                        <StackPanel DockPanel.Dock="Bottom" Margin="0,5,0,0"> 
-                            <Button Content="Edit Node" Command="{Binding ToggleEditNodeCommand}" Margin="0,5,0,0" ToolTip="Edit the selected filter node's value"/>
-                            <Button Content="Remove Node" Command="{Binding RemoveFilterNodeCommand}" Margin="0,5,0,0" ToolTip="Remove the selected filter node and its children"/>
-                            <!-- TODO: Add Trash Bin area for DnD delete later -->
-                        </StackPanel>
-
-                        <!-- TreeView now displays the ACTIVE profile's tree -->
-                        <TreeView x:Name="FilterTreeView"
-                                ItemsSource="{Binding ActiveTreeRootNodes}"
-                                SelectedItemChanged="TreeView_SelectedItemChanged"
-                                Margin="0,0,0,0"
-                                Background="Transparent"
-                                AllowDrop="True"
-                                DragEnter="FilterTreeView_DragEnter"
-                                DragOver="FilterTreeView_DragOver"
-                                DragLeave="FilterTreeView_DragLeave"
-                                Drop="FilterTreeView_Drop">
-                            <TreeView.ItemContainerStyle>
-                                <!-- Apply the HierarchicalDataTemplate from FilterTemplates.xaml -->
-                                <Style TargetType="{x:Type TreeViewItem}" BasedOn="{StaticResource {x:Type TreeViewItem}}">
-                                    <!-- AllowDrop could be set here too if needed for item-specific drop zones later -->
-                                </Style>
-                            </TreeView.ItemContainerStyle>
-                        </TreeView>
-                    </DockPanel>
-                </Border>
-
-                <!-- Simulator Configuration Overlay Border *** -->
-                <!-- Placed *after* the filter border so it renders on top -->
-                <Border x:Name="SimulatorConfigOverlay"
-                        Background="{DynamicResource Overlay.BackgroundBrush}"
-                        BorderBrush="{DynamicResource AccentBrush}"
-                        BorderThickness="1"
-                        CornerRadius="5"
-                        Padding="10" Margin="5"
-                        Visibility="{Binding IsSimulatorConfigurationVisible, Converter={StaticResource BoolToVis}}">
-                    <!-- SIMULATOR CONTROLS HERE *** -->
-                    <Grid>
-                        <!-- Close Button - Placed first so it's visually behind stackpanel if needed,
-                             but aligned top-right makes it effectively on top corner. -->
-                        <Button Style="{StaticResource OverlayCloseButtonStyle}"
-                                Command="{Binding HideSimulatorConfigCommand}"
-                                VerticalAlignment="Top" HorizontalAlignment="Right"
-                                Margin="0,-2,-2,0" Panel.ZIndex="1"/> <!-- Adjust margin slightly to tuck into corner, ZIndex ensures it's clickable -->
-
-                        <!-- Original StackPanel with Controls - Now inside the Grid -->
-                        <StackPanel Margin="0,15,0,0"> <!-- Add top margin to avoid overlap with button -->
-                            <TextBlock Text="Log Simulator Controls" FontSize="14" FontWeight="SemiBold"
-                                    Foreground="{DynamicResource Overlay.ForegroundBrush}"
-                                    HorizontalAlignment="Center" Margin="0,0,0,15"/>
-
-                            <!-- Lines Per Second Slider -->
-                            <TextBlock Text="Lines Per Second:"
-                                    Foreground="{DynamicResource Overlay.ForegroundBrush}"
-                                    Margin="0,0,0,2"/>
-                            <Slider Name="LpsSlider"
-                                    Minimum="0" Maximum="100" SmallChange="1" LargeChange="5"
-                                    IsSnapToTickEnabled="True" TickFrequency="1"
-                                    ToolTip="Adjust how fast the log is written, as measured in lines per second."
-                                    Value="{Binding SimulatorLPS, Mode=TwoWay, Converter={StaticResource LpsConverter}}"
-                                    Margin="0,0,0,2">
-                            </Slider>
-                            <TextBlock Text="{Binding SimulatorLPS, StringFormat='{}{0:F0} LPS'}"
-                                       Foreground="{DynamicResource Overlay.ForegroundBrush}"
-                                       HorizontalAlignment="Center" Margin="0,0,0,10"/>
-
-                            <!-- ERROR FREQUENCY CONTROLS === -->
-                            <TextBlock Text="Error Frequency (1 in N lines):"
-                                       Foreground="{DynamicResource Overlay.ForegroundBrush}"
-                                       Margin="0,10,0,2"/>
-                            <Slider Minimum="0" Maximum="100" SmallChange="1" LargeChange="10"
-                                    IsSnapToTickEnabled="False"
-                                    ToolTip="Adjust how often ERROR messages are generated (1 = every line, 100000 = very rare)."
-                                    Value="{Binding SimulatorErrorFrequency, Mode=TwoWay, Converter={StaticResource ErrorFrequencyConverter}}"
-                                    Margin="0,0,0,2"/>
-                            <TextBlock Text="{Binding SimulatorErrorFrequency, StringFormat='1 in {0:N0}'}"
-                                       Foreground="{DynamicResource Overlay.ForegroundBrush}"
-                                       HorizontalAlignment="Center" Margin="0,0,0,10"/>
- 
-                            <!-- BURST CONTROLS -->
-                            <Separator Margin="0,15"/>
-
-                            <TextBlock Text="Generate Burst:"
-                                    Foreground="{DynamicResource Overlay.ForegroundBrush}"
-                                    Margin="0,10,0,2"/>
-                            <Slider Name="BurstSlider"
-                                    Minimum="0" Maximum="100" SmallChange="1" LargeChange="10"
-                                    IsSnapToTickEnabled="False"
-                                    ToolTip="Adjust how many lines to generate in a burst. Big values can slow down the UI."
-                                    Value="{Binding SimulatorBurstSize, Mode=TwoWay, Converter={StaticResource BurstSizeConverter}}"
-                                    Margin="0,0,0,2"/>
-                            <TextBlock Text="{Binding SimulatorBurstSize, StringFormat='{}{0:N0} Lines'}"
-                                    Foreground="{DynamicResource Overlay.ForegroundBrush}"
-                                    HorizontalAlignment="Center" Margin="0,0,0,10"/>
-                            <Button Content="Burst" Width="70" Margin="5" HorizontalAlignment="Center"
-                                    Command="{Binding GenerateBurstCommand}"/>
-
-                            <!-- Control Buttons -->
-                            <WrapPanel HorizontalAlignment="Center" Margin="0,10,0,10">
-                                <ToggleButton Width="70" Margin="5"
-                                        Command="{Binding ToggleSimulatorCommand}"
-                                        IsChecked="{Binding IsSimulatorRunning, Mode=OneWay}"
-                                        Style="{DynamicResource SimulatorToggleButtonStyle}"/>
-                                <Button Content="Restart" Width="70" Margin="5"
-                                        Command="{Binding RestartSimulatorCommand}"/>
-                            </WrapPanel>
-
-                            <!-- Clear Log Button -->
-                            <Button Content="Clear Displayed Log" HorizontalAlignment="Center" Margin="0,15,0,0"
-                                    Command="{Binding ClearLogCommand}"/>
-
-                        </StackPanel>
-                    </Grid>
-                </Border>
-            </Grid>
-
-
-            <GridSplitter Grid.Column="1"
-                          Width="5"
-                          HorizontalAlignment="Center"
-                          VerticalAlignment="Stretch"
-                          Background="{DynamicResource BorderBrush}"
-                          ShowsPreview="True"
-                          ResizeDirection="Columns"
-                          ResizeBehavior="PreviousAndNext"/>
-
-            <!-- Right Panel: Log Display and Search -->
-            <Grid Grid.Column="2">
-                 <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
-
-                <!-- Toolbar -->
-                <Border Grid.Row="0" Style="{DynamicResource CardPanelStyle}" Padding="5" Margin="5,5,5,0">
-                    <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <CheckBox Content="Line Numbers" IsChecked="{Binding ShowLineNumbers}"
-                                      VerticalAlignment="Center"
-                                      ToolTip="Show or hide original line numbers" Margin="3"/>
-                        <CheckBox Content="Highlight Timestamps" IsChecked="{Binding HighlightTimestamps}"
-                                      VerticalAlignment="Center"
-                                      ToolTip="Highlight timestamp patterns in log entries" Margin="3"/>
-
-                        <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,2"/>
-
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="Context Lines:" VerticalAlignment="Center" Margin="5,0,2,0"/>
-                            <TextBox Text="{Binding ContextLines, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource StringToIntConverter}}"
-                                    Width="35" VerticalAlignment="Center" VerticalContentAlignment="Center" Margin="0,0,2,0">
-                                <TextBox.ToolTip><ToolTip>Enter the number of lines to show before and after a matched line (0 = none).</ToolTip></TextBox.ToolTip>
-                            </TextBox>
-                            <StackPanel Orientation="Vertical" VerticalAlignment="Center">
-                                <!-- NEON: Use base Button style, maybe adjust padding/fontsize -->
-                                <Button Content="▲" Command="{Binding IncrementContextLinesCommand}" Padding="3,0" Margin="0,0,0,1" FontSize="8" MinHeight="10" ToolTip="Increase Context Lines"/>
-                                <Button Content="▼" Command="{Binding DecrementContextLinesCommand}" Padding="3,0" Margin="0,1,0,0" FontSize="8" MinHeight="10" ToolTip="Decrease Context Lines"/>
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel Orientation="Horizontal" HorizontalAlignment="Center"/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                </ItemsControl>
+                            </GroupBox>
+                            <!-- Edit/Remove Buttons -->
+                            <StackPanel DockPanel.Dock="Bottom" Margin="0,5,0,0">
+                                <Button Content="Edit Node" Command="{Binding ToggleEditNodeCommand}" Margin="0,5,0,0" ToolTip="Edit the selected filter node's value"/>
+                                <Button Content="Remove Node" Command="{Binding RemoveFilterNodeCommand}" Margin="0,5,0,0" ToolTip="Remove the selected filter node and its children"/>
                             </StackPanel>
-                        </StackPanel>
 
-                        <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,2"/>
-
-                        <!-- Busy Indicator -->
-                        <controls:BusyIndicator Width="16" Height="16"
-                            VerticalAlignment="Center"
-                            Margin="10,0,5,0"
-                            ActiveStates="{Binding CurrentBusyStates}"
-                            ToolTip="Applying filters or loading data..."/>
-
-                        <TextBlock Text="{Binding SearchStatusText}" VerticalAlignment="Center" Margin="10,0,5,0" FontStyle="Italic" Foreground="{DynamicResource SecondaryTextBrush}"/>
-                    </WrapPanel>
-                </Border>
-
-                <!-- Log Display Area (Row 1). Use a Grid here to layer the editor and the overlay -->
-                <Grid Grid.Row="1">
-                    <Border Style="{DynamicResource CardPanelStyle}" Padding="5">
-                        <avalonEdit:TextEditor x:Name="LogOutputEditor"
-                                            xmlns:avalonEdit="http://icsharpcode.net/sharpdevelop/avalonedit"
-                                            xmlns:helpers="clr-namespace:Logonaut.UI.Helpers"
-                                            FontFamily="Consolas" FontSize="12pt" IsReadOnly="True"
-                                            SyntaxHighlighting="{x:Null}"
-                                            WordWrap="False"
-                                            VerticalScrollBarVisibility="Disabled"
-                                            HorizontalScrollBarVisibility="Auto"
-                                            Padding="3,0,0,0"
-                                            Style="{StaticResource TextEditorWithOverviewRulerStyle}"
-                                            helpers:AvalonEditHelper.FilterSubstrings="{Binding FilterSubstrings, Mode=OneWay}"
-                                            helpers:AvalonEditHelper.HighlightTimestamps="{Binding HighlightTimestamps, Mode=OneWay}"
-                                            ShowLineNumbers="False"
-                                            helpers:AvalonEditHelper.SearchTerm="{Binding SearchText, Mode=OneWay}"
-                                            helpers:AvalonEditHelper.SelectOffset="{Binding CurrentMatchOffset, Mode=OneWay}"
-                                            helpers:AvalonEditHelper.SelectLength="{Binding CurrentMatchLength, Mode=OneWay}">
-                        </avalonEdit:TextEditor>
+                            <TreeView x:Name="FilterTreeView"
+                                    ItemsSource="{Binding ActiveTreeRootNodes}"
+                                    SelectedItemChanged="TreeView_SelectedItemChanged"
+                                    Margin="0,0,0,0"
+                                    Background="Transparent"
+                                    AllowDrop="True"
+                                    DragEnter="FilterTreeView_DragEnter"
+                                    DragOver="FilterTreeView_DragOver"
+                                    DragLeave="FilterTreeView_DragLeave"
+                                    Drop="FilterTreeView_Drop">
+                                <TreeView.ItemContainerStyle>
+                                    <Style TargetType="{x:Type TreeViewItem}" BasedOn="{StaticResource {x:Type TreeViewItem}}"/>
+                                </TreeView.ItemContainerStyle>
+                            </TreeView>
+                        </DockPanel>
                     </Border>
-
-                    <Border x:Name="LoadingOverlayContainer" Grid.Row="1"
-                            IsHitTestVisible="False"
-                            Width="{Binding ElementName=LogOutputEditor, Path=ActualWidth}"
-                            Height="{Binding ElementName=LogOutputEditor, Path=ActualHeight}"
-                            Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}">
-                            <!-- Background can be transparent if the overlay control fills it -->
-                            <!-- Background="#30000000"-->
-                        <controls:LoadingScanlineOverlay/>
+                    <!-- Simulator Overlay (Inside Column 0 Grid) -->
+                    <Border x:Name="SimulatorConfigOverlay"
+                            Panel.ZIndex="10"
+                            Background="{DynamicResource Overlay.BackgroundBrush}"
+                            BorderBrush="{DynamicResource AccentBrush}"
+                            BorderThickness="1"
+                            CornerRadius="5"
+                            Padding="10" Margin="5"
+                            Visibility="{Binding IsSimulatorConfigurationVisible, Converter={StaticResource BoolToVis}}">
+                        <Grid>
+                            <!-- Close Button - Placed first so it's visually behind stackpanel if needed,
+                                but aligned top-right makes it effectively on top corner. -->
+                            <Button Style="{StaticResource OverlayCloseButtonStyle}"
+                                    Command="{Binding HideSimulatorConfigCommand}"
+                                    VerticalAlignment="Top" HorizontalAlignment="Right"
+                                    Margin="0,-2,-2,0" Panel.ZIndex="1"/> <!-- Adjust margin slightly to tuck into corner, ZIndex ensures it's clickable -->
+                            <StackPanel Margin="0,15,0,0">
+                                <TextBlock Text="Log Simulator Controls" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Overlay.ForegroundBrush}" HorizontalAlignment="Center" Margin="0,0,0,15"/>
+                                <TextBlock Text="Lines Per Second:" Foreground="{DynamicResource Overlay.ForegroundBrush}" Margin="0,0,0,2"/>
+                                <Slider Name="LpsSlider" Minimum="0" Maximum="100" SmallChange="1" LargeChange="5" IsSnapToTickEnabled="True" TickFrequency="1" ToolTip="Adjust how fast the log is written, as measured in lines per second." Value="{Binding SimulatorLPS, Mode=TwoWay, Converter={StaticResource LpsConverter}}" Margin="0,0,0,2"/>
+                                <TextBlock Text="{Binding SimulatorLPS, StringFormat='{}{0:F0} LPS'}" Foreground="{DynamicResource Overlay.ForegroundBrush}" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                                <TextBlock Text="Error Frequency (1 in N lines):" Foreground="{DynamicResource Overlay.ForegroundBrush}" Margin="0,10,0,2"/>
+                                <Slider Minimum="0" Maximum="100" SmallChange="1" LargeChange="10" IsSnapToTickEnabled="False" ToolTip="Adjust how often ERROR messages are generated (1 = every line, 100000 = very rare)." Value="{Binding SimulatorErrorFrequency, Mode=TwoWay, Converter={StaticResource ErrorFrequencyConverter}}" Margin="0,0,0,2"/>
+                                <TextBlock Text="{Binding SimulatorErrorFrequency, StringFormat='1 in {0:N0}'}" Foreground="{DynamicResource Overlay.ForegroundBrush}" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                                <Separator Margin="0,15"/>
+                                <TextBlock Text="Generate Burst:" Foreground="{DynamicResource Overlay.ForegroundBrush}" Margin="0,10,0,2"/>
+                                <Slider Name="BurstSlider" Minimum="0" Maximum="100" SmallChange="1" LargeChange="10" IsSnapToTickEnabled="False" ToolTip="Adjust how many lines to generate in a burst. Big values can slow down the UI." Value="{Binding SimulatorBurstSize, Mode=TwoWay, Converter={StaticResource BurstSizeConverter}}" Margin="0,0,0,2"/>
+                                <TextBlock Text="{Binding SimulatorBurstSize, StringFormat='{}{0:N0} Lines'}" Foreground="{DynamicResource Overlay.ForegroundBrush}" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                                <Button Content="Burst" Width="70" Margin="5" HorizontalAlignment="Center" Command="{Binding GenerateBurstCommand}"/>
+                                <WrapPanel HorizontalAlignment="Center" Margin="0,10,0,10">
+                                    <ToggleButton Width="70" Margin="5" Command="{Binding ToggleSimulatorCommand}" IsChecked="{Binding IsSimulatorRunning, Mode=OneWay}" Style="{DynamicResource SimulatorToggleButtonStyle}"/>
+                                    <Button Content="Restart" Width="70" Margin="5" Command="{Binding RestartSimulatorCommand}"/>
+                                </WrapPanel>
+                                <Button Content="Clear Displayed Log" HorizontalAlignment="Center" Margin="0,15,0,0" Command="{Binding ClearLogCommand}"/>
+                            </StackPanel>
+                        </Grid>
                     </Border>
                 </Grid>
 
-                <!-- Search Panel -->
-                 <Border Grid.Row="2" Style="{DynamicResource CardPanelStyle}" Padding="5" Margin="5,0,5,5">
-                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <Button Content="Previous" Command="{Binding PreviousSearchCommand}" Margin="5,0"/>
-                        <TextBox
-                                x:Name="SearchTextBox"
-                                Width="250"
-                                Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
-                                Margin="5,0">
-                            <TextBox.InputBindings>
-                                <KeyBinding Key="Enter"
-                                            Command="{Binding DataContext.NextSearchCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
-                                            <!-- Binding to the command on the Window's DataContext (MainViewModel) -->
-                            </TextBox.InputBindings>
-                        </TextBox>
+                <!-- Splitter (Column 1 of MainContentColumnsGrid) -->
+                <GridSplitter Grid.Column="1"
+                              Width="5"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Stretch"
+                              Background="{DynamicResource BorderBrush}"
+                              ShowsPreview="True"
+                              ResizeDirection="Columns"
+                              ResizeBehavior="PreviousAndNext"/>
 
-                        <Button Content="Next" Command="{Binding NextSearchCommand}" Margin="5,0" />
-                        <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,0"/>
-                        <CheckBox Content="Case Sensitive" IsChecked="{Binding IsCaseSensitiveSearch}" VerticalAlignment="Center" Margin="5,0">
-                            <CheckBox.ToolTip><ToolTip>Match case when searching</ToolTip></CheckBox.ToolTip>
-                        </CheckBox>
+                <!-- Right Panel: Log Display (Column 2 of MainContentColumnsGrid) -->
+                <Grid Grid.Column="2">
+                     <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <!-- Toolbar -->
+                    <Border Grid.Row="0" Style="{DynamicResource CardPanelStyle}" Padding="5" Margin="5,5,5,0">
+                        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <CheckBox Content="Line Numbers" IsChecked="{Binding ShowLineNumbers}" VerticalAlignment="Center" ToolTip="Show or hide original line numbers" Margin="3"/>
+                            <CheckBox Content="Highlight Timestamps" IsChecked="{Binding HighlightTimestamps}" VerticalAlignment="Center" ToolTip="Highlight timestamp patterns in log entries" Margin="3"/>
+                            <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,2"/>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="Context Lines:" VerticalAlignment="Center" Margin="5,0,2,0"/>
+                                <TextBox Text="{Binding ContextLines, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource StringToIntConverter}}" Width="35" VerticalAlignment="Center" VerticalContentAlignment="Center" Margin="0,0,2,0">
+                                    <TextBox.ToolTip><ToolTip>Enter the number of lines to show before and after a matched line (0 = none).</ToolTip></TextBox.ToolTip>
+                                </TextBox>
+                                <StackPanel Orientation="Vertical" VerticalAlignment="Center">
+                                    <Button Content="▲" Command="{Binding IncrementContextLinesCommand}" Padding="3,0" Margin="0,0,0,1" FontSize="8" MinHeight="10" ToolTip="Increase Context Lines"/>
+                                    <Button Content="▼" Command="{Binding DecrementContextLinesCommand}" Padding="3,0" Margin="0,1,0,0" FontSize="8" MinHeight="10" ToolTip="Decrease Context Lines"/>
+                                </StackPanel>
+                            </StackPanel>
+                            <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,2"/>
+                            <controls:BusyIndicator Width="16" Height="16" VerticalAlignment="Center" Margin="10,0,5,0" ActiveStates="{Binding CurrentBusyStates}" ToolTip="Applying filters or loading data..."/>
+                            <TextBlock Text="{Binding SearchStatusText}" VerticalAlignment="Center" Margin="10,0,5,0" FontStyle="Italic" Foreground="{DynamicResource SecondaryTextBrush}"/>
+                        </WrapPanel>
+                    </Border>
+                    <!-- Log Display Area -->
+                    <Grid Grid.Row="1">
+                        <Border Style="{DynamicResource CardPanelStyle}" Padding="5">
+                            <avalonEdit:TextEditor x:Name="LogOutputEditor"
+                                                FontFamily="Consolas" FontSize="12pt" IsReadOnly="True"
+                                                SyntaxHighlighting="{x:Null}" WordWrap="False"
+                                                VerticalScrollBarVisibility="Disabled" HorizontalScrollBarVisibility="Auto"
+                                                Padding="3,0,0,0" Style="{StaticResource TextEditorWithOverviewRulerStyle}"
+                                                helpers:AvalonEditHelper.FilterSubstrings="{Binding FilterSubstrings, Mode=OneWay}"
+                                                helpers:AvalonEditHelper.HighlightTimestamps="{Binding HighlightTimestamps, Mode=OneWay}"
+                                                ShowLineNumbers="False"
+                                                helpers:AvalonEditHelper.SearchTerm="{Binding SearchText, Mode=OneWay}"
+                                                helpers:AvalonEditHelper.SelectOffset="{Binding CurrentMatchOffset, Mode=OneWay}"
+                                                helpers:AvalonEditHelper.SelectLength="{Binding CurrentMatchLength, Mode=OneWay}"/>
+                        </Border>
+                        <Border x:Name="LoadingOverlayContainer" Grid.Row="1" IsHitTestVisible="False" Width="{Binding ElementName=LogOutputEditor, Path=ActualWidth}" Height="{Binding ElementName=LogOutputEditor, Path=ActualHeight}" Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}">
+                            <controls:LoadingScanlineOverlay/>
+                        </Border>
+                    </Grid>
+                    <!-- Search Panel -->
+                    <Border Grid.Row="2" Style="{DynamicResource CardPanelStyle}" Padding="5" Margin="5,0,5,5">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <Button Content="Previous" Command="{Binding PreviousSearchCommand}" Margin="5,0"/>
+                            <TextBox x:Name="SearchTextBox" Width="250" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" Margin="5,0">
+                                <TextBox.InputBindings>
+                                    <KeyBinding Key="Enter" Command="{Binding DataContext.NextSearchCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+                                </TextBox.InputBindings>
+                            </TextBox>
+                            <Button Content="Next" Command="{Binding NextSearchCommand}" Margin="5,0" />
+                            <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,0"/>
+                            <CheckBox Content="Case Sensitive" IsChecked="{Binding IsCaseSensitiveSearch}" VerticalAlignment="Center" Margin="5,0">
+                                <CheckBox.ToolTip><ToolTip>Match case when searching</ToolTip></CheckBox.ToolTip>
+                            </CheckBox>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+            </Grid> <!-- End of MainContentColumnsGrid -->
+
+            <!-- CHILD 2: About Overlay (Sibling to MainContentColumnsGrid) -->
+            <Border x:Name="AboutOverlay"
+                    Panel.ZIndex="20"
+                    Background="{DynamicResource Overlay.BackgroundBrush}"
+                    BorderBrush="{DynamicResource AccentBrush}"
+                    BorderThickness="1" CornerRadius="5"
+                    Padding="15" Margin="20"
+                    Visibility="{Binding IsAboutOverlayVisible, Converter={StaticResource BoolToVis}}">
+
+                 <!-- Content of the About overlay -->
+                 <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <Button Style="{StaticResource OverlayCloseButtonStyle}" Command="{Binding ToggleAboutOverlayCommand}" VerticalAlignment="Top" HorizontalAlignment="Right" Margin="0,-7,-7,0" Panel.ZIndex="1"/>
+                    <StackPanel Grid.Row="0" Margin="0,0,0,15">
+                        <TextBlock Text="Logonaut" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center" Foreground="{DynamicResource Overlay.ForegroundBrush}"/>
+                        <TextBlock HorizontalAlignment="Center" Margin="0,5,0,0" Foreground="{DynamicResource Overlay.ForegroundBrush}"><Run Text="Version:"/><Run Text="{Binding ApplicationVersion, Mode=OneWay}"/></TextBlock>
+                        <TextBlock Text="© 2024 Lars Pötter" FontSize="10" HorizontalAlignment="Center" Margin="0,10,0,0" Foreground="{DynamicResource Overlay.ForegroundBrush}"/>
+                         <TextBlock HorizontalAlignment="Center" Margin="0,5,0,0">
+                            <Hyperlink NavigateUri="https://github.com/larspensjo/Logonaut" RequestNavigate="Hyperlink_RequestNavigate">
+                                <Run Text="Project Repository" Foreground="{DynamicResource AccentBrush}"/>
+                            </Hyperlink>
+                        </TextBlock>
                     </StackPanel>
-                 </Border>
-            </Grid>
-        </Grid>
+                    <Border Grid.Row="1" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,0">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <TextBox Text="{Binding AboutRevisionHistory, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True" BorderThickness="0" Background="Transparent" Foreground="{DynamicResource Overlay.ForegroundBrush}" FontFamily="Consolas" FontSize="11"/>
+                        </ScrollViewer>
+                    </Border>
+                 </Grid>
+            </Border>
 
-        <!-- Stats Bar -->
+        </Grid> <!-- End of Main Content Grid (Row 1) -->
+
+        <!-- Stats Bar (Row 2) -->
         <Border Grid.Row="2" Style="{DynamicResource CardPanelStyle}">
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                 <TextBlock Margin="5,0,15,0" VerticalAlignment="Center" Foreground="{DynamicResource SecondaryTextBrush}">
                     <Run Text="Total Lines:"/>
                     <Run Text="{Binding TotalLogLines, Mode=OneWay}" FontWeight="Bold"/>
                     <Run Text="/ Filtered:"/>
                     <Run Text="{Binding FilteredLogLinesCount, Mode=OneWay}" FontWeight="Bold"/>
                 </TextBlock>
-
-                <!-- Separator -->
                 <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,0"/>
-
-                <!-- Jump To Line Section -->
                 <TextBlock Text="Selected line: " VerticalAlignment="Center" Margin="5,0,0,0"/>
                 <TextBlock MinWidth="40" TextAlignment="Right" VerticalAlignment="Center" ToolTip="Original line number of selected line">
                      <TextBlock.Text>
                         <Binding Path="HighlightedOriginalLineNumber" Mode="OneWay">
-                            <Binding.TargetNullValue>
-                                <!-- Display '-' if the value is null (though int isn't nullable)
-                                     We need a converter to handle -1 -->
-                                <System:String>-</System:String>
-                            </Binding.TargetNullValue>
-                             <!-- Simple Converter Example (Implement this converter) -->
-                             <!-- <Binding.Converter>
-                                 <localConverters:NegativeToDashConverter/>
-                             </Binding.Converter> -->
-                             <!-- Or using style/trigger (more complex) -->
+                            <Binding.TargetNullValue><System:String>-</System:String></Binding.TargetNullValue>
                          </Binding>
                      </TextBlock.Text>
                 </TextBlock>
-
                 <TextBlock Text="Go To (CTRL+G):" VerticalAlignment="Center" Margin="10,0,3,0"/>
-                <TextBox x:Name="JumpToLineTextBox"
-                         MinWidth="60" VerticalAlignment="Center" VerticalContentAlignment="Center"
-                         Text="{Binding TargetOriginalLineNumberInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
-                    <TextBox.InputBindings>
-                        <KeyBinding Key="Enter" Command="{Binding JumpToLineCommand}"/>
-                    </TextBox.InputBindings>
-                     <i:Interaction.Triggers>
-                        <i:EventTrigger EventName="LostFocus">
-                             <!-- Optionally trigger jump on lost focus too -->
-                             <!-- <i:InvokeCommandAction Command="{Binding JumpToLineCommand}"/> -->
-                        </i:EventTrigger>
-                    </i:Interaction.Triggers>
+                <TextBox x:Name="JumpToLineTextBox" MinWidth="60" VerticalAlignment="Center" VerticalContentAlignment="Center" Text="{Binding TargetOriginalLineNumberInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                    <TextBox.InputBindings><KeyBinding Key="Enter" Command="{Binding JumpToLineCommand}"/></TextBox.InputBindings>
+                     <i:Interaction.Triggers><i:EventTrigger EventName="LostFocus"/></i:Interaction.Triggers>
                      <TextBox.Style>
                          <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
                              <Style.Triggers>

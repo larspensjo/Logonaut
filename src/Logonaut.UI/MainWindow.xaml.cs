@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Input; // Required for RoutedUICommand
 using System.Windows.Documents; // Required for AdornerLayer
+using System.Windows.Navigation;
 using ICSharpCode.AvalonEdit;
 using ICSharpCode.AvalonEdit.Rendering;
 using ICSharpCode.AvalonEdit.Editing; // Required for Caret
@@ -1027,6 +1028,21 @@ public partial class MainWindow : Window, IDisposable
         // Traverse up to find TreeViewItem and get its DataContext
         TreeViewItem? tvi = GetVisualAncestor<TreeViewItem>(element);
         return tvi?.DataContext as FilterViewModel;
+    }
+    
+    private void Hyperlink_RequestNavigate(object sender, RequestNavigateEventArgs e)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true });
+        }
+        catch (Exception ex) // Catch potential errors opening the link
+        {
+            Debug.WriteLine($"Error opening hyperlink: {ex.Message}");
+            // Optionally show a message to the user if desired, though often failing silently is acceptable here.
+            // MessageBox.Show($"Could not open link: {e.Uri.AbsoluteUri}\nError: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        e.Handled = true; // Important: Mark the event as handled to prevent default navigation attempts
     }
 
     // Finds the first visual ancestor of a specific type.

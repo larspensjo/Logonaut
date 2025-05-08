@@ -28,4 +28,8 @@
     <Resource Include="Assets/Logonaut.ico" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="RevisionHistory.txt" />
+  </ItemGroup>
+
 </Project>

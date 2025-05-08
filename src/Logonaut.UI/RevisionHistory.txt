@@ -1,0 +1,16 @@
+Revision History
+----------------
+
+Version 1.1.0 (YYYY-MM-DD)
+- Added cool new feature X.
+- Fixed bug Y in the filter system.
+- Improved performance of log loading.
+
+Version 1.0.5 (YYYY-MM-DD)
+- Ctrl+O shortcut for Open File.
+- Moved Exit to File menu.
+- Enhanced Filter Palette appearance.
+
+Version 1.0.0 (YYYY-MM-DD)
+- Initial release of Logonaut.
+- Core filtering and log viewing capabilities.

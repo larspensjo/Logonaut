@@ -5,6 +5,8 @@ using System.Reactive.Disposables;
 using System.Text.RegularExpressions;
 using System.Reactive.Linq;
 using System.Reactive.Concurrency;
+using System.Reflection;
+using System.IO; // For Stream
 using System.Windows; // For Visibility
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -124,7 +126,65 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         LoadPersistedSettings(); // Loads basic settings, not files yet
 
         PopulateFilterPalette();
+
+        ToggleAboutOverlayCommand = new RelayCommand(ExecuteToggleAboutOverlay);
+        LoadRevisionHistory();
     }
+
+    #region About command
+
+    [ObservableProperty] private bool _isAboutOverlayVisible;
+    [ObservableProperty] private string? _aboutRevisionHistory;
+    public string ApplicationVersion => Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0"; // Shows Major.Minor.Build
+    public IRelayCommand ToggleAboutOverlayCommand { get; }
+
+    private void ExecuteToggleAboutOverlay()
+    {
+        IsAboutOverlayVisible = !IsAboutOverlayVisible;
+        if (IsAboutOverlayVisible && string.IsNullOrEmpty(AboutRevisionHistory))
+        {
+            // Should have been loaded by constructor, but as a fallback:
+            LoadRevisionHistory();
+        }
+    }
+
+    private void LoadRevisionHistory()
+    {
+        try
+        {
+            var assembly = Assembly.GetExecutingAssembly();
+            // IMPORTANT: Adjust the resource name if your default namespace or folder structure differs.
+            // It's typically: YourDefaultNamespace.FolderPath.FileName.extension
+            // For Logonaut.UI project, if RevisionHistory.txt is in the root, it would be "Logonaut.UI.RevisionHistory.txt"
+            // If it's in a "Resources" subfolder, it might be "Logonaut.UI.Resources.RevisionHistory.txt"
+            string resourceName = "Logonaut.UI.RevisionHistory.txt"; 
+
+            // You can list all resource names to find the correct one during debugging:
+            // string[] names = assembly.GetManifestResourceNames();
+            // Debug.WriteLine("Available resources: " + string.Join(", ", names));
+
+            using (Stream? stream = assembly.GetManifestResourceStream(resourceName))
+            {
+                if (stream == null)
+                {
+                    AboutRevisionHistory = "Error: Revision history resource not found.";
+                    Debug.WriteLine($"Error: Could not find embedded resource '{resourceName}'");
+                    return;
+                }
+                using (StreamReader reader = new StreamReader(stream))
+                {
+                    AboutRevisionHistory = reader.ReadToEnd();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            AboutRevisionHistory = $"Error loading revision history: {ex.Message}";
+            Debug.WriteLine($"Exception loading revision history: {ex}");
+        }
+    }
+
+    #endregion // About command
 
     private void PopulateFilterPalette()
     {
