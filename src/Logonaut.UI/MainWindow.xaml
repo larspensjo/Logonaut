@@ -21,6 +21,7 @@
         <KeyBinding Key="F12" Command="{x:Static local:MainWindow.ToggleSimulatorConfigCommand}"/>
         <KeyBinding Modifiers="Ctrl" Key="Z" Command="{Binding UndoCommand}"/>
         <KeyBinding Modifiers="Ctrl" Key="Y" Command="{Binding RedoCommand}"/>
+        <KeyBinding Modifiers="Ctrl" Key="O" Command="{Binding OpenLogFileCommand}"/>
     </Window.InputBindings>
 
     <Window.Resources>
@@ -167,6 +168,7 @@
         <Menu Grid.Row="0">
             <MenuItem Header="_File">
                 <MenuItem Header="Open Log File" Command="{Binding OpenLogFileCommand}" />
+                <MenuItem Header="E_xit" Click="ExitMenuItem_Click"/>
             </MenuItem>
             <MenuItem Header="_Theme">
                 <MenuItem Header="Dark Mode" Command="{Binding Theme.SwitchToDarkCommand}" />
@@ -176,7 +178,6 @@
                 <MenuItem Header="_Undo" Command="{Binding UndoCommand}" InputGestureText="Ctrl+Z"/>
                 <MenuItem Header="_Redo" Command="{Binding RedoCommand}" InputGestureText="Ctrl+Y"/>
             </MenuItem>
-            <MenuItem Header="E_xit" Click="ExitMenuItem_Click"/>
         </Menu>
 
         <!-- Main content -->
