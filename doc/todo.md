@@ -15,6 +15,7 @@
     * When a simulator token is active, use a special animation.
 * It seems as if settings are saved frequently, also during startup.
 * The highlighted time stamps should be adjusted for themes.
+* The treeview of filters should have some visual indicator for what patterns are currently used for matching.
 
 * **SimulatorLogSource UI overlay**
 *   6. Sliders or percentage inputs for INFO, WARN, ERROR, DEBUG, TRACE (could enforce sum=100%).
