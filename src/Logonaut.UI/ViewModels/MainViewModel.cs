@@ -865,13 +865,19 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         return -1;
     }
 
+    // Collection of filter patterns (substrings/regex) for highlighting.
+    // Note: This state is derived by traversing the *active* FilterProfile.
+    [ObservableProperty] private ObservableCollection<IFilter> _filterHighlightModels = new();
+
     private void UpdateFilterSubstrings() // Triggered by TriggerFilterUpdate
     {
-        var newFilterSubstrings = new ObservableCollection<string>();
-        // Traverse the tree of the *currently active* profile
+        var newFilterModels = new ObservableCollection<IFilter>();
         if (ActiveFilterProfile?.RootFilterViewModel != null)
-            TraverseFilterTreeForHighlighting(ActiveFilterProfile.RootFilterViewModel, newFilterSubstrings);
-        FilterSubstrings = newFilterSubstrings; // Update the property bound to AvalonEditHelper
+        {
+            // Collect IFilter models instead of strings
+            TraverseFilterTreeForHighlighting(ActiveFilterProfile.RootFilterViewModel, newFilterModels);
+        }
+        FilterHighlightModels = newFilterModels; // Update the renamed property
     }
 
     [RelayCommand(CanExecute = nameof(CanDecrementContextLines))]
@@ -1187,39 +1193,24 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
     }
 
     // --- Highlighting Configuration ---
-    private void TraverseFilterTreeForHighlighting(FilterViewModel filterViewModel, ObservableCollection<string> patterns)
+    private void TraverseFilterTreeForHighlighting(FilterViewModel filterViewModel, ObservableCollection<IFilter> models)
     {
         if (!filterViewModel.Enabled) return;
-        string? pattern = null;
-        bool isRegex = false;
-        if (filterViewModel.Filter is SubstringFilter sf && !string.IsNullOrEmpty(sf.Value))
+
+        // Add the IFilter model itself if it's a SubstringFilter or RegexFilter and has a value
+        if ((filterViewModel.Filter is SubstringFilter || filterViewModel.Filter is RegexFilter) &&
+            !string.IsNullOrEmpty(filterViewModel.Filter.Value))
         {
-            pattern = Regex.Escape(sf.Value);
-            isRegex = false;
-        }
-        else if (filterViewModel.Filter is RegexFilter rf && !string.IsNullOrEmpty(rf.Value))
-        {
-            pattern = rf.Value;
-            isRegex = true;
-        }
-        if (pattern != null)
-        {
-            try
+            // Add the model, not just its value
+            if (!models.Contains(filterViewModel.Filter)) // Avoid duplicates if same filter instance appears multiple times (unlikely with tree)
             {
-                var regexIssues = false;
-                if (isRegex && new Regex(pattern).IsMatch(string.Empty))
-                    regexIssues = true;
-                if (!regexIssues && !patterns.Contains(pattern))
-                    patterns.Add(pattern);
+                models.Add(filterViewModel.Filter);
             }
-            catch (ArgumentException ex)
-            {
-                Debug.WriteLine($"Invalid regex pattern skipped for highlighting: '{pattern}'. Error: {ex.Message}");
-            }
-    }
-        foreach (var childFilter in filterViewModel.Children)
+        }
+        // Recursively traverse children
+        foreach (var childFilterVM in filterViewModel.Children)
         {
-            TraverseFilterTreeForHighlighting(childFilter, patterns);
+            TraverseFilterTreeForHighlighting(childFilterVM, models);
         }
     }
 

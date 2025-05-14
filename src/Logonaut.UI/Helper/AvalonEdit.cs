@@ -2,7 +2,9 @@ using System.Windows;
 using System.Windows.Threading;
 using ICSharpCode.AvalonEdit;
 using ICSharpCode.AvalonEdit.Highlighting;
-using ICSharpCode.AvalonEdit.Document; // Added for DocumentLine
+using ICSharpCode.AvalonEdit.Document;
+using Logonaut.Filters;
+using Microsoft.VisualBasic;
 
 namespace Logonaut.UI.Helpers;
 
@@ -15,7 +17,7 @@ public static class AvalonEditHelper
     // Keep track of the editor instance and its associated custom highlighting definition
     private static readonly Dictionary<TextEditor, CustomHighlightingDefinition> _editorDefinitions = new();
 
-    #region // --- BindableText Property ---
+    #region BindableText Property
 
     public static readonly DependencyProperty BindableTextProperty =
         DependencyProperty.RegisterAttached(
@@ -48,7 +50,7 @@ public static class AvalonEditHelper
 
     #endregion // --- BindableText Property ---
 
-    #region // --- EnableTextBinding Property (Two-Way Support) ---
+    #region EnableTextBinding Property (Two-Way Support)
 
     public static readonly DependencyProperty EnableTextBindingProperty =
         DependencyProperty.RegisterAttached(
@@ -87,7 +89,7 @@ public static class AvalonEditHelper
 
     #endregion // --- EnableTextBinding Property ---
 
-    #region // --- FilterSubstrings Property (Filter Highlighting) ---
+    #region FilterSubstrings Property (Filter Highlighting)
 
     public static readonly DependencyProperty FilterSubstringsProperty =
         DependencyProperty.RegisterAttached(
@@ -104,9 +106,10 @@ public static class AvalonEditHelper
         // Use TryGetValue for safety
         if (d is TextEditor editor && _editorDefinitions.TryGetValue(editor, out var customDef))
         {
-            var substrings = e.NewValue as IEnumerable<string> ?? Array.Empty<string>();
+            if (e.NewValue is not IEnumerable<IFilter> filters)
+                throw new ArgumentException("Expected IEnumerable<IFilter> for FilterSubstrings property.");
             // Update highlighting rules for filters
-            customDef.UpdateFilterHighlighting(substrings);
+            customDef.UpdateFilterHighlighting(filters);
             // Redraw needed to apply changes
             editor.TextArea?.TextView?.Redraw(); // Check for null TextView
         }
@@ -114,7 +117,7 @@ public static class AvalonEditHelper
 
     #endregion // --- FilterSubstrings Property ---
 
-    #region // --- HighlightTimestamps Property ---
+    #region HighlightTimestamps Property
 
     public static readonly DependencyProperty HighlightTimestampsProperty =
         DependencyProperty.RegisterAttached(
@@ -155,7 +158,7 @@ public static class AvalonEditHelper
 
     #endregion // --- HighlightTimestamps Property ---
 
-    #region // --- SearchTerm Property (Search Highlighting) ---
+    #region SearchTerm Property (Search Highlighting)
 
     public static readonly DependencyProperty SearchTermProperty =
         DependencyProperty.RegisterAttached(
@@ -180,7 +183,7 @@ public static class AvalonEditHelper
 
     #endregion // --- SearchTerm Property ---
 
-    #region // --- Selection Properties (Select/Scroll to Match) ---
+    #region Selection Properties (Select/Scroll to Match)
 
     public static readonly DependencyProperty SelectOffsetProperty =
         DependencyProperty.RegisterAttached(
@@ -261,7 +264,7 @@ public static class AvalonEditHelper
 
     #endregion // --- Selection Properties ---
 
-    #region // --- Highlighting Management ---
+    #region Highlighting Management
 
     // Applies all relevant highlighting rules based on current settings
     private static void ApplyAllHighlighting(TextEditor editor)
@@ -287,9 +290,9 @@ public static class AvalonEditHelper
         definition.AddRule(@"\bWARN\b|\bWARNING\b", "warning", true);
         definition.AddRule(@"\bINFO\b|\bINFORMATION\b", "info", true);
 
-        // Apply current filter highlighting rules
-        var substrings = GetFilterSubstrings(editor);
-        definition.UpdateFilterHighlighting(substrings ?? Array.Empty<string>());
+        // Apply current filter highlighting rules using the models
+        var filterModels = GetFilterHighlightModels(editor);
+        definition.UpdateFilterHighlighting(filterModels ?? Array.Empty<IFilter>());
 
         // Apply current search term highlighting rule
         var searchTerm = GetSearchTerm(editor);
@@ -297,8 +300,6 @@ public static class AvalonEditHelper
 
         // Apply the potentially updated highlighting definition to the editor
         editor.SyntaxHighlighting = definition;
-
-        // Redraw is typically handled by the methods that trigger this (e.g., OnHighlightTimestampsChanged)
     }
 
     // Restores default AvalonEdit highlighting
@@ -310,4 +311,30 @@ public static class AvalonEditHelper
     }
 
     #endregion // --- Highlighting Management ---
+
+    #region FilterHighlightModels Property (Filter Highlighting)
+
+    public static readonly DependencyProperty FilterHighlightModelsProperty = // Renamed from FilterSubstringsProperty
+        DependencyProperty.RegisterAttached(
+            "FilterHighlightModels", // Renamed
+            typeof(IEnumerable<IFilter>), // CHANGED TYPE
+            typeof(AvalonEditHelper),
+            new PropertyMetadata(null, OnFilterHighlightModelsChanged)); // Renamed callback
+
+    public static IEnumerable<IFilter> GetFilterHighlightModels(DependencyObject obj) => // Renamed getter
+                                        (IEnumerable<IFilter>)obj.GetValue(FilterHighlightModelsProperty);
+    public static void SetFilterHighlightModels(DependencyObject obj, IEnumerable<IFilter> value) => // Renamed setter
+                                        obj.SetValue(FilterHighlightModelsProperty, value);
+
+    private static void OnFilterHighlightModelsChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) // Renamed callback
+    {
+        if (d is TextEditor editor && _editorDefinitions.TryGetValue(editor, out var customDef))
+        {
+            var filterModels = e.NewValue as IEnumerable<IFilter> ?? Array.Empty<IFilter>(); // CHANGED TYPE
+            customDef.UpdateFilterHighlighting(filterModels); // Pass models
+            editor.TextArea?.TextView?.Redraw();
+        }
+    }
+
+    #endregion // --- FilterHighlightModels Property ---
 }

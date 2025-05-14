@@ -1,3 +1,5 @@
+using Newtonsoft.Json;
+
 namespace Logonaut.Filters
 {
     /// <summary>
@@ -11,10 +13,20 @@ namespace Logonaut.Filters
         
         public bool IsEditable => true;
 
+        [JsonProperty] public string HighlightColorKey { get; set; } = "FilterHighlight.Default";
+
         public SubstringFilter(string substring)
         {
             Value = substring;
         }
+
+        // Add JsonConstructor for deserialization if needed, or ensure properties are settable
+        [JsonConstructor] public SubstringFilter(string value, string highlightColorKey)
+        {
+            Value = value;
+            HighlightColorKey = string.IsNullOrEmpty(highlightColorKey) ? "FilterHighlight.Default" : highlightColorKey;
+        }
+
 
         public bool IsMatch(string line)
         {

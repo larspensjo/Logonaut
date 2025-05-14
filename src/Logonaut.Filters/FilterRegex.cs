@@ -41,14 +41,16 @@ public class RegexFilter : IFilter
         }
     }
 
-    [JsonConstructor] public RegexFilter(string value, bool isCaseSensitive = false)
+    [JsonProperty] public string HighlightColorKey { get; set; } = "FilterHighlight.Default";
+
+    [JsonConstructor] public RegexFilter(string value, bool isCaseSensitive = false, string? highlightColorKey = null)
     {
-        // Use the parameters directly in the constructor logic
-        _pattern = value ?? string.Empty; // Use 'value' parameter, ensure not null
+        _pattern = value ?? string.Empty; 
         _isCaseSensitive = isCaseSensitive;
+        HighlightColorKey = string.IsNullOrEmpty(highlightColorKey) ? "FilterHighlight.Default" : highlightColorKey;
         UpdateRegex();
     }
-
+    
     // No parameterless constructor needed if JsonConstructor is used effectively
 
     private void UpdateRegex()

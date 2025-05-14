@@ -23,6 +23,16 @@
     <Color x:Key="HighlightSearchBackgroundColor">#FF008B8B</Color> <!-- Dark Cyan -->
     <Color x:Key="ButtonHoverBackgroundColor">#FF4A4A4C</Color>
 
+    <!-- THEME-AWARE FILTER HIGHLIGHT COLORS -->
+    <Color x:Key="ThemeAware.FilterHighlight.Red.Background">#4DFF0000</Color>     <!-- Semi-transparent Red -->
+    <Color x:Key="ThemeAware.FilterHighlight.Red.Foreground">#FFFFCCCC</Color>     <!-- Light Red/Pink Text -->
+    <Color x:Key="ThemeAware.FilterHighlight.Green.Background">#4D00FF00</Color>   <!-- Semi-transparent Green -->
+    <Color x:Key="ThemeAware.FilterHighlight.Green.Foreground">#FFCCFFCC</Color>   <!-- Light Green Text -->
+    <Color x:Key="ThemeAware.FilterHighlight.Blue.Background">#4D0000FF</Color>    <!-- Semi-transparent Blue -->
+    <Color x:Key="ThemeAware.FilterHighlight.Blue.Foreground">#FFCCCCFF</Color>    <!-- Light Blue Text -->
+    <Color x:Key="ThemeAware.FilterHighlight.Yellow.Background">#4DFFFF00</Color>  <!-- Semi-transparent Yellow -->
+    <Color x:Key="ThemeAware.FilterHighlight.Yellow.Foreground">#FF333300</Color>  <!-- Dark Yellow/Brown Text for contrast on light yellow bg -->
+
     <!-- Brushes for Simulator Overlay -->
     <SolidColorBrush x:Key="Overlay.BackgroundBrush" Color="#D0333333"/> <!-- Semi-transparent dark grey -->
     <SolidColorBrush x:Key="Overlay.ForegroundBrush" Color="#FFFFFFFF"/> <!-- White Text -->
@@ -42,6 +52,18 @@
     <SolidColorBrush x:Key="HighlightSearchBackgroundBrush" Color="{StaticResource HighlightSearchBackgroundColor}"/>
     <SolidColorBrush x:Key="DividerBrush" Color="{StaticResource BorderColor}" /> <!-- For VerticalLineMargin/Separators -->
     <SolidColorBrush x:Key="ChunkSeparatorBrush" Color="#307070"/>
+
+    <!-- BRUSHES FOR FILTER HIGHLIGHTS -->
+    <SolidColorBrush x:Key="FilterHighlight.Default.Background" Color="{StaticResource HighlightFilterBackgroundColor}"/> <!-- Default uses existing -->
+    <SolidColorBrush x:Key="FilterHighlight.Default.Foreground" Color="{StaticResource PrimaryForegroundColor}"/>       <!-- Default uses existing -->
+    <SolidColorBrush x:Key="FilterHighlight.Red.Background" Color="{StaticResource ThemeAware.FilterHighlight.Red.Background}"/>
+    <SolidColorBrush x:Key="FilterHighlight.Red.Foreground" Color="{StaticResource ThemeAware.FilterHighlight.Red.Foreground}"/>
+    <SolidColorBrush x:Key="FilterHighlight.Green.Background" Color="{StaticResource ThemeAware.FilterHighlight.Green.Background}"/>
+    <SolidColorBrush x:Key="FilterHighlight.Green.Foreground" Color="{StaticResource ThemeAware.FilterHighlight.Green.Foreground}"/>
+    <SolidColorBrush x:Key="FilterHighlight.Blue.Background" Color="{StaticResource ThemeAware.FilterHighlight.Blue.Background}"/>
+    <SolidColorBrush x:Key="FilterHighlight.Blue.Foreground" Color="{StaticResource ThemeAware.FilterHighlight.Blue.Foreground}"/>
+    <SolidColorBrush x:Key="FilterHighlight.Yellow.Background" Color="{StaticResource ThemeAware.FilterHighlight.Yellow.Background}"/>
+    <SolidColorBrush x:Key="FilterHighlight.Yellow.Foreground" Color="{StaticResource ThemeAware.FilterHighlight.Yellow.Foreground}"/>
 
     <!-- Brushes for EmptyDropTargetAdorner -->
     <SolidColorBrush x:Key="EmptyDropAdorner.BackgroundBrush" Color="#4C2C2C2E"/> <!-- Semi-transparent PanelBackground (Dark Theme: Lighter Dark Grey) -->
@@ -983,7 +1005,7 @@
     <SolidColorBrush x:Key="Highlighting.Error" Color="{StaticResource ErrorColor}"/>
     <SolidColorBrush x:Key="Highlighting.Warning" Color="{StaticResource WarningColor}"/>
     <SolidColorBrush x:Key="Highlighting.Info" Color="{StaticResource InfoColor}"/>
-    <StaticResource x:Key="Highlighting.FilterMatch.Background" ResourceKey="PersistedHighlightBrush"/>
+    <StaticResource x:Key="Highlighting.FilterMatch.Background" ResourceKey="FilterHighlight.Default.Background"/>
     <SolidColorBrush x:Key="Highlighting.FilterMatch.Foreground" Color="{StaticResource PrimaryForegroundColor}"/> <!-- Ensure text is readable -->
     <SolidColorBrush x:Key="Highlighting.SearchMatch.Background" Color="{StaticResource HighlightSearchBackgroundColor}"/>
     <SolidColorBrush x:Key="Highlighting.SearchMatch.Foreground" Color="{StaticResource PrimaryForegroundColor}"/>

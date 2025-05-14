@@ -39,6 +39,12 @@ namespace Logonaut.Filters
         /// The value of the filter. Only used by some filters.
         /// </summary>
         string Value { get; set; }
+
+        /// <summary>
+        /// Gets or sets the resource key prefix for the highlight color (e.g., "FilterHighlight.Red").
+        /// The actual brushes will be resolved using ".Background" and ".Foreground" suffixes.
+        /// </summary>
+        string HighlightColorKey { get; set; }
     }
 
     /// <summary>
@@ -59,12 +65,14 @@ namespace Logonaut.Filters
 
         private string _value = string.Empty;
 
-        [JsonProperty] // Allow JSON serialization/deserialization of the Value property.
-        public virtual string Value
+        [JsonProperty] public virtual string Value
         {
             get => _value;
             set => _value = value;
         }
+
+        // Default highlight color key for filters that don't override
+        [JsonProperty] public virtual string HighlightColorKey { get; set; } = "FilterHighlight.Default";
     }
 
     /// <summary>

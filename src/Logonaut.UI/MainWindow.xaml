@@ -368,7 +368,7 @@
                                                 SyntaxHighlighting="{x:Null}" WordWrap="False"
                                                 VerticalScrollBarVisibility="Disabled" HorizontalScrollBarVisibility="Auto"
                                                 Padding="3,0,0,0" Style="{StaticResource TextEditorWithOverviewRulerStyle}"
-                                                helpers:AvalonEditHelper.FilterSubstrings="{Binding FilterSubstrings, Mode=OneWay}"
+                                                helpers:AvalonEditHelper.FilterHighlightModels="{Binding FilterHighlightModels, Mode=OneWay}"
                                                 helpers:AvalonEditHelper.HighlightTimestamps="{Binding HighlightTimestamps, Mode=OneWay}"
                                                 ShowLineNumbers="False"
                                                 helpers:AvalonEditHelper.SearchTerm="{Binding SearchText, Mode=OneWay}"

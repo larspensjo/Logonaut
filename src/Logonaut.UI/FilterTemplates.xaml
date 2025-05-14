@@ -53,6 +53,32 @@
                         </TextBox.InputBindings>
                     </TextBox>
                 </Grid>
+
+                <!-- ComboBox for Highlight Color Selection -->
+                <ComboBox ItemsSource="{Binding Source={x:Static vm:FilterViewModel.AvailableHighlightColors}}"
+                          SelectedValue="{Binding HighlightColorKey, Mode=TwoWay}"
+                          SelectedValuePath="Key"
+                          DisplayMemberPath="Name"
+                          Margin="5,0,0,0" Width="80" VerticalAlignment="Center"
+                          Visibility="{Binding IsEditable, Converter={StaticResource BoolToVis}}"
+                          ToolTip="Select highlight color for this filter">
+                    <ComboBox.Style>
+                        <Style TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+                            <Style.Triggers>
+                                <!-- Hide if filter is not Substring or Regex -->
+                                <DataTrigger Value="False">
+                                    <DataTrigger.Binding>
+                                        <MultiBinding Converter="{x:Static converters:IsFilterTypeConverter.Instance}" 
+                                                      ConverterParameter="SubstringType|RegexType">
+                                            <Binding Path="FilterType"/>
+                                        </MultiBinding>
+                                    </DataTrigger.Binding>
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ComboBox.Style>
+                </ComboBox>
             </StackPanel>
              <Border.Style>
                 <Style TargetType="Border">

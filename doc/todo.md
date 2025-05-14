@@ -19,7 +19,6 @@
 * The Anchor button is now automatically when new lines are added to the log window.
 * If I select a line and then disable the filter, I want the log window to keep the selected line visible.
 * When dragging the separator between the filter view and the log view, I want the windows to update as I drag.
-* It should be possible to select what colors are used for every substring. Default should be red, but it is enough to supply a few alternatives (green, yellow and blue)
 
 * **SimulatorLogSource UI overlay**
 *   6. Sliders or percentage inputs for INFO, WARN, ERROR, DEBUG, TRACE (could enforce sum=100%).

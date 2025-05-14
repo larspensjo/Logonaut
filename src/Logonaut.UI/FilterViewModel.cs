@@ -89,7 +89,6 @@ public partial class FilterViewModel : ObservableObject, ICommandExecutorProvide
         _commandExecutor.Execute(action);
     }
 
-
     public bool Enabled
     {
         get => Filter.Enabled;
@@ -124,8 +123,7 @@ public partial class FilterViewModel : ObservableObject, ICommandExecutorProvide
         }
     }
 
-    [RelayCommand]
-    public void BeginEdit()
+    [RelayCommand] public void BeginEdit()
     {
         if (IsEditable)
         {
@@ -135,8 +133,7 @@ public partial class FilterViewModel : ObservableObject, ICommandExecutorProvide
         }
     }
 
-    [RelayCommand]
-    public void EndEdit()
+    [RelayCommand] public void EndEdit()
     {
         if (IsEditing)
         {
@@ -166,8 +163,36 @@ public partial class FilterViewModel : ObservableObject, ICommandExecutorProvide
         OnPropertyChanged(nameof(Enabled)); // This will now update the UI for Enabled state changes
     }
 
-     // Helper method used by AddFilterAction to recreate children VMs during Undo/Redo if needed
-     // Or perhaps AddFilterAction directly manipulates the Children collection is simpler. Let's stick with that.
+    #region Highlight Color Key
 
-     // We removed the _filterConfigurationChangedCallback, assuming ICommandExecutor.Execute handles notifications.
+    // Expose HighlightColorKey for binding
+    public string HighlightColorKey
+    {
+        get => Filter.HighlightColorKey;
+        set
+        {
+            if (Filter.HighlightColorKey != value)
+            {
+                // Create and execute an action for changing the color key
+                // (We'll define ChangeFilterHighlightColorKeyAction later)
+                var action = new ChangeFilterHighlightColorKeyAction(this, Filter.HighlightColorKey, value);
+                _commandExecutor.Execute(action); 
+                // The action's Execute will set Filter.HighlightColorKey and call RefreshProperties
+            }
+        }
+    }
+    // NEW: List of available color choices for the ComboBox
+    // This could also be static or provided by MainViewModel if shared across all FilterViewModels
+    public static List<FilterHighlightColorChoice> AvailableHighlightColors { get; } = new()
+    {
+        new("Default", "FilterHighlight.Default"),
+        new("Red", "FilterHighlight.Red"),
+        new("Green", "FilterHighlight.Green"),
+        new("Blue", "FilterHighlight.Blue"),
+        new("Yellow", "FilterHighlight.Yellow")
+    };
+
+    #endregion Highlight Color Key
 }
+
+public record FilterHighlightColorChoice(string Name, string Key);

@@ -2,6 +2,7 @@ using System.Windows;
 using System.Text.RegularExpressions;
 using ICSharpCode.AvalonEdit.Highlighting;
 using System.Windows.Media;
+using Logonaut.Filters;
 
 namespace Logonaut.UI.Helpers;
 
@@ -23,7 +24,7 @@ public class CustomHighlightingDefinition : IHighlightingDefinition
     private Dictionary<string, string> _properties = new();
     
     // Track filter-based highlighting rules separately
-    private List<HighlightingRule> _filterHighlightingRules = new();
+    private List<KeyValuePair<IFilter, HighlightingRule>> _filterHighlightingRules = new();
 
     // Track the search highlighting rule separately
     private HighlightingRule? _searchHighlightingRule = null;
@@ -65,12 +66,6 @@ public class CustomHighlightingDefinition : IHighlightingDefinition
             // or use the existing "InfoColor" key if it's distinct enough.
             // Let's assume the theme file has a "Highlighting.Info" brush defined for consistency.
             Foreground = GetThemeBrush("Highlighting.Info", Colors.Green) // Fallback color
-        };
-        
-        _namedColors["filter"] = new HighlightingColor
-        {
-            Background = GetThemeBrush("Highlighting.FilterMatch.Background", Colors.Yellow),
-            Foreground = GetThemeBrush("Highlighting.FilterMatch.Foreground", Colors.Black)
         };
 
         _namedColors["searchMatch"] = new HighlightingColor
@@ -197,46 +192,95 @@ public class CustomHighlightingDefinition : IHighlightingDefinition
     
     // Update filter-based highlighting with a new set of substrings
     // TODO: Instead of clearing old rules, make new ones. This function isn't needed.
-    public void UpdateFilterHighlighting(IEnumerable<string> filterSubstrings)
+    public void UpdateFilterHighlighting(IEnumerable<IFilter> filterModels)
     {
         // Remove all existing filter highlighting rules
-        foreach (var rule in _filterHighlightingRules)
+        foreach (var kvp in _filterHighlightingRules)
         {
-            MainRuleSet.Rules.Remove(rule);
+            MainRuleSet.Rules.Remove(kvp.Value);
         }
         _filterHighlightingRules.Clear();
         
-        // Add new rules for each filter substring
-        foreach (var substring in filterSubstrings)
+        // Add new rules for each enabled, non-empty filter model
+        foreach (var filterModel in filterModels)
         {
-            AddFilterSubstringHighlighting(substring);
+            if (filterModel.Enabled && !string.IsNullOrEmpty(filterModel.Value))
+            {
+                AddSingleFilterHighlightRule(filterModel);
+            }
         }
 
-        // Add highlighting for a filter substring
-        void AddFilterSubstringHighlighting(string substring)
+        // Adds a highlighting rule for a single IFilter model
+        void AddSingleFilterHighlightRule(IFilter filterModel)
         {
-            // TODO: There is a bug that makes this happen sometimes.
-            if (substring == "")
-                throw new ArgumentException("Filter substring cannot be empty");
+            if (string.IsNullOrEmpty(filterModel.Value)) // Should be caught by caller, but double check
+                return;
+
             try
             {
-                // Create a regex from the substring (which might already be a regex pattern)
+                string pattern = filterModel.Value;
+                bool isRegexFilter = filterModel is RegexFilter; // Check if it's a RegexFilter
+
+                // For SubstringFilter, escape the pattern to treat it literally
+                if (!isRegexFilter)
+                {
+                    pattern = Regex.Escape(pattern);
+                }
+
+                // Resolve the HighlightColor for this specific filter
+                HighlightingColor? colorForThisFilter = ResolveHighlightColor(filterModel.HighlightColorKey);
+
+                if (colorForThisFilter == null)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Warning: Could not resolve highlight color for key '{filterModel.HighlightColorKey}'. Using default.");
+                    // Fallback to a default if the key isn't found (e.g., if "filter_default_background" is defined)
+                    colorForThisFilter = _namedColors["filter_default_background"]; 
+                }
+                
                 var rule = new HighlightingRule
                 {
-                    Color = _namedColors["filter"],
-                    Regex = new Regex(substring, RegexOptions.IgnoreCase)
+                    Color = colorForThisFilter,
+                    Regex = new Regex(pattern, RegexOptions.IgnoreCase) // Assuming IgnoreCase for filters for now
                 };
-                if (rule.Regex.IsMatch(string.Empty))
-                    throw new ArgumentException("Filter substring cannot be empty");
-                _filterHighlightingRules.Add(rule);
+
+                // This check was for the old UpdateFilterHighlighting that took string patterns.
+                // Now, filterModel.Value for RegexFilter is the pattern itself.
+                // For SubstringFilter, it's escaped.
+                // An empty Regex pattern (e.g. from an empty SubstringFilter.Value)
+                // would have Regex.Escape("") -> "", which is a valid Regex that matches empty strings.
+                // It's better to filter out empty filterModel.Value before calling this.
+                // if (rule.Regex.IsMatch(string.Empty) && isRegexFilter) // More specific check for regex
+                // {
+                //     System.Diagnostics.Debug.WriteLine($"Warning: Regex pattern '{filterModel.Value}' for filter matches empty string. Skipping highlight rule.");
+                //     return;
+                // }
+                    
+                _filterHighlightingRules.Add(new KeyValuePair<IFilter, HighlightingRule>(filterModel, rule));
                 MainRuleSet.Rules.Add(rule);
             }
-            catch (ArgumentException)
+            catch (ArgumentException ex)
             {
-                // Skip invalid regex patterns
-                // TODO: This should be an exception in the future
-                System.Diagnostics.Debug.WriteLine($"Invalid regex pattern: {substring}");
+                System.Diagnostics.Debug.WriteLine($"Invalid regex pattern for filter '{filterModel.Value}': {ex.Message}. Skipping highlight rule.");
             }
+        }
+
+        // Dynamically resolves HighlightingColor based on resource keys
+        HighlightingColor? ResolveHighlightColor(string colorKey)
+        {
+            Brush? backgroundBrush = Application.Current?.TryFindResource(colorKey + ".Background") as Brush;
+            Brush? foregroundBrush = Application.Current?.TryFindResource(colorKey + ".Foreground") as Brush;
+
+            // If brushes are not found, this filter might not get custom coloring or fallback.
+            if (backgroundBrush == null && foregroundBrush == null) return null;
+
+            var highlightingColor = new HighlightingColor();
+            if (backgroundBrush is SolidColorBrush bgScb)
+                highlightingColor.Background = new SimpleHighlightingBrush(bgScb.Color);
+            if (foregroundBrush is SolidColorBrush fgScb)
+                highlightingColor.Foreground = new SimpleHighlightingBrush(fgScb.Color);
+            
+            // If only one is found, the other remains null (default behavior by AvalonEdit)
+            return highlightingColor;
         }
     }
 
