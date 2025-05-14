@@ -140,8 +140,8 @@ public static class AvalonEditHelper
                 }
                 else
                 {
-                    // Re-apply if toggled back on
-                    editor.SyntaxHighlighting = _editorDefinitions[editor];
+                    // Re-apply if toggled back on, ensuring colors are refreshed
+                    ApplyAllHighlighting(editor); 
                 }
             }
             else
@@ -272,13 +272,17 @@ public static class AvalonEditHelper
             definition = new CustomHighlightingDefinition();
             _editorDefinitions[editor] = definition;
         }
-
+        else
+        {
+            // If definition already exists, refresh its colors from the current theme
+            definition.RefreshColorsFromTheme();
+        }
+        
         // Clear existing rules before re-applying to ensure clean state
-        // (Could be optimized later if specific rule sets are managed)
-        // definition.ClearRules(); // Be careful if ClearRules also clears colors
+        definition.ClearRules(); // This clears MainRuleSet.Rules, not _namedColors
 
         // Re-apply common patterns and rules
-        definition.AddCommonTimestampPatterns(); // Consider making this idempotent or clearing only specific rules
+        definition.AddCommonTimestampPatterns(); 
         definition.AddRule(@"\bERROR\b|\bFAILED\b|\bEXCEPTION\b", "error", true);
         definition.AddRule(@"\bWARN\b|\bWARNING\b", "warning", true);
         definition.AddRule(@"\bINFO\b|\bINFORMATION\b", "info", true);

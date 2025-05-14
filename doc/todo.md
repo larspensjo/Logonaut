@@ -14,12 +14,12 @@
 * When the simluator is enabled, rather than a file log, I want a special busy token.
     * When a simulator token is active, use a special animation.
 * It seems as if settings are saved frequently, also during startup.
-* The highlighted time stamps should be adjusted for themes.
 * The treeview of filters should have some visual indicator for what patterns are currently used for matching.
 * The Jump-to-line should have a button beside it, which you can click to activate the jump-to-line.
 * The Anchor button is now automatically when new lines are added to the log window.
 * If I select a line and then disable the filter, I want the log window to keep the selected line visible.
 * When dragging the separator between the filter view and the log view, I want the windows to update as I drag.
+* It should be possible to select what colors are used for every substring. Default should be red, but it is enough to supply a few alternatives (green, yellow and blue)
 
 * **SimulatorLogSource UI overlay**
 *   6. Sliders or percentage inputs for INFO, WARN, ERROR, DEBUG, TRACE (could enforce sum=100%).
