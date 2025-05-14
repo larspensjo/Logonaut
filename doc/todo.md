@@ -15,6 +15,7 @@
     * When a simulator token is active, use a special animation.
 * It seems as if settings are saved frequently, also during startup.
 * The highlighted time stamps should be adjusted for themes.
+* It should be possible to select what colors are used for every substring. Default should be red, but it is enough to supply a few alternatives (green, yellow and blue)
 
 * **SimulatorLogSource UI overlay**
 *   6. Sliders or percentage inputs for INFO, WARN, ERROR, DEBUG, TRACE (could enforce sum=100%).
