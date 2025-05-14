@@ -34,43 +34,62 @@ public class CustomHighlightingDefinition : IHighlightingDefinition
 
     public CustomHighlightingDefinition()
     {
-        // TODO: Clean-up here.
-        // TODO: Should defaultl colors be set in the constructor or in a separate method? Maybe in the themes?
-        // Initialize with some default named colors
+        // Initialize colors from theme resources
+        RefreshColorsFromTheme();
+    }
+
+    // Method to (re)load colors from theme resources
+    public void RefreshColorsFromTheme()
+    {
         _namedColors["timestamp"] = new HighlightingColor 
         { 
-            Foreground = new SimpleHighlightingBrush(Colors.DarkBlue),
-            FontWeight = FontWeights.Bold
+            Foreground = GetThemeBrush("Highlighting.Timestamp", Colors.DarkBlue), // Fallback color
+            FontWeight = FontWeights.Bold // Keep bold for timestamps
         };
         
         _namedColors["error"] = new HighlightingColor 
         { 
-            Foreground = new SimpleHighlightingBrush(Colors.Red),
-            FontWeight = FontWeights.Bold
+            Foreground = GetThemeBrush("Highlighting.Error", Colors.Red), // Fallback color
+            FontWeight = FontWeights.Bold // Keep bold for errors
         };
         
         _namedColors["warning"] = new HighlightingColor 
         { 
-            Foreground = new SimpleHighlightingBrush(Colors.Orange)
+            Foreground = GetThemeBrush("Highlighting.Warning", Colors.Orange) // Fallback color
         };
         
         _namedColors["info"] = new HighlightingColor 
         { 
-            Foreground = new SimpleHighlightingBrush(Colors.Green)
+            // For 'info', the theme files use "InfoColor" for the brush, which is fine.
+            // But AvalonEdit expects "Highlighting.Info". We can either align names
+            // or use the existing "InfoColor" key if it's distinct enough.
+            // Let's assume the theme file has a "Highlighting.Info" brush defined for consistency.
+            Foreground = GetThemeBrush("Highlighting.Info", Colors.Green) // Fallback color
         };
         
-        // Ensure the 'filter' and 'searchMatch' colors use theme resources
         _namedColors["filter"] = new HighlightingColor
         {
-            Background = new SimpleHighlightingBrush(((Application.Current?.TryFindResource("Highlighting.FilterMatch.Background") as SolidColorBrush)?.Color ?? Colors.Yellow)), // Fallback
-            Foreground = new SimpleHighlightingBrush(((Application.Current?.TryFindResource("Highlighting.FilterMatch.Foreground") as SolidColorBrush)?.Color ?? Colors.Black)) // Fallback
+            Background = GetThemeBrush("Highlighting.FilterMatch.Background", Colors.Yellow),
+            Foreground = GetThemeBrush("Highlighting.FilterMatch.Foreground", Colors.Black)
         };
 
         _namedColors["searchMatch"] = new HighlightingColor
         {
-            Background = new SimpleHighlightingBrush(((Application.Current?.TryFindResource("Highlighting.SearchMatch.Background") as SolidColorBrush)?.Color ?? Colors.LightCyan)), // Fallback
-            Foreground = new SimpleHighlightingBrush(((Application.Current?.TryFindResource("Highlighting.SearchMatch.Foreground") as SolidColorBrush)?.Color ?? Colors.Black)) // Fallback
+            Background = GetThemeBrush("Highlighting.SearchMatch.Background", Colors.LightCyan),
+            Foreground = GetThemeBrush("Highlighting.SearchMatch.Foreground", Colors.Black)
         };
+    }
+
+    // Helper to get brush from theme resources with a fallback
+    private SimpleHighlightingBrush GetThemeBrush(string resourceKey, Color fallbackColor)
+    {
+        Brush? themeBrush = Application.Current?.TryFindResource(resourceKey) as Brush;
+        if (themeBrush is SolidColorBrush scb)
+        {
+            return new SimpleHighlightingBrush(scb.Color);
+        }
+        // Add handling for other brush types if necessary, or default to SolidColorBrush
+        return new SimpleHighlightingBrush(fallbackColor);
     }
 
     // Add a highlighting rule with a specific pattern and color
