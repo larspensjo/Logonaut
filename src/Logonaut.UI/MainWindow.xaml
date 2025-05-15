@@ -7,7 +7,7 @@
         xmlns:converters="clr-namespace:Logonaut.UI.Converters"
         xmlns:local="clr-namespace:Logonaut.UI"
         xmlns:controls="clr-namespace:Logonaut.UI.Controls"
-        xmlns:views="clr-namespace:Logonaut.UI.Views"
+        xmlns:views="clr-namespace:Logonaut.UI.Views" 
         xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
         xmlns:System="clr-namespace:System;assembly=mscorlib"
         Title="Logonaut" Height="600" Width="900"
@@ -26,7 +26,6 @@
     </Window.InputBindings>
 
     <Window.Resources>
-        <!-- TOOD: These converters overlap with some in Converters.xaml -->
         <converters:BoolToVisibilityConverter x:Key="BoolToVis"/>
         <converters:StringToIntConverter x:Key="StringToIntConverter" />
 
@@ -123,7 +122,6 @@
                                 SearchMarkerBrush="{DynamicResource OverviewRuler.SearchMarkerBrush}"
                                 ThumbBrush="{DynamicResource OverviewRuler.ThumbBrush}"/>
 
-                            <!-- Binding needs RelativeSource to find Window's DataContext (ViewModel) -->
                             <ToggleButton Style="{StaticResource AnchorToggleButtonStyle}"
                                           Grid.Column="1" Grid.Row="1"
                                           IsChecked="{Binding DataContext.IsAutoScrollEnabled, RelativeSource={RelativeSource AncestorType=Window}, Mode=TwoWay}"
@@ -148,7 +146,7 @@
                         CanExecute="ToggleSimulatorConfig_CanExecute"/>
     </Window.CommandBindings>
 
-    <Grid> <!-- Outermost Grid -->
+    <Grid> 
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/> <!-- Menu -->
             <RowDefinition Height="*"/>    <!-- Main Content Area -->
@@ -189,7 +187,6 @@
 
                 <views:FilterPanelView Grid.Column="0"/>
 
-                <!-- Splitter (Column 1 of MainContentColumnsGrid) -->
                 <GridSplitter Grid.Column="1"
                               Width="5"
                               HorizontalAlignment="Center"
@@ -264,9 +261,9 @@
                     </Border>
                 </Grid>
 
-            </Grid> <!-- End of MainContentColumnsGrid -->
+            </Grid> 
 
-            <!-- CHILD 2: About Overlay (Sibling to MainContentColumnsGrid) -->
+            <!-- About Overlay Border (Remains in MainWindow to overlay entire content) -->
             <Border x:Name="AboutOverlay"
                     Panel.ZIndex="20"
                     Background="{DynamicResource Overlay.BackgroundBrush}"
@@ -274,34 +271,11 @@
                     BorderThickness="1" CornerRadius="5"
                     Padding="15" Margin="20"
                     Visibility="{Binding IsAboutOverlayVisible, Converter={StaticResource BoolToVis}}">
-
-                 <!-- Content of the About overlay -->
-                 <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-                    <Button Style="{StaticResource OverlayCloseButtonStyle}" Command="{Binding ToggleAboutOverlayCommand}" VerticalAlignment="Top" HorizontalAlignment="Right" Margin="0,-7,-7,0" Panel.ZIndex="1"/>
-                    <StackPanel Grid.Row="0" Margin="0,0,0,15">
-                        <TextBlock Text="Logonaut" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center" Foreground="{DynamicResource Overlay.ForegroundBrush}"/>
-                        <TextBlock HorizontalAlignment="Center" Margin="0,5,0,0" Foreground="{DynamicResource Overlay.ForegroundBrush}"><Run Text="Version:"/><Run Text="{Binding ApplicationVersion, Mode=OneWay}"/></TextBlock>
-                        <TextBlock Text="© 2024 Lars Pensjö" FontSize="10" HorizontalAlignment="Center" Margin="0,10,0,0" Foreground="{DynamicResource Overlay.ForegroundBrush}"/>
-                         <TextBlock HorizontalAlignment="Center" Margin="0,5,0,0">
-                            <Hyperlink NavigateUri="https://github.com/larspensjo/Logonaut" RequestNavigate="Hyperlink_RequestNavigate">
-                                <Run Text="Project Repository" Foreground="{DynamicResource AccentBrush}"/>
-                            </Hyperlink>
-                        </TextBlock>
-                    </StackPanel>
-                    <Border Grid.Row="1" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,0">
-                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                            <TextBox Text="{Binding AboutRevisionHistory, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True" BorderThickness="0" Background="Transparent" Foreground="{DynamicResource Overlay.ForegroundBrush}" FontFamily="Consolas" FontSize="11"/>
-                        </ScrollViewer>
-                    </Border>
-                 </Grid>
+                
+                <views:AboutView />
             </Border>
 
-        </Grid> <!-- End of Main Content Grid (Row 1) -->
+        </Grid> 
 
         <!-- Stats Bar (Row 2) -->
         <Border Grid.Row="2" Style="{DynamicResource CardPanelStyle}">
@@ -330,7 +304,6 @@
                              <Style.Triggers>
                                  <DataTrigger Binding="{Binding IsJumpTargetInvalid}" Value="True">
                                      <Setter Property="Background" Value="LightCoral"/>
-                                     <!-- Optional: Add animation for flashing -->
                                  </DataTrigger>
                              </Style.Triggers>
                          </Style>
