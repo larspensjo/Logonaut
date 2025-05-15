@@ -328,7 +328,7 @@
                               HorizontalAlignment="Center"
                               VerticalAlignment="Stretch"
                               Background="{DynamicResource BorderBrush}"
-                              ShowsPreview="True"
+                              ShowsPreview="False"
                               ResizeDirection="Columns"
                               ResizeBehavior="PreviousAndNext"/>
 
