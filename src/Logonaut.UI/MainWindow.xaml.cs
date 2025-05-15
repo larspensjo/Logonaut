@@ -1,21 +1,14 @@
 ﻿using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Windows;
-using System.Windows.Data; // Required for Binding
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Input; // Required for RoutedUICommand
 using System.Windows.Documents; // Required for AdornerLayer
-using System.Windows.Navigation;
 using ICSharpCode.AvalonEdit;
 using ICSharpCode.AvalonEdit.Rendering;
-using ICSharpCode.AvalonEdit.Editing; // Required for Caret
-using ICSharpCode.AvalonEdit.Document; // Required for DocumentLine
 using Logonaut.UI.Helpers;
 using Logonaut.UI.ViewModels;
-using Logonaut.Filters;
-using System.Diagnostics;
-using Logonaut.Common; // Required for FilteredLogLine
 
 namespace Logonaut.UI;
 
@@ -52,7 +45,6 @@ namespace Logonaut.UI;
  */
 public partial class MainWindow : Window, IDisposable
 {
-    private int _lastKnownCaretLine = -1; // Field to track the last caret line
     private EmptyDropTargetAdorner? _emptyDropAdorner;
     private AdornerLayer? _adornerLayer;
 
@@ -134,17 +126,9 @@ public partial class MainWindow : Window, IDisposable
 
     private readonly MainViewModel _viewModel;
     private readonly TextEditor _logOutputEditor; // Just for convenience. Referencing LogOutputEditor triggers an Intellisense error.
-    private OverviewRulerMargin? _overviewRuler;
-    private ChunkSeparatorRenderer? _chunkSeparator;
     private bool _disposed;
-    private SelectedIndexHighlightTransformer? _selectedIndexTransformer;
 
     private static Logonaut.Core.FileSystemSettingsService _settingsService = new();
-
-    // Field for DnD visual feedback +++
-    private TreeViewItem? _dragOverTreeViewItem = null;
-    private Brush? _originalDragOverItemBrush = null;
-    private const string DragDropDataFormatFilterType = "LogonautFilterTypeIdentifier"; // Custom data format key
 
     // Enable injection of the ViewModel for testing purposes
     public MainWindow(MainViewModel viewModel)
@@ -224,15 +208,6 @@ public partial class MainWindow : Window, IDisposable
         }
     }
 
-    private void ViewModel_RequestScrollToLineIndex(object? sender, int lineIndex)
-    {
-        // Ensure this runs on the UI thread if there's any doubt
-        Dispatcher.BeginInvoke(new Action(() =>
-        {
-            ScrollToSelectedLine(lineIndex);
-        }));
-    }
-
     private void MainWindow_Closing(object? sender, CancelEventArgs e)
     {
         Dispose();
@@ -256,128 +231,6 @@ public partial class MainWindow : Window, IDisposable
             _disposed = true;
             GC.SuppressFinalize(this); // If you add a finalizer
         }
-    }
-
-    private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (_chunkSeparator != null && (e.PropertyName == nameof(MainViewModel.FilteredLogLines) || e.PropertyName == nameof(MainViewModel.ContextLines)))
-        {
-            _chunkSeparator.UpdateChunks(_viewModel.FilteredLogLines, _viewModel.ContextLines);
-            // When FilteredLogLines changes, we also need to update the transformer's source
-            if (_selectedIndexTransformer != null && _logOutputEditor.TextArea?.TextView != null)
-            {
-                _selectedIndexTransformer.FilteredLinesSource = _viewModel.FilteredLogLines;
-                // Force a redraw if the highlight might need to be reapplied due to content change
-                _logOutputEditor.TextArea.TextView.Redraw();
-            }
-        }
-
-
-        if (_selectedIndexTransformer != null && _logOutputEditor.TextArea?.TextView != null)
-        {
-            // Handle HighlightedOriginalLineNumber change from ViewModel
-            if (e.PropertyName == nameof(MainViewModel.HighlightedOriginalLineNumber))
-            {
-                var highlightBrush = _logOutputEditor.TextArea.TextView.Tag as Brush;
-                // Pass the current FilteredLogLines to the transformer.
-                // It's important this is the same collection instance the editor is displaying.
-                _selectedIndexTransformer.UpdateState(
-                    _viewModel.HighlightedOriginalLineNumber,
-                    highlightBrush,
-                    _viewModel.FilteredLogLines, // Pass the current FilteredLogLines
-                    _logOutputEditor.TextArea.TextView
-                );
-            }
-            // The HighlightedFilteredLineIndex property change handling remains for auto-scroll logic,
-            // but the actual highlighting is now driven by HighlightedOriginalLineNumber.
-            else if (e.PropertyName == nameof(MainViewModel.HighlightedFilteredLineIndex))
-            {
-                if (_viewModel.HighlightedFilteredLineIndex >= 0 && _viewModel.IsAutoScrollEnabled)
-                {
-                    bool highlightedLineIsLastLine = (_viewModel.FilteredLogLines.Count > 0 &&
-                                                      _viewModel.HighlightedFilteredLineIndex == _viewModel.FilteredLogLines.Count - 1);
-                    if (!highlightedLineIsLastLine)
-                    {
-                        _viewModel.IsAutoScrollEnabled = false;
-                    }
-                }
-            }
-        }
-
-        // Clear Status Message on Successful Jump ---
-        if (e.PropertyName == nameof(MainViewModel.HighlightedOriginalLineNumber) &&
-            !string.IsNullOrEmpty(_viewModel.JumpStatusMessage) &&
-            _viewModel.HighlightedOriginalLineNumber.ToString() == _viewModel.TargetOriginalLineNumberInput)
-        {
-            _viewModel.JumpStatusMessage = string.Empty; // Clear message if jump succeeded
-        }
-    }
-
-    private void ViewModel_RequestScrollToEnd(object? sender, EventArgs e)
-    {
-        // Ensure this runs on the UI thread if there's any doubt,
-        // but it should be called from the VM's Post callback.
-        // Dispatcher.BeginInvoke(new Action(() =>
-        // {
-                _logOutputEditor?.ScrollToEnd();
-        // }), DispatcherPriority.Background); // Background is usually safe
-    }
-
-    private void ScrollToSelectedLine(int filteredLineIndex)
-    {
-        if (_logOutputEditor?.Document == null)
-            throw new InvalidOperationException("LogOutputEditor Document is null.");
-
-        if (_logOutputEditor.TextArea?.TextView == null)
-            throw new InvalidOperationException("LogOutputEditor TextView is null.");
-
-        // Convert 0-based index to 1-based document line number
-        int targetDocumentLineNumber = filteredLineIndex + 1;
-
-        // Check if the target line number is valid within the *current* document content
-        if (targetDocumentLineNumber <= 0 || targetDocumentLineNumber > _logOutputEditor.Document.LineCount)
-        {
-             System.Diagnostics.Debug.WriteLine($"ScrollToSelectedLine: Invalid target line number {targetDocumentLineNumber} for document length {_logOutputEditor.Document.LineCount}.");
-             return;
-        }
-
-        try
-        {
-            var textView = _logOutputEditor.TextArea.TextView;
-            DocumentLine targetLine = _logOutputEditor.Document.GetLineByNumber(targetDocumentLineNumber);
-
-            // Calculate the visual top position of the line relative to the document start
-            double visualTop = textView.GetVisualTopByDocumentLine(targetDocumentLineNumber);
-
-            if (!double.IsNaN(visualTop) && !double.IsInfinity(visualTop))
-            {
-                // Calculate desired offset to center the line
-                double desiredOffset = visualTop - (textView.ActualHeight / 2.0);
-
-                // Use TextView.DocumentHeight (total content height) and TextView.ActualHeight (visible area height)
-                double maxOffset = Math.Max(0, textView.DocumentHeight - textView.ActualHeight);
-
-                double clampedOffset = Math.Max(0, Math.Min(desiredOffset, maxOffset));
-
-                // Perform the scroll using the calculated vertical offset
-                _logOutputEditor.ScrollToVerticalOffset(clampedOffset);
-            }
-            else
-            {
-                // Fallback to simple ScrollToLine if visual position calculation fails
-                System.Diagnostics.Debug.WriteLine($"ScrollToSelectedLine: VisualTop calculation failed for line {targetDocumentLineNumber}. Falling back to ScrollToLine.");
-                _logOutputEditor.ScrollToLine(targetDocumentLineNumber);
-            }
-        }
-        catch (ArgumentOutOfRangeException argEx)
-        {
-            System.Diagnostics.Debug.WriteLine($"Error during ScrollToSelectedLine (ArgumentOutOfRange): {argEx.Message}");
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"Error during ScrollToSelectedLine: {ex.Message}");
-        }
-
     }
 
     private void MainWindow_Loaded(object sender, RoutedEventArgs e)
@@ -442,135 +295,6 @@ public partial class MainWindow : Window, IDisposable
         _logOutputEditor.TextArea.SelectionChanged += LogOutputEditor_SelectionChanged;
     }
 
-    private void LogOutputEditor_Unloaded(object? sender, RoutedEventArgs? e)
-    {
-        if (_logOutputEditor?.TextArea != null)
-            _logOutputEditor.TextArea.SelectionChanged -= LogOutputEditor_SelectionChanged;
-
-        // Clean up Overview Ruler binding
-        if (_overviewRuler != null) {
-            _overviewRuler.RequestScrollOffset -= OverviewRuler_RequestScrollOffset;
-            _overviewRuler.PreviewMouseLeftButtonDown -= OverviewRuler_PreviewMouseLeftButtonDown;
-        }
-        _overviewRuler = null; // Release reference
-
-        if (_logOutputEditor?.TextArea?.Caret != null)
-            _logOutputEditor.TextArea.Caret.PositionChanged -= Caret_PositionChanged;
-
-        // --- Unsubscribe from User Input Events ---
-        if (_logOutputEditor?.TextArea != null)
-        {
-                _logOutputEditor.TextArea.PreviewMouseWheel -= TextArea_PreviewMouseWheel;
-                _logOutputEditor.TextArea.PreviewKeyDown -= TextArea_PreviewKeyDown;
-        }
-
-        TextView? textView = _logOutputEditor?.TextArea?.TextView;
-        if (textView == null && _logOutputEditor != null) // Check _logOutputEditor as well because TextArea might be null if unloaded very early
-        {
-             // If textView is null during unload, it's possible the control is already significantly torn down.
-             // Log a warning, but try to proceed with other cleanup.
-             Debug.WriteLine("WARN: TextView was null during LogOutputEditor_Unloaded. Some cleanup might be skipped.");
-        }
-
-
-        if (_selectedIndexTransformer != null && textView != null)
-        {
-            if (textView.LineTransformers.Contains(_selectedIndexTransformer))
-            {
-                textView.LineTransformers.Remove(_selectedIndexTransformer);
-            }
-            // Clear the proxy property used for the brush
-            textView.ClearValue(TextView.TagProperty);
-        }
-        _selectedIndexTransformer = null;
-
-        // Clean up Chunk Separator
-        if (_chunkSeparator != null && textView != null)
-        {
-            // Clear bindings
-            BindingOperations.ClearBinding(_chunkSeparator, ChunkSeparatorRenderer.SeparatorBrushProperty);
-            textView.ClearValue(TextView.TagProperty); // Clear the resource reference on Tag
-
-            // Remove renderer and dispose
-            if(textView.BackgroundRenderers.Contains(_chunkSeparator))
-            {
-            textView.BackgroundRenderers.Remove(_chunkSeparator);
-            }
-            _chunkSeparator.Dispose();
-        }
-        _chunkSeparator = null; // Release reference
-    }
-
-   private void Caret_PositionChanged(object? sender, EventArgs e)
-    {
-        if (sender is Caret caret && DataContext is MainViewModel viewModel)
-        {
-            int currentCaretLine = caret.Line; // 1-based line number
-
-            if (currentCaretLine != _lastKnownCaretLine) // Process only if line actually changed
-            {
-                _lastKnownCaretLine = currentCaretLine;
-                int filteredLineIndex = currentCaretLine - 1;
-
-                // Update the ViewModel's highlighted line index if it's a valid line
-                // This will trigger ViewModel_PropertyChanged if the value actually changes.
-                if (filteredLineIndex >= 0 && filteredLineIndex < viewModel.FilteredLogLines.Count)
-                {
-                    // Set HighlightedOriginalLineNumber instead of HighlightedFilteredLineIndex
-                    // to make the selection "stick" to the original content.
-                    viewModel.HighlightedOriginalLineNumber = viewModel.FilteredLogLines[filteredLineIndex].OriginalLineNumber;
-                }
-                else
-                {
-                    if (viewModel.HighlightedOriginalLineNumber != -1)
-                        viewModel.HighlightedOriginalLineNumber = -1;
-                }
-            }
-        }
-    }
-
-
-    private void TextArea_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
-    {
-        // Disable auto-scroll if scrolling UP (positive delta)
-        if (_viewModel.IsAutoScrollEnabled && e.Delta > 0)
-        {
-            _viewModel.IsAutoScrollEnabled = false;
-            // System.Diagnostics.Debug.WriteLine("AutoScroll disabled due to MouseWheel Up.");
-        }
-    }
-
-    private void OverviewRuler_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-    {
-        // Disable auto-scroll when user clicks the ruler to start scrolling
-        if (_viewModel.IsAutoScrollEnabled)
-        {
-            _viewModel.IsAutoScrollEnabled = false;
-            // System.Diagnostics.Debug.WriteLine("AutoScroll disabled due to Ruler Click.");
-        }
-        // Allow the base class or other handlers to continue processing the click for actual scrolling
-    }
-
-    private void TextArea_PreviewKeyDown(object sender, KeyEventArgs e)
-    {
-        if (!_viewModel.IsAutoScrollEnabled) return; // Only act if enabled
-
-        switch (e.Key)
-        {
-            case Key.PageUp:
-            case Key.PageDown:
-            case Key.Up: // Arrow keys might not always scroll, but disabling is safe
-            case Key.Down:
-            case Key.Home: // Home/End usually scroll vertically
-            case Key.End:
-                _viewModel.IsAutoScrollEnabled = false;
-                // System.Diagnostics.Debug.WriteLine($"AutoScroll disabled due to KeyDown: {e.Key}");
-                // Note: We don't set e.Handled = true here unless we want to
-                // completely prevent the default scroll action for some reason.
-                break;
-        }
-    }
-
     private void ProfileNameTextBox_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
         if (e.Key == System.Windows.Input.Key.Enter)
@@ -592,125 +316,6 @@ public partial class MainWindow : Window, IDisposable
             // commit the rename
             vm.EndRenameCommand.Execute(null);
         }
-    }
-
-    private void LogOutputEditor_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
-    {
-        // Ctrl+V Paste Logic
-        if (e.Key == System.Windows.Input.Key.V && Keyboard.Modifiers == ModifierKeys.Control)
-        {
-            if (System.Windows.Clipboard.ContainsText())
-            {
-                string clipboardText = System.Windows.Clipboard.GetText();
-                if (!string.IsNullOrEmpty(clipboardText))
-                {
-                    _viewModel.LoadLogFromText(clipboardText);
-                    e.Handled = true;
-                    return; // Handled
-                }
-            }
-        }
-
-        // Ctrl+F3 Search Selected Text
-        if (e.Key == System.Windows.Input.Key.F3 && Keyboard.Modifiers == ModifierKeys.Control)
-        {
-            // Check if there is selected text in the editor
-            if (_logOutputEditor.SelectionLength > 0 && !string.IsNullOrEmpty(_logOutputEditor.SelectedText))
-            {
-                string selected = _logOutputEditor.SelectedText;
-
-                // Update the ViewModel's SearchText
-                _viewModel.SearchText = selected;
-
-                // Trigger "Find Next" immediately
-                // (Setting SearchText likely triggers CanExecuteChanged if needed)
-                // TODO: Should start search from current position, not from the beginning.
-                if (_viewModel.NextSearchCommand.CanExecute(null))
-                {
-                    _viewModel.NextSearchCommand.Execute(null); // The first search will find the string currently selected
-                    _viewModel.NextSearchCommand.Execute(null);
-                }
-
-                e.Handled = true; // Mark as handled
-            }
-            // If no text is selected, Ctrl+F3 currently does nothing in the editor.
-            // You could potentially add fallback behavior here if desired.
-            return; // Handled or nothing to do for Ctrl+F3
-        }
-
-        // Note: F3 and Shift+F3 are now handled by the Window.InputBindings
-        //       because they should work globally, not just when the editor has focus.
-        //       If we handled them here, they wouldn't work when e.g. the search box has focus.
-    }
-
-    // Only for things not dependent on ViewModel knowing the editor
-    private void LogOutputEditor_Loaded(object sender, RoutedEventArgs e)
-    {
-            // The template should be applied now, try to find the ruler
-            // Use VisualTreeHelper to find the element within the template
-            _overviewRuler = FindVisualChild<Logonaut.UI.Helpers.OverviewRulerMargin>(_logOutputEditor);
-
-            if (_overviewRuler != null)
-            _overviewRuler.RequestScrollOffset += OverviewRuler_RequestScrollOffset;
-            else
-            throw new Exception("OverviewRulerMargin not found in TextEditor template.");
-
-            // Unsubscribe when the editor unloads to prevent memory leaks
-            _logOutputEditor.Unloaded += (s, ev) => {
-                if (_overviewRuler != null)
-                {
-                    _overviewRuler.RequestScrollOffset -= OverviewRuler_RequestScrollOffset;
-                }
-                // Also unsubscribe from Loaded/Unloaded? Might not be necessary if window closes.
-            };
-    }
-
-    private void LogOutputEditor_PreviewMouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
-    {
-        if (e.ChangedButton == System.Windows.Input.MouseButton.Left && DataContext is ViewModels.MainViewModel viewModel)
-        {
-            var textView = _logOutputEditor.TextArea.TextView;
-            if (!textView.IsLoaded || !textView.VisualLinesValid)
-                throw new InvalidOperationException("TextView is not loaded or visual lines are not valid.");
-
-            Point pointRelativeToTextView = e.GetPosition(textView);
-            Point pointInDocument = new Point(
-                pointRelativeToTextView.X + textView.ScrollOffset.X,
-                pointRelativeToTextView.Y + textView.ScrollOffset.Y
-            );
-            TextViewPosition? positionInfo = textView.GetPosition(pointInDocument); 
-
-            int clickedOriginalLineNumber = -1; // Default to -1 if no line is clicked
-            if (positionInfo.HasValue)
-            {
-                VisualLine? clickedVisualLine = textView.GetVisualLine(positionInfo.Value.Line);
-                if (clickedVisualLine != null)
-                {
-                    int clickedDocumentLineNumber = clickedVisualLine.FirstDocumentLine.LineNumber; // 1-based in current view
-                    int clickedFilteredLineIndex = clickedDocumentLineNumber - 1;
-                    
-                    if (clickedFilteredLineIndex >= 0 && clickedFilteredLineIndex < viewModel.FilteredLogLines.Count)
-                    {
-                        clickedOriginalLineNumber = viewModel.FilteredLogLines[clickedFilteredLineIndex].OriginalLineNumber;
-                    }
-                }
-            }
-            
-            // Update the highlighted original line number in the ViewModel
-            viewModel.HighlightedOriginalLineNumber = clickedOriginalLineNumber;
-            
-            // Explicitly disable auto-scroll upon any left mouse click that results in a selection
-            if (clickedOriginalLineNumber >= 0 && viewModel.IsAutoScrollEnabled)
-            {
-                viewModel.IsAutoScrollEnabled = false;
-            }
-        }
-    }
-
-    // Handler for the ruler's request to scroll
-    private void OverviewRuler_RequestScrollOffset(object? sender, double requestedOffset)
-    {
-        _logOutputEditor.ScrollToVerticalOffset(requestedOffset);
     }
 
 
@@ -737,33 +342,6 @@ public partial class MainWindow : Window, IDisposable
         }
         return null;
     }
-
-
-    private void SetupCustomMargins()
-    {
-        var numberMargin = new Logonaut.UI.Helpers.OriginalLineNumberMargin();
-        _logOutputEditor.TextArea.LeftMargins.Add(numberMargin);
-
-        var filteredLinesBinding = new System.Windows.Data.Binding("FilteredLogLines")
-        {
-            Source = this.DataContext,
-            Mode = System.Windows.Data.BindingMode.OneWay
-        };
-        numberMargin.SetBinding(Logonaut.UI.Helpers.OriginalLineNumberMargin.FilteredLinesSourceProperty, filteredLinesBinding);
-
-        var visibilityBinding = new System.Windows.Data.Binding("IsCustomLineNumberMarginVisible")
-        {
-            Source = this.DataContext,
-            Mode = System.Windows.Data.BindingMode.OneWay
-        };
-        numberMargin.SetBinding(UIElement.VisibilityProperty, visibilityBinding);
-
-        // --- Separator Margin ---
-        var lineSeparatorMargin = new Logonaut.UI.Helpers.VerticalLineMargin();
-        lineSeparatorMargin.SetBinding(UIElement.VisibilityProperty, visibilityBinding);
-        _logOutputEditor.TextArea.LeftMargins.Add(lineSeparatorMargin);
-    }
-
 
     private void MainWindow_SourceInitialized(object? sender, EventArgs e)
     {
@@ -802,23 +380,6 @@ public partial class MainWindow : Window, IDisposable
         }
     }
 
-    private void LogOutputEditor_SelectionChanged(object? sender, EventArgs e) // Hook this up to editor.TextArea.SelectionChanged
-    {
-        if (DataContext is MainViewModel viewModel && sender is TextArea textArea)
-        {
-            string selectedText = textArea.Selection.GetText();
-            // Check for multi-line. SegmentTree.GetText() gives raw text.
-            if (!string.IsNullOrEmpty(selectedText) && (selectedText.Contains('\r') || selectedText.Contains('\n')))
-            {
-                viewModel.SelectedLogTextForFilter = null; // Multi-line, invalidate
-            }
-            else
-            {
-                viewModel.SelectedLogTextForFilter = string.IsNullOrEmpty(selectedText) ? null : selectedText;
-            }
-        }
-    }
-
     // Call ViewModel cleanup method when the window is closing
     private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
     {
@@ -833,245 +394,4 @@ public partial class MainWindow : Window, IDisposable
     {
         this.Close(); // Trigger the Window_Closing event
     }
-
-    #region Drag-and-Drop Handlers for Filter Palette and TreeView
-
-    // --- Drag Source: Filter Palette Item ---
-    // Initiates a drag operation when a filter type is dragged from the palette.
-    private void PaletteItemsControl_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-    {
-        DependencyObject? originalSource = e.OriginalSource as DependencyObject;
-        ContentPresenter? paletteItemContainer = null;
-
-        while (originalSource != null && originalSource != sender as ItemsControl)
-        {
-            if (originalSource is ContentPresenter cp && cp.DataContext is Logonaut.Common.PaletteItemDescriptor)
-            {
-                paletteItemContainer = cp;
-                break;
-            }
-            originalSource = VisualTreeHelper.GetParent(originalSource);
-        }
-
-        if (paletteItemContainer != null && paletteItemContainer.DataContext is Logonaut.Common.PaletteItemDescriptor descriptor)
-        {
-            if (!descriptor.IsEnabled) // If the item itself is disabled, do not start drag
-            {
-                e.Handled = true;
-                return;
-            }
-
-            DataObject dragData = new DataObject();
-            dragData.SetData(DragDropDataFormatFilterType, descriptor.TypeIdentifier);
-
-            if (descriptor.IsDynamic && !string.IsNullOrEmpty(descriptor.InitialValue))
-            {
-                // Add a new format for the initial value
-                dragData.SetData("LogonautFilterInitialValue", descriptor.InitialValue);
-            }
-
-            DragDrop.DoDragDrop(paletteItemContainer, dragData, DragDropEffects.Copy);
-            e.Handled = true;
-        }
-    }
-
-    // --- Drop Target: FilterTreeView ---
-    private void FilterTreeView_DragEnter(object sender, DragEventArgs e)
-    {
-        UpdateDragDropEffects(e);
-    }
-
-    private void FilterTreeView_DragOver(object sender, DragEventArgs e)
-    {
-        UpdateDragDropEffects(e);
-    }
-
-    // Determines the effect of a drag operation over the TreeView and provides visual feedback.
-    private void UpdateDragDropEffects(DragEventArgs e)
-    {
-        e.Effects = DragDropEffects.None; 
-        ClearDropTargetAdornment();    
-        // Don't immediately hide/set resting here. Let the logic below decide.
-        // The permanent adorner's resting state is managed by UpdateEmptyTreeViewAdornerVisibility
-
-        if (e.Data.GetDataPresent(DragDropDataFormatFilterType))
-        {
-            Point pt = e.GetPosition(FilterTreeView);
-            TreeViewItem? targetTVI = GetVisualAncestor<TreeViewItem>(FilterTreeView.InputHitTest(pt) as DependencyObject);
-            FilterViewModel? targetVM = (targetTVI?.DataContext) as FilterViewModel;
-
-            if (_viewModel.ActiveFilterProfile is not { } activeFilterProfile)
-                throw new InvalidOperationException("ActiveFilterProfile is null.");
-
-            if (targetTVI != null && targetVM != null && targetVM.Filter is CompositeFilter)
-            {
-                e.Effects = DragDropEffects.Copy;
-                ApplyDropTargetAdornment(targetTVI);
-                HideEmptyDropAdornerOrSetResting(); // If over an item, ensure empty adorner (if visible) is resting or hidden
-            }
-            else if (targetTVI == null) 
-            {
-                if (activeFilterProfile.RootFilterViewModel == null) // Tree is completely empty
-                {
-                    e.Effects = DragDropEffects.Copy;
-                    ShowEmptyDropAdornerActiveState(); // Show in ACTIVE state during drag
-                }
-                else if (activeFilterProfile.RootFilterViewModel.Filter is CompositeFilter) // Tree has composite root
-                {
-                    e.Effects = DragDropEffects.Copy;
-                    // No specific item adornment, permanent empty adorner should be hidden by UpdateEmptyTreeViewAdornerVisibility
-                }
-            }
-        }
-        else // No valid data
-        {
-             HideEmptyDropAdornerOrSetResting(); // Ensure it's resting if no valid data
-        }
-        e.Handled = true;
-    }
-    
-    private void FilterTreeView_DragLeave(object sender, DragEventArgs e)
-    {
-        ClearDropTargetAdornment();
-        HideEmptyDropAdornerOrSetResting();
-        e.Handled = true;
-    }
-
-    // Handles the drop action on the FilterTreeView.
-    private void FilterTreeView_Drop(object sender, DragEventArgs e)
-    {
-        ClearDropTargetAdornment(); // Clear highlight after drop
-        HideEmptyDropAdornerOrSetResting();
-        var mainViewModel = DataContext as MainViewModel;
-        if (mainViewModel == null) return;
-
-        string? filterTypeIdentifier = e.Data.GetData(DragDropDataFormatFilterType) as string;
-        if (string.IsNullOrEmpty(filterTypeIdentifier)) return;
-
-        string? initialValue = null;
-        if (e.Data.GetDataPresent("LogonautFilterInitialValue"))
-            initialValue = e.Data.GetData("LogonautFilterInitialValue") as string;
-
-        FilterViewModel? targetParentVM = null;
-        int? dropIndex = null; // For future precise insertion; null means append for now.
-
-        Point pt = e.GetPosition(FilterTreeView);
-        TreeViewItem? targetTVI = GetVisualAncestor<TreeViewItem>(FilterTreeView.InputHitTest(pt) as DependencyObject);
-        FilterViewModel? hitTestVM = (targetTVI?.DataContext) as FilterViewModel;
-
-        if (hitTestVM != null) // Dropped on an existing item
-        {
-            if (hitTestVM.Filter is CompositeFilter)
-            {
-                targetParentVM = hitTestVM;
-                // For Step 1, always append. Index calculation for specific position comes later.
-                dropIndex = targetParentVM.Children.Count; 
-            }
-            else
-            {
-                // Dropping on a non-composite leaf is handled by DragOver setting Effects to None.
-                // If it still reaches here, do nothing.
-                e.Effects = DragDropEffects.None;
-                return;
-            }
-        }
-        // If hitTestVM is null, it implies a drop on empty TreeView space.
-        // mainViewModel.ExecuteAddFilterFromDrop will handle logic for adding to root or empty tree.
-        // In this case, targetParentVM remains null, and ExecuteAddFilterFromDrop will figure it out.
-
-        mainViewModel.ExecuteAddFilterFromDrop(filterTypeIdentifier, targetParentVM, dropIndex, initialValue);
-        e.Handled = true;
-    }
-
-    // --- Visual Feedback Helpers ---
-    private void ShowEmptyDropAdornerActiveState() // Renamed for clarity
-    {
-        if (_emptyDropAdorner != null && _emptyDropAdorner.Visibility == Visibility.Visible)
-        {
-            _emptyDropAdorner.SetVisualState(true); // Switch to active state
-        }
-        // If it wasn't visible, UpdateEmptyTreeViewAdornerVisibility should handle showing it in resting first.
-        // Or, if it should immediately appear active:
-        // else if (_viewModel.ActiveFilterProfile?.RootFilterViewModel == null) // Only if tree is truly empty
-        // {
-        //     UpdateEmptyTreeViewAdornerVisibility(); // This will show it in resting
-        //     _emptyDropAdorner?.SetVisualState(true); // Then immediately switch to active
-        // }
-    }
-
-    private void HideEmptyDropAdornerOrSetResting() // Renamed and modified
-    {
-        if (_emptyDropAdorner != null && _emptyDropAdorner.Visibility == Visibility.Visible)
-        {
-            // If the tree is still empty, revert to resting state, otherwise it will be hidden by UpdateEmptyTreeViewAdornerVisibility
-            bool isTreeEmpty = (_viewModel.ActiveFilterProfile?.RootFilterViewModel == null && _viewModel.ActiveTreeRootNodes.Count == 0);
-            if (isTreeEmpty)
-            {
-                 _emptyDropAdorner.SetVisualState(false); // Revert to resting
-            }
-            // If not empty, UpdateEmptyTreeViewAdornerVisibility (called after drop) will hide it.
-        }
-    }
-
-    // Applies a temporary background highlight to a TreeViewItem during drag-over.
-    private void ApplyDropTargetAdornment(TreeViewItem? tvi)
-    {
-        if (tvi != null)
-        {
-            _dragOverTreeViewItem = tvi;
-            _originalDragOverItemBrush = tvi.Background;
-            // Use a theme-aware highlight brush if possible, or fallback
-            var highlightBrush = TryFindResource("AccentBrush") as Brush ?? SystemColors.HighlightBrush; // Using AccentBrush for highlight
-            tvi.Background = highlightBrush;
-        }
-    }
-
-    // Clears any temporary background highlight from a TreeViewItem.
-    private void ClearDropTargetAdornment()
-    {
-        if (_dragOverTreeViewItem != null && _originalDragOverItemBrush != null)
-        {
-            _dragOverTreeViewItem.Background = _originalDragOverItemBrush;
-        }
-        _dragOverTreeViewItem = null;
-        _originalDragOverItemBrush = null;
-    }
-    
-    // --- Helper Methods ---
-
-    // Gets the FilterViewModel associated with a DependencyObject (typically a UI element within a TreeViewItem).
-    private FilterViewModel? GetFilterViewModelFromElement(DependencyObject? element)
-    {
-        // Traverse up to find TreeViewItem and get its DataContext
-        TreeViewItem? tvi = GetVisualAncestor<TreeViewItem>(element);
-        return tvi?.DataContext as FilterViewModel;
-    }
-    
-    private void Hyperlink_RequestNavigate(object sender, RequestNavigateEventArgs e)
-    {
-        try
-        {
-            Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true });
-        }
-        catch (Exception ex) // Catch potential errors opening the link
-        {
-            Debug.WriteLine($"Error opening hyperlink: {ex.Message}");
-            // Optionally show a message to the user if desired, though often failing silently is acceptable here.
-            // MessageBox.Show($"Could not open link: {e.Uri.AbsoluteUri}\nError: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
-        }
-        e.Handled = true; // Important: Mark the event as handled to prevent default navigation attempts
-    }
-
-    // Finds the first visual ancestor of a specific type.
-    public static T? GetVisualAncestor<T>(DependencyObject? d) where T : class
-    {
-        while (d != null)
-        {
-            if (d is T tItem) return tItem;
-            d = VisualTreeHelper.GetParent(d);
-        }
-        return null;
-    }
-
-    #endregion
 }
