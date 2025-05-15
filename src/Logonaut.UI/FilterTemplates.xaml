@@ -5,66 +5,49 @@
                     xmlns:helpers="clr-namespace:Logonaut.UI.Helpers"
                     xmlns:converters="clr-namespace:Logonaut.UI.Converters">
 
-
-    <!-- Style for the ComboBoxItem in the filter color selector's popup -->
-    <Style x:Key="FilterColorComboBoxItemStyle" TargetType="ComboBoxItem">
-        <Setter Property="Padding" Value="4,3"/>
-        <Setter Property="SnapsToDevicePixels" Value="True"/>
+    <!-- Style for individual color choice buttons in the popup (ColorChoiceButtonStyle) -->
+    <Style x:Key="ColorChoiceButtonStyle" TargetType="Button">
+        <Setter Property="Width" Value="70"/>
+        <Setter Property="Height" Value="25"/>
+        <Setter Property="Margin" Value="2"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+        <Setter Property="DataContext" Value="{Binding}"/> 
+        <Setter Property="Command" Value="{Binding DataContext.ChangeHighlightColorCommand, RelativeSource={RelativeSource AncestorType=Popup}}"/>
+        <Setter Property="CommandParameter" Value="{Binding Key}"/>
         <Setter Property="Template">
             <Setter.Value>
-                <ControlTemplate TargetType="ComboBoxItem">
-                    <Border x:Name="Bd"
-                            Background="{TemplateBinding Background}"
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="ButtonBorder"
+                            Background="{Binding Key, Converter={StaticResource HighlightKeyToBrushConverter}, ConverterParameter=Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
-                            Padding="{TemplateBinding Padding}"
-                            SnapsToDevicePixels="true">
-                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-                                          SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                            CornerRadius="2">
+                        <TextBlock Text="{Binding Name}"
+                                   Foreground="{Binding Key, Converter={StaticResource HighlightKeyToBrushConverter}, ConverterParameter=Foreground}"
+                                   VerticalAlignment="Center" HorizontalAlignment="Center"/>
                     </Border>
                     <ControlTemplate.Triggers>
-                        <Trigger Property="IsHighlighted" Value="true">
-                            <Setter Property="Background" TargetName="Bd" Value="{DynamicResource ComboBoxItemHoverBackgroundBrush}"/>
-                            <Setter Property="Foreground" Value="{DynamicResource ComboBoxItemHoverForegroundBrush}"/>
-                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
-                            <Setter TargetName="Bd" Property="Effect" Value="{DynamicResource FocusGlowEffect}"/>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                            <Setter TargetName="ButtonBorder" Property="Effect" Value="{DynamicResource FocusGlowEffect}"/>
                         </Trigger>
-                        <Trigger Property="IsEnabled" Value="false">
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                            <Setter TargetName="ButtonBorder" Property="Background" Value="{Binding Key, Converter={StaticResource HighlightKeyToBrushConverter}, ConverterParameter=Background}"/>
+                            <Setter TargetName="ButtonBorder" Property="Effect">
+                                <Setter.Value>
+                                    <DropShadowEffect ShadowDepth="1" BlurRadius="2" Opacity="0.3" Color="Black"/>
+                                </Setter.Value>
+                            </Setter>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.5"/>
                         </Trigger>
-                        <!-- DataTriggers to set background/foreground based on the item's DataContext (FilterHighlightColorChoice.Key) -->
-                        <DataTrigger Binding="{Binding Key}" Value="FilterHighlight.Default">
-                            <Setter Property="Background" TargetName="Bd" Value="{DynamicResource FilterHighlight.Default.Background}"/>
-                            <Setter Property="Foreground" Value="{DynamicResource FilterHighlight.Default.Foreground}"/>
-                        </DataTrigger>
-                        <DataTrigger Binding="{Binding Key}" Value="FilterHighlight.Red">
-                            <Setter Property="Background" TargetName="Bd" Value="{DynamicResource FilterHighlight.Red.Background}"/>
-                            <Setter Property="Foreground" Value="{DynamicResource FilterHighlight.Red.Foreground}"/>
-                        </DataTrigger>
-                        <DataTrigger Binding="{Binding Key}" Value="FilterHighlight.Green">
-                            <Setter Property="Background" TargetName="Bd" Value="{DynamicResource FilterHighlight.Green.Background}"/>
-                            <Setter Property="Foreground" Value="{DynamicResource FilterHighlight.Green.Foreground}"/>
-                        </DataTrigger>
-                        <DataTrigger Binding="{Binding Key}" Value="FilterHighlight.Blue">
-                            <Setter Property="Background" TargetName="Bd" Value="{DynamicResource FilterHighlight.Blue.Background}"/>
-                            <Setter Property="Foreground" Value="{DynamicResource FilterHighlight.Blue.Foreground}"/>
-                        </DataTrigger>
-                        <DataTrigger Binding="{Binding Key}" Value="FilterHighlight.Yellow">
-                            <Setter Property="Background" TargetName="Bd" Value="{DynamicResource FilterHighlight.Yellow.Background}"/>
-                            <Setter Property="Foreground" Value="{DynamicResource FilterHighlight.Yellow.Foreground}"/>
-                        </DataTrigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
-    </Style>
-
-    <!-- Style for the ComboBox used INSIDE the Popup -->
-    <Style x:Key="PopupColorComboBoxStyle" TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
-        <Setter Property="ItemContainerStyle" Value="{StaticResource FilterColorComboBoxItemStyle}"/>
-        <!-- You might want to set a MinWidth or specific Width here if the default is too small -->
-        <Setter Property="MinWidth" Value="100"/>
     </Style>
 
     <!-- Main HierarchicalDataTemplate for FilterViewModel -->
@@ -146,7 +129,6 @@
                                                     BorderBrush="{TemplateBinding BorderBrush}"
                                                     BorderThickness="{TemplateBinding BorderThickness}"
                                                     CornerRadius="2">
-                                                <!-- Optional: A small visual cue like a downward triangle -->
                                                 <Path Data="M0,0 L3,3 L6,0 Z" 
                                                       Stretch="Uniform" Width="6" Height="4"
                                                       VerticalAlignment="Center" HorizontalAlignment="Center"
@@ -159,9 +141,8 @@
                                     <Trigger Property="IsMouseOver" Value="True">
                                         <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
                                     </Trigger>
-                                    <Trigger Property="IsChecked" Value="True"> <!-- When popup is open -->
+                                    <Trigger Property="IsChecked" Value="True"> 
                                         <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
-                                         <!-- Optional: A slight change to indicate it's active -->
                                         <Setter Property="Effect" Value="{DynamicResource FocusGlowEffect}"/>
                                     </Trigger>
                                     <Trigger Property="IsEnabled" Value="False">
@@ -182,20 +163,29 @@
                         <Border Background="{DynamicResource PanelBackgroundBrush}"
                                 BorderBrush="{DynamicResource AccentBrush}" 
                                 BorderThickness="1" CornerRadius="3" Padding="5"
-                                Effect="{DynamicResource PanelShadowEffect}">
-                            <ComboBox x:Name="InnerColorComboBox"
-                                      ItemsSource="{Binding Source={x:Static vm:FilterViewModel.AvailableHighlightColors}}"
-                                      SelectedValue="{Binding HighlightColorKey, Mode=TwoWay}"
-                                      SelectedValuePath="Key"
-                                      DisplayMemberPath="Name"
-                                      Style="{StaticResource PopupColorComboBoxStyle}">
-                                <i:Interaction.Triggers>
-                                    <i:EventTrigger EventName="SelectionChanged">
-                                        <!-- This action closes the popup by unchecking the ToggleButton -->
-                                        <i:ChangePropertyAction TargetName="ColorIndicatorToggleButton" PropertyName="IsChecked" Value="False"/>
-                                    </i:EventTrigger>
-                                </i:Interaction.Triggers>
-                            </ComboBox>
+                                Effect="{DynamicResource PanelShadowEffect}"
+                                MinWidth="80"> 
+                            <ItemsControl ItemsSource="{Binding Source={x:Static vm:FilterViewModel.AvailableHighlightColors}}"
+                                          ItemContainerStyle="{x:Null}" Focusable="False"> 
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:FilterHighlightColorChoice}">
+                                        <Button Style="{StaticResource ColorChoiceButtonStyle}">
+                                            <!-- Interaction Trigger to close popup on button click -->
+                                            <i:Interaction.Triggers>
+                                                <i:EventTrigger EventName="Click">
+                                                    <i:ChangePropertyAction TargetObject="{Binding ElementName=ColorIndicatorToggleButton}" 
+                                                                            PropertyName="IsChecked" Value="False"/>
+                                                </i:EventTrigger>
+                                            </i:Interaction.Triggers>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Vertical" HorizontalAlignment="Stretch"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                            </ItemsControl>
                         </Border>
                     </Popup>
                 </Grid>

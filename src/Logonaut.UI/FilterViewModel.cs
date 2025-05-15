@@ -4,8 +4,11 @@ using CommunityToolkit.Mvvm.Input;
 using Logonaut.Filters;
 using Logonaut.UI.Commands;
 using System.Diagnostics;
+using System.Collections.Generic; // For List and KeyValuePair
 
 namespace Logonaut.UI.ViewModels;
+
+public record FilterHighlightColorChoice(string Name, string Key);
 
 /*
  * ViewModel wrapper for an IFilter node, representing it in the filter tree UI.
@@ -33,50 +36,84 @@ public partial class FilterViewModel : ObservableObject, ICommandExecutorProvide
     [ObservableProperty] private bool _isSelected;
     [ObservableProperty] private bool _isEditing = false;
     [ObservableProperty] private bool _isNotEditing = true;
-
     [ObservableProperty] private bool _isExpanded; // Relevant for CompositeFilters
 
-    public bool IsEditable => Filter.IsEditable;
+    public IRelayCommand<string> ChangeHighlightColorCommand { get; }
 
-    // Store the executor
+
+    public string HighlightColorKey
+    {
+        get => Filter.HighlightColorKey;
+        set // This setter is still used if something binds directly to HighlightColorKey with TwoWay binding
+        {
+            if (Filter.HighlightColorKey != value)
+            {
+                // Check if the command can execute, to avoid issues if called inappropriately
+                if (ChangeHighlightColorCommand.CanExecute(value))
+                {
+                    ChangeHighlightColorCommand.Execute(value);
+                }
+            }
+        }
+    }
+    
+    public static List<FilterHighlightColorChoice> AvailableHighlightColors { get; } = new()
+    {
+        new("Default", "FilterHighlight.Default"),
+        new("Red", "FilterHighlight.Red"),
+        new("Green", "FilterHighlight.Green"),
+        new("Blue", "FilterHighlight.Blue"),
+        new("Yellow", "FilterHighlight.Yellow")
+    };
+
+    public bool IsEditable => Filter.IsEditable;
     private readonly ICommandExecutor _commandExecutor;
     public ICommandExecutor CommandExecutor => _commandExecutor;
-
-    // Store original value for ChangeFilterValueAction
     private string? _valueBeforeEdit;
 
     public FilterViewModel(IFilter filter, ICommandExecutor commandExecutor, FilterViewModel? parent = null)
     {
         Filter = filter;
         Parent = parent;
-        _commandExecutor = commandExecutor ?? throw new ArgumentNullException(nameof(commandExecutor)); // Store executor
+        _commandExecutor = commandExecutor ?? throw new ArgumentNullException(nameof(commandExecutor));
+
+        // Initialize the command
+        ChangeHighlightColorCommand = new RelayCommand<string>(ExecuteChangeHighlightColor, CanExecuteChangeHighlightColor);
 
         if (filter is CompositeFilter composite)
         {
             foreach (var child in composite.SubFilters)
             {
-                // Pass the executor down when creating children
                 Children.Add(new FilterViewModel(child, commandExecutor, this));
             }
         }
     }
 
-    [RelayCommand]
-    public void AddChildFilter(IFilter childFilter)
+    private bool CanExecuteChangeHighlightColor(string? newColorKey)
+    {
+        return newColorKey != null && Filter.HighlightColorKey != newColorKey;
+    }
+
+    private void ExecuteChangeHighlightColor(string? newColorKey)
+    {
+        if (newColorKey == null || Filter.HighlightColorKey == newColorKey) return;
+
+        var action = new ChangeFilterHighlightColorKeyAction(this, Filter.HighlightColorKey, newColorKey);
+        _commandExecutor.Execute(action);
+        // RefreshProperties is called by the action, which will update OnPropertyChanged for HighlightColorKey
+        // This will also make the IsOpen binding for the popup (via ToggleButton.IsChecked) false IF we add that logic
+    }
+
+    [RelayCommand] public void AddChildFilter(IFilter childFilter)
     {
         if (Filter is CompositeFilter composite)
         {
-            // Determine insert index (e.g., end)
             int index = Children.Count;
-            // Create and execute the action via the command executor
             var action = new AddFilterAction(this, childFilter, index);
             _commandExecutor.Execute(action);
-             // Selection/Expansion logic might need slight adjustment if ExecuteAction doesn't return the new VM
-             // Find the VM after execution:
              var addedVM = Children.LastOrDefault(vm => vm.Filter == childFilter);
              if (addedVM != null) {
                  IsExpanded = true;
-                 // Need a way to set MainViewModel.SelectedFilterNode perhaps? Or let MainViewModel handle selection.
              }
         }
     }
@@ -96,7 +133,6 @@ public partial class FilterViewModel : ObservableObject, ICommandExecutorProvide
         {
             if (Filter.Enabled != value)
             {
-                // Create and execute the command instead of setting directly
                 var action = new ToggleFilterEnabledAction(this);
                 _commandExecutor.Execute(action);
             }
@@ -139,8 +175,6 @@ public partial class FilterViewModel : ObservableObject, ICommandExecutorProvide
         {
             IsEditing = false;
             IsNotEditing = true;
-
-            // Only execute command if value actually changed
             string currentValue = Filter.Value;
             if (_valueBeforeEdit != null && _valueBeforeEdit != currentValue)
             {
@@ -152,7 +186,7 @@ public partial class FilterViewModel : ObservableObject, ICommandExecutorProvide
              _valueBeforeEdit = null;
         }
     }
-
+    
     // Helper method used by Actions to update bound properties after direct model manipulation.
     // TODO: A little kludgy. Is there a solution where we don't need to expose this method?
     // TODO: Will there be three events? That could be costly?
@@ -163,37 +197,4 @@ public partial class FilterViewModel : ObservableObject, ICommandExecutorProvide
         OnPropertyChanged(nameof(Enabled));
         OnPropertyChanged(nameof(HighlightColorKey));
     }
-
-    #region Highlight Color Key
-
-    // Expose HighlightColorKey for binding
-    public string HighlightColorKey
-    {
-        get => Filter.HighlightColorKey;
-        set
-        {
-            if (Filter.HighlightColorKey != value)
-            {
-                // Create and execute an action for changing the color key
-                // (We'll define ChangeFilterHighlightColorKeyAction later)
-                var action = new ChangeFilterHighlightColorKeyAction(this, Filter.HighlightColorKey, value);
-                _commandExecutor.Execute(action); 
-                // The action's Execute will set Filter.HighlightColorKey and call RefreshProperties
-            }
-        }
-    }
-    // NEW: List of available color choices for the ComboBox
-    // This could also be static or provided by MainViewModel if shared across all FilterViewModels
-    public static List<FilterHighlightColorChoice> AvailableHighlightColors { get; } = new()
-    {
-        new("Default", "FilterHighlight.Default"),
-        new("Red", "FilterHighlight.Red"),
-        new("Green", "FilterHighlight.Green"),
-        new("Blue", "FilterHighlight.Blue"),
-        new("Yellow", "FilterHighlight.Yellow")
-    };
-
-    #endregion Highlight Color Key
 }
-
-public record FilterHighlightColorChoice(string Name, string Key);
