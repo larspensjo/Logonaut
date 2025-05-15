@@ -1,5 +1,7 @@
 # TODO
 
+* Bulk Color Assignment: For composite filters, changing the color should affect all children.
+* Color-Based Quick Filters/Toggles: Above the log view or in the filter panel, show a row of small colored swatches representing all currently used highlight colors in the active filter profile.
 * Refactor AnimatedSpinner into a flexible BusyIndicator (see [BusyIndicatorPlan.md](BusyIndicatorPlan.md)).
 * Use MainViewModel.JumpStatusMessage for error messsages instead of MessageBox.
 * Support multiple log windows, as tabs. Every log window shall have its own selected filter profile.
