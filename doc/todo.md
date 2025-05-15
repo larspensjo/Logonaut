@@ -1,5 +1,7 @@
 # TODO
 
+This document has a list of ideas.
+
 * Theming for Adorners: EmptyDropTargetAdorner creates brushes in code-behind. Consider moving these to theme resource dictionaries for better maintainability, similar to other controls.
 * Ctrl+F3 Search from Current Position: LogOutputEditor_PreviewKeyDown for Ctrl+F3 should search from the current selection/caret position rather than always starting from the beginning.
 * Error Handling for ScrollToSelectedLine: The current ScrollToSelectedLine has try-catch blocks but mainly logs to Debug. More user-visible feedback or robust recovery could be considered if scrolling errors become common.
@@ -30,7 +32,6 @@
 *   Toolbar UserControl: Extract the toolbar above the AvalonEdit control into its own LogDisplayToolBarView.xaml.
 *   Search Panel UserControl: Extract the search panel below AvalonEdit into SearchPanelView.xaml.
 *   Stats Bar UserControl: Extract the status bar at the bottom into StatusBarView.xaml.
-*   About Overlay Content UserControl: Similar to the simulator overlay, the content of the AboutOverlay could become AboutView.xaml.
 * ViewModel Specialization: As MainViewModel grows, consider if parts of its logic could be extracted into more specialized ViewModels that these new UserControls might bind to, rather than everything binding directly to the main MainViewModel. This would be a larger refactoring. For instance, a FilterPanelViewModel could be created and exposed as a property on MainViewModel.
 
 * **SimulatorLogSource UI overlay**
