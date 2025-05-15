@@ -30,7 +30,6 @@
 *   Toolbar UserControl: Extract the toolbar above the AvalonEdit control into its own LogDisplayToolBarView.xaml.
 *   Search Panel UserControl: Extract the search panel below AvalonEdit into SearchPanelView.xaml.
 *   Stats Bar UserControl: Extract the status bar at the bottom into StatusBarView.xaml.
-*   Simulator Overlay Content UserControl: The content of the SimulatorConfigOverlay Border could become SimulatorConfigView.xaml. The overlay Border itself would remain in MainWindow.xaml to control its visibility over the main content.
 *   About Overlay Content UserControl: Similar to the simulator overlay, the content of the AboutOverlay could become AboutView.xaml.
 * ViewModel Specialization: As MainViewModel grows, consider if parts of its logic could be extracted into more specialized ViewModels that these new UserControls might bind to, rather than everything binding directly to the main MainViewModel. This would be a larger refactoring. For instance, a FilterPanelViewModel could be created and exposed as a property on MainViewModel.
 
