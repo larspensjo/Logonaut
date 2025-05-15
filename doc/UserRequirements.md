@@ -2,7 +2,8 @@
 
 This document outlines the functional requirements for the Logonaut application from a user's perspective.
 
-The requirement ID is a unique ID that can be referenced from the source code and other documents. The version number is incremented when a requirement is updated.
+The requirement ID is a unique ID and a version number that can be referenced from the source code and other documents.
+The version number, a suffix with 'V<N>' is incremented when a requirement is updated.
 
 ## 1. Core Log Viewing
 
@@ -58,10 +59,11 @@ The requirement ID is a unique ID that can be referenced from the source code an
     *   [ReqFilterDisplayMatchingLinesv1] The log display must show only the lines matching the rules of the **active** filter profile.
     *   [ReqFilterContextLinesv1] The application must provide a setting (`Context Lines` input with increment/decrement buttons) to include a specified number of **context lines** before and after each matching line.
     *   [ReqFilterHighlightMatchesv1] Text segments that cause a line to match a filter rule (substrings or regex matches) must be visually highlighted in the output (distinct background color).
+    *   [ReqFilterHighlightPerRuleColorV1] User-Configurable Per-Filter Highlighting Color: For individual Substring and Regex filters, the user must be able to select a distinct highlight color from a predefined, theme-aware palette (e.g., Default, Red, Green, Blue, Yellow) using a `ComboBox` next to the filter rule in the tree. The selected color should apply to both the filter match highlighting in the log view and the visual representation of the color choice in the `ComboBox` itself.
     *   [ReqFilterNodeToggleEnablev1] Individual filter rules (nodes) within the active profile's tree must be toggleable (enabled/disabled) via a `CheckBox` next to the rule, without removing them.
-*   [ReqFilterDynamicUpdateViewv1] **Dynamic Filter Updates:** The filtered log view must update automatically and efficiently whenever the active filter profile is changed or the rules/settings within the active profile are modified.
+*   [ReqFilterDynamicUpdateViewV2] Dynamic Filter Updates: The filtered log view must update automatically and efficiently whenever the active filter profile is changed or the rules/settings (including highlight color) within the active profile are modified.
 *   **Persistence:**
-    *   [ReqPersistFilterProfilesv1] All created filter profiles (names and structures) must be saved when the application closes and reloaded on startup.
+    *   [ReqPersistFilterProfilesV3] All created filter profiles (names, structures, and individual filter highlight color settings) must be saved when the application closes and reloaded on startup.
     *   [ReqPersistLastActiveProfilev1] The application must remember and automatically select the last active profile upon restarting.
 
 ## 4. Search Functionality
@@ -99,7 +101,7 @@ The requirement ID is a unique ID that can be referenced from the source code an
 
 *   [ReqSettingsLoadSavev1] **Load/Save Settings:** Application settings must be loaded at startup and saved automatically on change and at shutdown.
 *   **Saved Settings:** Saved settings must include:
-    *   [ReqPersistSettingFilterProfilesv1] All defined filter profiles (names and filter trees).
+    *   [ReqPersistSettingFilterProfilesV2] All defined filter profiles (names, filter trees, and individual filter highlight color settings).
     *   [ReqPersistSettingLastProfilev1] The name/identifier of the last active filter profile.
     *   [ReqPersistSettingContextLinesv1] The context line setting.
     *   [ReqPersistSettingShowLineNumsv1] Display options (show line numbers toggle state).
