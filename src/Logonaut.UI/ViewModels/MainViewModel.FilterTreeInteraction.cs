@@ -5,12 +5,18 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Logonaut.Filters;
 using Logonaut.UI.Commands;
+using Logonaut.Common;
 
 namespace Logonaut.UI.ViewModels;
 
 // Groups interactions specifically related to building and manipulating the filter rule tree for the active profile
 public partial class MainViewModel : ObservableObject, IDisposable, ICommandExecutor
 {
+
+    public ObservableCollection<PaletteItemDescriptor> FilterPaletteItems { get; } = new();
+    public PaletteItemDescriptor? InitializedSubstringPaletteItem { get; private set; }
+
+    [ObservableProperty] private string? _selectedLogTextForFilter; // Will be set from MainWindow.xaml.cs
 
     // The filter node currently selected within the TreeView of the ActiveFilterProfile.
     [NotifyCanExecuteChangedFor(nameof(AddFilterCommand))] // Enable adding if composite selected
@@ -25,6 +31,29 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
     // Collection of filter patterns (substrings/regex) for highlighting.
     // Note: This state is derived by traversing the *active* FilterProfile.
     [ObservableProperty] private ObservableCollection<IFilter> _filterHighlightModels = new();
+
+    partial void OnSelectedLogTextForFilterChanged(string? oldValue, string? newValue)
+    {
+        if (InitializedSubstringPaletteItem is null)
+            throw new InvalidOperationException("InitializedSubstringPaletteItem is not initialized.");
+
+        if (string.IsNullOrEmpty(newValue))
+        {
+            InitializedSubstringPaletteItem.IsEnabled = false;
+            InitializedSubstringPaletteItem.DisplayName = "<Selection>"; // Reset display name
+            InitializedSubstringPaletteItem.InitialValue = null;
+        }
+        else
+        {
+            // Ignore multi-line (Mainwindow.xaml.cs should pre-filter this)
+            InitializedSubstringPaletteItem.InitialValue = newValue;
+            string displayText = newValue;
+            if (displayText.Length > MaxPaletteDisplayTextLength)
+                displayText = displayText.Substring(0, MaxPaletteDisplayTextLength - 3) + "..."; // TODO: Use a more advanced one with '...' in the middle
+            InitializedSubstringPaletteItem.DisplayName = $"Substring: \"{displayText}\"";
+            InitializedSubstringPaletteItem.IsEnabled = true;
+        }
+    }
 
     private void UpdateActiveTreeRootNodes(FilterProfileViewModel? activeProfile)
     {
@@ -336,5 +365,16 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         {
             ClearActiveFilterMatchingStatusRecursive(child);
         }
+    }
+
+    private void PopulateFilterPalette()
+    {
+        InitializedSubstringPaletteItem = new PaletteItemDescriptor("<Selection>", "SubstringType", isDynamic: true); // "SubstringType" is key
+        FilterPaletteItems.Add(InitializedSubstringPaletteItem);
+        FilterPaletteItems.Add(new PaletteItemDescriptor("Substring: \"\"", "SubstringType"));
+        FilterPaletteItems.Add(new PaletteItemDescriptor("Regex", "RegexType"));
+        FilterPaletteItems.Add(new PaletteItemDescriptor("AND Group", "AndType"));
+        FilterPaletteItems.Add(new PaletteItemDescriptor("OR Group", "OrType"));
+        FilterPaletteItems.Add(new PaletteItemDescriptor("NOR Group", "NorType"));
     }
 }

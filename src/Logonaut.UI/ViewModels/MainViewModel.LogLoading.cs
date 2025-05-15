@@ -14,6 +14,7 @@ namespace Logonaut.UI.ViewModels;
 // and indirectly, the simulator when it becomes the active source).
 public partial class MainViewModel : ObservableObject, IDisposable, ICommandExecutor
 {
+    private string? _lastOpenedFolderPath;
     private ILogSource? _fileLogSource; // Keep a reference to the file source instance
 
     // Path of the currently monitored log file.
@@ -202,5 +203,10 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
             _disposables.Remove(_reactiveFilteredLogStream); // Remove from main collection before disposing
             _reactiveFilteredLogStream.Dispose();
         }
+    }
+
+    private void ProcessTotalLinesUpdate(long count)
+    {
+        TotalLogLines = count;
     }
 }

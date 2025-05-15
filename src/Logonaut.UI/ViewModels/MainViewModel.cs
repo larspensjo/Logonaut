@@ -50,7 +50,6 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
     #region Fields
 
     // --- Services & Context ---
-    private string? _lastOpenedFolderPath;
     private readonly IScheduler? _backgroundScheduler; // Make it possible to inject your own background scheduler
     private readonly ILogSourceProvider _sourceProvider;
     public static readonly object LoadingToken = new();
@@ -58,7 +57,6 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
     public static readonly object BurstToken = new();
     private readonly IFileDialogService _fileDialogService;
     private readonly ISettingsService _settingsService;
-    [ObservableProperty] private string? _selectedLogTextForFilter; // Will be set from MainWindow.xaml.cs
 
     private readonly SynchronizationContext _uiContext;
     private IReactiveFilteredLogStream _reactiveFilteredLogStream; // This will be recreated when switching sources
@@ -71,9 +69,6 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
     private IDisposable? _totalLinesSubscription;
     public event EventHandler? RequestScrollToEnd; // Triggered when Auto Scroll is enabled
     public event EventHandler<int>? RequestScrollToLineIndex; // Event passes the 0-based index to scroll to
-
-    public ObservableCollection<PaletteItemDescriptor> FilterPaletteItems { get; } = new();
-    public PaletteItemDescriptor? InitializedSubstringPaletteItem { get; private set; }
 
     #endregion // --- Fields ---
 
@@ -182,40 +177,7 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
 
     #endregion // About command
 
-    private void PopulateFilterPalette()
-    {
-        InitializedSubstringPaletteItem = new PaletteItemDescriptor("<Selection>", "SubstringType", isDynamic: true); // "SubstringType" is key
-        FilterPaletteItems.Add(InitializedSubstringPaletteItem);
-        FilterPaletteItems.Add(new PaletteItemDescriptor("Substring: \"\"", "SubstringType"));
-        FilterPaletteItems.Add(new PaletteItemDescriptor("Regex", "RegexType"));
-        FilterPaletteItems.Add(new PaletteItemDescriptor("AND Group", "AndType"));
-        FilterPaletteItems.Add(new PaletteItemDescriptor("OR Group", "OrType"));
-        FilterPaletteItems.Add(new PaletteItemDescriptor("NOR Group", "NorType"));
-    }
-
     const int MaxPaletteDisplayTextLength = 20; // Or whatever fits your UI
-    partial void OnSelectedLogTextForFilterChanged(string? oldValue, string? newValue)
-    {
-        if (InitializedSubstringPaletteItem is null)
-            throw new InvalidOperationException("InitializedSubstringPaletteItem is not initialized.");
-
-        if (string.IsNullOrEmpty(newValue))
-        {
-            InitializedSubstringPaletteItem.IsEnabled = false;
-            InitializedSubstringPaletteItem.DisplayName = "<Selection>"; // Reset display name
-            InitializedSubstringPaletteItem.InitialValue = null;
-        }
-        else
-        {
-            // Ignore multi-line (Mainwindow.xaml.cs should pre-filter this)
-            InitializedSubstringPaletteItem.InitialValue = newValue;
-            string displayText = newValue;
-            if (displayText.Length > MaxPaletteDisplayTextLength)
-                displayText = displayText.Substring(0, MaxPaletteDisplayTextLength - 3) + "..."; // TODO: Use a more advanced one with '...' in the middle
-            InitializedSubstringPaletteItem.DisplayName = $"Substring: \"{displayText}\"";
-            InitializedSubstringPaletteItem.IsEnabled = true;
-        }
-    }
 
     private void CurrentBusyStates_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
@@ -322,11 +284,6 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
     #endregion // Jump To Line Command
 
     #region UI State Management
-
-    private void ProcessTotalLinesUpdate(long count)
-    {
-        TotalLogLines = count;
-    }
 
     public ThemeViewModel Theme { get; }
 
