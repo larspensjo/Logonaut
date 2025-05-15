@@ -15,6 +15,7 @@ using Logonaut.UI.Helpers;
 using Logonaut.UI.ViewModels;
 using Logonaut.Filters;
 using System.Diagnostics;
+using Logonaut.Common; // Required for FilteredLogLine
 
 namespace Logonaut.UI;
 
@@ -260,32 +261,50 @@ public partial class MainWindow : Window, IDisposable
     private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (_chunkSeparator != null && (e.PropertyName == nameof(MainViewModel.FilteredLogLines) || e.PropertyName == nameof(MainViewModel.ContextLines)))
+        {
             _chunkSeparator.UpdateChunks(_viewModel.FilteredLogLines, _viewModel.ContextLines);
+            // When FilteredLogLines changes, we also need to update the transformer's source
+            if (_selectedIndexTransformer != null && _logOutputEditor.TextArea?.TextView != null)
+            {
+                _selectedIndexTransformer.FilteredLinesSource = _viewModel.FilteredLogLines;
+                // Force a redraw if the highlight might need to be reapplied due to content change
+                _logOutputEditor.TextArea.TextView.Redraw();
+            }
+        }
+
 
         if (_selectedIndexTransformer != null && _logOutputEditor.TextArea?.TextView != null)
         {
-            if (e.PropertyName == nameof(MainViewModel.HighlightedFilteredLineIndex))
+            // Handle HighlightedOriginalLineNumber change from ViewModel
+            if (e.PropertyName == nameof(MainViewModel.HighlightedOriginalLineNumber))
             {
-                int newLineNumberInFilteredDoc = _viewModel.HighlightedFilteredLineIndex >= 0
-                                    ? _viewModel.HighlightedFilteredLineIndex + 1 // Convert 0-based index to 1-based line number
-                                    : -1; // Disable if index is -1
-
-                // Get the brush from the TextView's Tag property (where we stored the resource)
                 var highlightBrush = _logOutputEditor.TextArea.TextView.Tag as Brush;
-
-                // Update the transformer state (this method handles redraw)
-                _selectedIndexTransformer.UpdateState(newLineNumberInFilteredDoc, highlightBrush, _logOutputEditor.TextArea.TextView);
-
-                // Disable AutoScroll whenever a line is selected (by either method)
+                // Pass the current FilteredLogLines to the transformer.
+                // It's important this is the same collection instance the editor is displaying.
+                _selectedIndexTransformer.UpdateState(
+                    _viewModel.HighlightedOriginalLineNumber,
+                    highlightBrush,
+                    _viewModel.FilteredLogLines, // Pass the current FilteredLogLines
+                    _logOutputEditor.TextArea.TextView
+                );
+            }
+            // The HighlightedFilteredLineIndex property change handling remains for auto-scroll logic,
+            // but the actual highlighting is now driven by HighlightedOriginalLineNumber.
+            else if (e.PropertyName == nameof(MainViewModel.HighlightedFilteredLineIndex))
+            {
                 if (_viewModel.HighlightedFilteredLineIndex >= 0 && _viewModel.IsAutoScrollEnabled)
                 {
-                    _viewModel.IsAutoScrollEnabled = false;
+                    bool highlightedLineIsLastLine = (_viewModel.FilteredLogLines.Count > 0 &&
+                                                      _viewModel.HighlightedFilteredLineIndex == _viewModel.FilteredLogLines.Count - 1);
+                    if (!highlightedLineIsLastLine)
+                    {
+                        _viewModel.IsAutoScrollEnabled = false;
+                    }
                 }
             }
         }
 
         // Clear Status Message on Successful Jump ---
-        // Optional: Could also be done via a timer in the ViewModel
         if (e.PropertyName == nameof(MainViewModel.HighlightedOriginalLineNumber) &&
             !string.IsNullOrEmpty(_viewModel.JumpStatusMessage) &&
             _viewModel.HighlightedOriginalLineNumber.ToString() == _viewModel.TargetOriginalLineNumberInput)
@@ -380,6 +399,7 @@ public partial class MainWindow : Window, IDisposable
         // Get the initial brush from the resource dictionary via the Tag proxy
         textView.SetResourceReference(TextView.TagProperty, "PersistedHighlightBrush");
         _selectedIndexTransformer.HighlightBrush = textView.Tag as Brush;
+        _selectedIndexTransformer.FilteredLinesSource = _viewModel.FilteredLogLines; // Initial set
         // Add transformer to the text view
         textView.LineTransformers.Add(_selectedIndexTransformer);
 
@@ -445,8 +465,13 @@ public partial class MainWindow : Window, IDisposable
         }
 
         TextView? textView = _logOutputEditor?.TextArea?.TextView;
-        if (textView is null)
-            throw new InvalidOperationException("TextView not found within LogOutputEditor.");
+        if (textView == null && _logOutputEditor != null) // Check _logOutputEditor as well because TextArea might be null if unloaded very early
+        {
+             // If textView is null during unload, it's possible the control is already significantly torn down.
+             // Log a warning, but try to proceed with other cleanup.
+             Debug.WriteLine("WARN: TextView was null during LogOutputEditor_Unloaded. Some cleanup might be skipped.");
+        }
+
 
         if (_selectedIndexTransformer != null && textView != null)
         {
@@ -460,7 +485,7 @@ public partial class MainWindow : Window, IDisposable
         _selectedIndexTransformer = null;
 
         // Clean up Chunk Separator
-        if (_chunkSeparator != null && textView is not null)
+        if (_chunkSeparator != null && textView != null)
         {
             // Clear bindings
             BindingOperations.ClearBinding(_chunkSeparator, ChunkSeparatorRenderer.SeparatorBrushProperty);
@@ -482,40 +507,28 @@ public partial class MainWindow : Window, IDisposable
         {
             int currentCaretLine = caret.Line; // 1-based line number
 
-            // Check if the line actually changed
-            if (currentCaretLine != _lastKnownCaretLine)
+            if (currentCaretLine != _lastKnownCaretLine) // Process only if line actually changed
             {
-                // Update the last known line
                 _lastKnownCaretLine = currentCaretLine;
-
-                // Calculate the 0-based index for the ViewModel
                 int filteredLineIndex = currentCaretLine - 1;
 
-                // Update the ViewModel's highlighted line index
-                // Ensure the index is valid before setting
+                // Update the ViewModel's highlighted line index if it's a valid line
+                // This will trigger ViewModel_PropertyChanged if the value actually changes.
                 if (filteredLineIndex >= 0 && filteredLineIndex < viewModel.FilteredLogLines.Count)
                 {
-                    viewModel.HighlightedFilteredLineIndex = filteredLineIndex;
-
-                    // IMPORTANT: Disable AutoScroll whenever the user manually changes the line
-                    if (viewModel.IsAutoScrollEnabled)
-                    {
-                        viewModel.IsAutoScrollEnabled = false;
-                        // Debug.WriteLine("AutoScroll disabled due to Caret Line Change.");
-                    }
+                    // Set HighlightedOriginalLineNumber instead of HighlightedFilteredLineIndex
+                    // to make the selection "stick" to the original content.
+                    viewModel.HighlightedOriginalLineNumber = viewModel.FilteredLogLines[filteredLineIndex].OriginalLineNumber;
                 }
                 else
                 {
-                    // If the line number is somehow invalid (e.g., caret moved beyond document end temporarily?)
-                    // you might choose to clear the highlight or ignore. Let's clear it for safety.
-                    if (viewModel.HighlightedFilteredLineIndex != -1)
-                    {
-                        viewModel.HighlightedFilteredLineIndex = -1;
-                    }
+                    if (viewModel.HighlightedOriginalLineNumber != -1)
+                        viewModel.HighlightedOriginalLineNumber = -1;
                 }
             }
         }
     }
+
 
     private void TextArea_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
@@ -660,33 +673,37 @@ public partial class MainWindow : Window, IDisposable
             if (!textView.IsLoaded || !textView.VisualLinesValid)
                 throw new InvalidOperationException("TextView is not loaded or visual lines are not valid.");
 
-            // 1. Get the click position relative to the TextView control
             Point pointRelativeToTextView = e.GetPosition(textView);
-
-            // 2. Calculate the click position relative to the start of the document (add scroll offsets)
             Point pointInDocument = new Point(
                 pointRelativeToTextView.X + textView.ScrollOffset.X,
                 pointRelativeToTextView.Y + textView.ScrollOffset.Y
             );
+            TextViewPosition? positionInfo = textView.GetPosition(pointInDocument); 
 
-            // 3. Use the document-relative point to get the position
-            TextViewPosition? positionInfo = textView.GetPosition(pointInDocument); // Pass the corrected point
-
-            int clickedFilteredLineIndex = -1; // Default to -1 if no line is clicked
+            int clickedOriginalLineNumber = -1; // Default to -1 if no line is clicked
             if (positionInfo.HasValue)
             {
-                // 4. Get the VisualLine object associated with the position
-                //    We can use the Line number from the positionInfo to get the DocumentLine,
-                //    and then the VisualLine. Or, less reliably, try GetVisualLineFromVisualTop again.
                 VisualLine? clickedVisualLine = textView.GetVisualLine(positionInfo.Value.Line);
-
                 if (clickedVisualLine != null)
                 {
-                    int clickedDocumentLineNumber = clickedVisualLine.FirstDocumentLine.LineNumber;
-                    clickedFilteredLineIndex = clickedDocumentLineNumber - 1;
+                    int clickedDocumentLineNumber = clickedVisualLine.FirstDocumentLine.LineNumber; // 1-based in current view
+                    int clickedFilteredLineIndex = clickedDocumentLineNumber - 1;
+                    
+                    if (clickedFilteredLineIndex >= 0 && clickedFilteredLineIndex < viewModel.FilteredLogLines.Count)
+                    {
+                        clickedOriginalLineNumber = viewModel.FilteredLogLines[clickedFilteredLineIndex].OriginalLineNumber;
+                    }
                 }
             }
-            viewModel.HighlightedFilteredLineIndex = clickedFilteredLineIndex;
+            
+            // Update the highlighted original line number in the ViewModel
+            viewModel.HighlightedOriginalLineNumber = clickedOriginalLineNumber;
+            
+            // Explicitly disable auto-scroll upon any left mouse click that results in a selection
+            if (clickedOriginalLineNumber >= 0 && viewModel.IsAutoScrollEnabled)
+            {
+                viewModel.IsAutoScrollEnabled = false;
+            }
         }
     }
 
