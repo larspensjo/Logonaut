@@ -7,6 +7,7 @@
         xmlns:converters="clr-namespace:Logonaut.UI.Converters"
         xmlns:local="clr-namespace:Logonaut.UI"
         xmlns:controls="clr-namespace:Logonaut.UI.Controls"
+        xmlns:views="clr-namespace:Logonaut.UI.Views"
         xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
         xmlns:System="clr-namespace:System;assembly=mscorlib"
         Title="Logonaut" Height="600" Width="900"
@@ -186,141 +187,7 @@
                     <ColumnDefinition Width="3*" MinWidth="300"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- Filter Panel Area (Column 0 of THIS grid) -->
-                <Grid Grid.Column="0">
-                    <!-- Border for Card Style -->
-                    <Border Style="{DynamicResource CardPanelStyle}">
-                        <!-- DockPanel for Filter Panel Contents -->
-                        <DockPanel>
-                            <!-- ... (All existing filter panel content: TextBlock, Profile ComboBox/TextBox, Buttons, TreeView etc.) ... -->
-                            <TextBlock DockPanel.Dock="Top" Text="Filters" FontWeight="Bold" Margin="0,0,0,5"/>
-                            <!-- Profile Management Area -->
-                            <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
-                                <TextBlock Text="Active Profile:" Margin="0,0,0,2" FontSize="10" Foreground="{DynamicResource SecondaryTextBrush}"/>
-                                <Grid Margin="0,0,0,5" MinWidth="180">
-                                    <!-- TextBox for inline rename. Set DataContext here so code-behind sees the profile VM directly -->
-                                    <TextBox x:Name="ProfileNameTextBox"
-                                            DataContext="{Binding ActiveFilterProfile}"
-                                            Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}"
-                                            Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                            helpers:TextBoxHelper.FocusOnVisible="True"
-                                            VerticalAlignment="Center"
-                                            MinWidth="150">
-                                        <TextBox.InputBindings>
-                                            <KeyBinding Key="Enter" Command="{Binding EndRenameCommand}"/> <!-- Commit on Enter -->
-                                            <KeyBinding Key="Escape" Command="{Binding CancelRenameCommand}"/> <!-- Cancel on Escape -->
-                                        </TextBox.InputBindings>
-                                        <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="LostFocus">
-                                            <!-- Check if still editing before committing -->
-                                            <i:InvokeCommandAction Command="{Binding EndRenameCommand}" />
-                                        </i:EventTrigger>
-                                        </i:Interaction.Triggers>
-                                    </TextBox>
-
-                                <!-- ComboBox for selection (shows arrow) -->
-                                <ComboBox ItemsSource="{Binding AvailableProfiles}"
-                                        SelectedItem="{Binding ActiveFilterProfile}"
-                                        DisplayMemberPath="Name"
-                                        IsEditable="False"
-                                        Visibility="{Binding ActiveFilterProfile.IsNotEditing, Converter={StaticResource BoolToVis}, FallbackValue=Visible}"
-                                        VerticalAlignment="Center"
-                                        Margin="0,0,0,5">
-                                    <ComboBox.ToolTip>
-                                        <ToolTip>Select the active filter profile.</ToolTip>
-                                    </ComboBox.ToolTip>
-                                    </ComboBox>
-                                </Grid>
-
-                                <WrapPanel HorizontalAlignment="Center">
-                                <Button Content="New"
-                                        Command="{Binding CreateNewProfileCommand}"
-                                        Margin="2"
-                                        ToolTip="Create a new filter profile"/>
-                                <Button Content="Rename"
-                                        Command="{Binding ActiveFilterProfile.BeginRenameCommand}"
-                                        IsEnabled="{Binding ActiveFilterProfile.IsNotEditing}"
-                                        Margin="2"
-                                        ToolTip="Rename the selected profile"/>
-                                <Button Content="Delete"
-                                        Command="{Binding DeleteProfileCommand}"
-                                        Margin="2"
-                                        ToolTip="Delete the selected profile"/>
-                                </WrapPanel>
-                            </StackPanel>
-
-                            <GroupBox DockPanel.Dock="Bottom" Header="Filter Palette" Margin="0,10,0,10" Style="{DynamicResource PaletteGroupBoxStyle}">
-                            <ItemsControl ItemsSource="{Binding FilterPaletteItems}"
-                                          ItemTemplate="{DynamicResource FilterPaletteItemTemplate}"
-                                          ItemContainerStyle="{DynamicResource FilterPaletteItemStyle}" 
-                                          PreviewMouseLeftButtonDown="PaletteItemsControl_PreviewMouseLeftButtonDown">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <WrapPanel Orientation="Horizontal" HorizontalAlignment="Center"/>
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                </ItemsControl>
-                            </GroupBox>
-                            <!-- Edit/Remove Buttons -->
-                            <StackPanel DockPanel.Dock="Bottom" Margin="0,5,0,0">
-                                <Button Content="Edit Node" Command="{Binding ToggleEditNodeCommand}" Margin="0,5,0,0" ToolTip="Edit the selected filter node's value"/>
-                                <Button Content="Remove Node" Command="{Binding RemoveFilterNodeCommand}" Margin="0,5,0,0" ToolTip="Remove the selected filter node and its children"/>
-                            </StackPanel>
-
-                            <TreeView x:Name="FilterTreeView"
-                                    ItemsSource="{Binding ActiveTreeRootNodes}"
-                                    SelectedItemChanged="TreeView_SelectedItemChanged"
-                                    Margin="0,0,0,0"
-                                    Background="Transparent"
-                                    AllowDrop="True"
-                                    DragEnter="FilterTreeView_DragEnter"
-                                    DragOver="FilterTreeView_DragOver"
-                                    DragLeave="FilterTreeView_DragLeave"
-                                    Drop="FilterTreeView_Drop">
-                                <TreeView.ItemContainerStyle>
-                                    <Style TargetType="{x:Type TreeViewItem}" BasedOn="{StaticResource {x:Type TreeViewItem}}"/>
-                                </TreeView.ItemContainerStyle>
-                            </TreeView>
-                        </DockPanel>
-                    </Border>
-                    <!-- Simulator Overlay (Inside Column 0 Grid) -->
-                    <Border x:Name="SimulatorConfigOverlay"
-                            Panel.ZIndex="10"
-                            Background="{DynamicResource Overlay.BackgroundBrush}"
-                            BorderBrush="{DynamicResource AccentBrush}"
-                            BorderThickness="1"
-                            CornerRadius="5"
-                            Padding="10" Margin="5"
-                            Visibility="{Binding IsSimulatorConfigurationVisible, Converter={StaticResource BoolToVis}}">
-                        <Grid>
-                            <!-- Close Button - Placed first so it's visually behind stackpanel if needed,
-                                but aligned top-right makes it effectively on top corner. -->
-                            <Button Style="{StaticResource OverlayCloseButtonStyle}"
-                                    Command="{Binding HideSimulatorConfigCommand}"
-                                    VerticalAlignment="Top" HorizontalAlignment="Right"
-                                    Margin="0,-2,-2,0" Panel.ZIndex="1"/> <!-- Adjust margin slightly to tuck into corner, ZIndex ensures it's clickable -->
-                            <StackPanel Margin="0,15,0,0">
-                                <TextBlock Text="Log Simulator Controls" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Overlay.ForegroundBrush}" HorizontalAlignment="Center" Margin="0,0,0,15"/>
-                                <TextBlock Text="Lines Per Second:" Foreground="{DynamicResource Overlay.ForegroundBrush}" Margin="0,0,0,2"/>
-                                <Slider Name="LpsSlider" Minimum="0" Maximum="100" SmallChange="1" LargeChange="5" IsSnapToTickEnabled="True" TickFrequency="1" ToolTip="Adjust how fast the log is written, as measured in lines per second." Value="{Binding SimulatorLPS, Mode=TwoWay, Converter={StaticResource LpsConverter}}" Margin="0,0,0,2"/>
-                                <TextBlock Text="{Binding SimulatorLPS, StringFormat='{}{0:F0} LPS'}" Foreground="{DynamicResource Overlay.ForegroundBrush}" HorizontalAlignment="Center" Margin="0,0,0,10"/>
-                                <TextBlock Text="Error Frequency (1 in N lines):" Foreground="{DynamicResource Overlay.ForegroundBrush}" Margin="0,10,0,2"/>
-                                <Slider Minimum="0" Maximum="100" SmallChange="1" LargeChange="10" IsSnapToTickEnabled="False" ToolTip="Adjust how often ERROR messages are generated (1 = every line, 100000 = very rare)." Value="{Binding SimulatorErrorFrequency, Mode=TwoWay, Converter={StaticResource ErrorFrequencyConverter}}" Margin="0,0,0,2"/>
-                                <TextBlock Text="{Binding SimulatorErrorFrequency, StringFormat='1 in {0:N0}'}" Foreground="{DynamicResource Overlay.ForegroundBrush}" HorizontalAlignment="Center" Margin="0,0,0,10"/>
-                                <Separator Margin="0,15"/>
-                                <TextBlock Text="Generate Burst:" Foreground="{DynamicResource Overlay.ForegroundBrush}" Margin="0,10,0,2"/>
-                                <Slider Name="BurstSlider" Minimum="0" Maximum="100" SmallChange="1" LargeChange="10" IsSnapToTickEnabled="False" ToolTip="Adjust how many lines to generate in a burst. Big values can slow down the UI." Value="{Binding SimulatorBurstSize, Mode=TwoWay, Converter={StaticResource BurstSizeConverter}}" Margin="0,0,0,2"/>
-                                <TextBlock Text="{Binding SimulatorBurstSize, StringFormat='{}{0:N0} Lines'}" Foreground="{DynamicResource Overlay.ForegroundBrush}" HorizontalAlignment="Center" Margin="0,0,0,10"/>
-                                <Button Content="Burst" Width="70" Margin="5" HorizontalAlignment="Center" Command="{Binding GenerateBurstCommand}"/>
-                                <WrapPanel HorizontalAlignment="Center" Margin="0,10,0,10">
-                                    <ToggleButton Width="70" Margin="5" Command="{Binding ToggleSimulatorCommand}" IsChecked="{Binding IsSimulatorRunning, Mode=OneWay}" Style="{DynamicResource SimulatorToggleButtonStyle}"/>
-                                    <Button Content="Restart" Width="70" Margin="5" Command="{Binding RestartSimulatorCommand}"/>
-                                </WrapPanel>
-                                <Button Content="Clear Displayed Log" HorizontalAlignment="Center" Margin="0,15,0,0" Command="{Binding ClearLogCommand}"/>
-                            </StackPanel>
-                        </Grid>
-                    </Border>
-                </Grid>
+                <views:FilterPanelView Grid.Column="0"/>
 
                 <!-- Splitter (Column 1 of MainContentColumnsGrid) -->
                 <GridSplitter Grid.Column="1"

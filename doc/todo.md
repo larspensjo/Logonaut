@@ -24,7 +24,15 @@
 * The Anchor button is now automatically when new lines are added to the log window.
 * If I select a line and then disable the filter, I want the log window to keep the selected line visible.
 * When dragging the separator between the filter view and the log view, I want the windows to update as I drag.
+* Implement drag and drop of filters to other composite nodes.
 * Switching themes did not update the highlights used by filters.
+* Splitting xaml into smaller controls:
+*   Toolbar UserControl: Extract the toolbar above the AvalonEdit control into its own LogDisplayToolBarView.xaml.
+*   Search Panel UserControl: Extract the search panel below AvalonEdit into SearchPanelView.xaml.
+*   Stats Bar UserControl: Extract the status bar at the bottom into StatusBarView.xaml.
+*   Simulator Overlay Content UserControl: The content of the SimulatorConfigOverlay Border could become SimulatorConfigView.xaml. The overlay Border itself would remain in MainWindow.xaml to control its visibility over the main content.
+*   About Overlay Content UserControl: Similar to the simulator overlay, the content of the AboutOverlay could become AboutView.xaml.
+* ViewModel Specialization: As MainViewModel grows, consider if parts of its logic could be extracted into more specialized ViewModels that these new UserControls might bind to, rather than everything binding directly to the main MainViewModel. This would be a larger refactoring. For instance, a FilterPanelViewModel could be created and exposed as a property on MainViewModel.
 
 * **SimulatorLogSource UI overlay**
 *   6. Sliders or percentage inputs for INFO, WARN, ERROR, DEBUG, TRACE (could enforce sum=100%).
