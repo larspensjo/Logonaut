@@ -9,6 +9,7 @@
     <converters:FilterTypeToIconConverter x:Key="FilterTypeToIconConverter" />
     <converters:ExponentialValueConverter x:Key="ExponentialConverter"/>
     <converters:IsFilterTypeConverter x:Key="IsFilterTypeConverter"/>
+    <converters:HighlightKeyToBrushConverter x:Key="HighlightKeyToBrushConverter" />
 
     <!-- Assuming the default desired range was 1-200 LPS for the Lines Per Second slider -->
     <converters:ExponentialValueConverter x:Key="LpsConverter"

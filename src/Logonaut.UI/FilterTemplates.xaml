@@ -1,13 +1,12 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:filters="clr-namespace:Logonaut.Filters;assembly=Logonaut.Filters"
                     xmlns:vm="clr-namespace:Logonaut.UI.ViewModels"
                     xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
                     xmlns:helpers="clr-namespace:Logonaut.UI.Helpers"
-                    xmlns:converters="clr-namespace:Logonaut.UI.Converters"
-                    xmlns:local="clr-namespace:Logonaut.UI">
+                    xmlns:converters="clr-namespace:Logonaut.UI.Converters">
 
-    <!-- Style for the ComboBoxItem in the filter color selector -->
+
+    <!-- Style for the ComboBoxItem in the filter color selector's popup -->
     <Style x:Key="FilterColorComboBoxItemStyle" TargetType="ComboBoxItem">
         <Setter Property="Padding" Value="4,3"/>
         <Setter Property="SnapsToDevicePixels" Value="True"/>
@@ -26,7 +25,6 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsHighlighted" Value="true">
-                            <!-- Standard hover effect from theme -->
                             <Setter Property="Background" TargetName="Bd" Value="{DynamicResource ComboBoxItemHoverBackgroundBrush}"/>
                             <Setter Property="Foreground" Value="{DynamicResource ComboBoxItemHoverForegroundBrush}"/>
                             <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
@@ -35,7 +33,6 @@
                         <Trigger Property="IsEnabled" Value="false">
                             <Setter Property="Opacity" Value="0.5"/>
                         </Trigger>
-
                         <!-- DataTriggers to set background/foreground based on the item's DataContext (FilterHighlightColorChoice.Key) -->
                         <DataTrigger Binding="{Binding Key}" Value="FilterHighlight.Default">
                             <Setter Property="Background" TargetName="Bd" Value="{DynamicResource FilterHighlight.Default.Background}"/>
@@ -63,137 +60,32 @@
         </Setter>
     </Style>
 
-    <!-- Style for the ComboBox itself to color the selection box -->
-    <Style x:Key="FilterColorComboBoxStyle" TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+    <!-- Style for the ComboBox used INSIDE the Popup -->
+    <Style x:Key="PopupColorComboBoxStyle" TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
         <Setter Property="ItemContainerStyle" Value="{StaticResource FilterColorComboBoxItemStyle}"/>
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="ComboBox">
-                    <Grid x:Name="MainGrid" SnapsToDevicePixels="true">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition MinWidth="{DynamicResource {x:Static SystemParameters.VerticalScrollBarWidthKey}}" Width="0"/>
-                        </Grid.ColumnDefinitions>
-                        <Popup x:Name="PART_Popup"
-                               AllowsTransparency="true"
-                               Grid.ColumnSpan="2"
-                               IsOpen="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
-                               Margin="1"
-                               PopupAnimation="{DynamicResource {x:Static SystemParameters.ComboBoxPopupAnimationKey}}"
-                               Placement="Bottom">
-                            <Border x:Name="DropDownBorder"
-                                    Background="{DynamicResource ComboBoxDropdownBackgroundBrush}"
-                                    BorderBrush="{DynamicResource ComboBoxDropdownBorderBrush}"
-                                    BorderThickness="1" CornerRadius="3">
-                                <ScrollViewer x:Name="DropDownScrollViewer">
-                                    <ItemsPresenter x:Name="ItemsPresenter"
-                                                    KeyboardNavigation.DirectionalNavigation="Contained"
-                                                    SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
-                                </ScrollViewer>
-                            </Border>
-                        </Popup>
-                        
-                        <!-- This ToggleButton acts as the main visible part of the ComboBox when closed -->
-                        <ToggleButton x:Name="toggleButton"
-                                      BorderBrush="{TemplateBinding BorderBrush}"
-                                      BorderThickness="{TemplateBinding BorderThickness}"
-                                      Background="{TemplateBinding Background}" 
-                                      Grid.ColumnSpan="2"
-                                      IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
-                                      Style="{DynamicResource ComboBoxToggleButtonKey}"/> 
-                                      <!-- ComboBoxToggleButtonKey is defined in the theme files -->
-                        
-                        <ContentPresenter x:Name="contentPresenter"
-                                          ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
-                                          ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
-                                          Content="{TemplateBinding SelectionBoxItem}"
-                                          ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}"
-                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                          IsHitTestVisible="false"
-                                          Margin="{TemplateBinding Padding}"
-                                          SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"
-                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}">
-                            <ContentPresenter.Resources>
-                                <Style TargetType="TextBlock">
-                                    <!-- This TextBlock will display the selected item's text. -->
-                                    <!-- Its Foreground will be styled by triggers on the parent ComboBox. -->
-                                    <Setter Property="Foreground" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ComboBox}}"/>
-                                </Style>
-                            </ContentPresenter.Resources>
-                        </ContentPresenter>
-                    </Grid>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="HasItems" Value="false">
-                            <Setter Property="Height" TargetName="DropDownBorder" Value="95"/>
-                        </Trigger>
-                        <Trigger Property="IsEnabled" Value="false">
-                            <Setter Property="Opacity" Value="0.5"/>
-                        </Trigger>
-                        <Trigger Property="IsFocused" Value="True">
-                            <Setter Property="BorderBrush" TargetName="toggleButton" Value="{DynamicResource AccentBrush}"/>
-                            <Setter Property="Effect" TargetName="toggleButton" Value="{DynamicResource FocusGlowEffect}"/>
-                        </Trigger>
-
-                        <!-- DataTriggers to change ComboBox (selection box) Background and Foreground -->
-                        <!-- Binding to DataContext.HighlightColorKey (which is FilterViewModel.HighlightColorKey) -->
-                        <DataTrigger Binding="{Binding HighlightColorKey}" Value="FilterHighlight.Default">
-                            <Setter Property="Background" TargetName="toggleButton" Value="{DynamicResource FilterHighlight.Default.Background}"/>
-                            <Setter Property="Foreground" Value="{DynamicResource FilterHighlight.Default.Foreground}"/>
-                        </DataTrigger>
-                        <DataTrigger Binding="{Binding HighlightColorKey}" Value="FilterHighlight.Red">
-                            <Setter Property="Background" TargetName="toggleButton" Value="{DynamicResource FilterHighlight.Red.Background}"/>
-                            <Setter Property="Foreground" Value="{DynamicResource FilterHighlight.Red.Foreground}"/>
-                        </DataTrigger>
-                        <DataTrigger Binding="{Binding HighlightColorKey}" Value="FilterHighlight.Green">
-                            <Setter Property="Background" TargetName="toggleButton" Value="{DynamicResource FilterHighlight.Green.Background}"/>
-                            <Setter Property="Foreground" Value="{DynamicResource FilterHighlight.Green.Foreground}"/>
-                        </DataTrigger>
-                        <DataTrigger Binding="{Binding HighlightColorKey}" Value="FilterHighlight.Blue">
-                            <Setter Property="Background" TargetName="toggleButton" Value="{DynamicResource FilterHighlight.Blue.Background}"/>
-                            <Setter Property="Foreground" Value="{DynamicResource FilterHighlight.Blue.Foreground}"/>
-                        </DataTrigger>
-                        <DataTrigger Binding="{Binding HighlightColorKey}" Value="FilterHighlight.Yellow">
-                            <Setter Property="Background" TargetName="toggleButton" Value="{DynamicResource FilterHighlight.Yellow.Background}"/>
-                            <Setter Property="Foreground" Value="{DynamicResource FilterHighlight.Yellow.Foreground}"/>
-                        </DataTrigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
-
-        <!-- THE VISIBILITY TRIGGER -->
-        <Style.Triggers>
-            <DataTrigger Value="False">
-                <DataTrigger.Binding>
-                    <MultiBinding Converter="{StaticResource IsFilterTypeConverter}"
-                                    ConverterParameter="SubstringType|RegexType">
-                        <!-- IMPORTANT: The binding for the trigger needs to find FilterType on the ComboBox's DataContext (FilterViewModel) -->
-                        <Binding Path="FilterType"/>
-                    </MultiBinding>
-                </DataTrigger.Binding>
-                <Setter Property="Visibility" Value="Collapsed"/>
-            </DataTrigger>
-        </Style.Triggers>
+        <!-- You might want to set a MinWidth or specific Width here if the default is too small -->
+        <Setter Property="MinWidth" Value="100"/>
     </Style>
 
-
-    <!-- DataTemplate for FilterViewModel in TreeView -->
+    <!-- Main HierarchicalDataTemplate for FilterViewModel -->
     <!-- Explicitly bind to the child collection. This important, or the children will not be displayed -->
     <HierarchicalDataTemplate DataType="{x:Type vm:FilterViewModel}"
                               ItemsSource="{Binding Children}">
-        <!-- NEON: Item Border - Subtle background difference based on type -->
         <Border x:Name="ItemBorder" Background="Transparent" Padding="0" CornerRadius="3">
-            <StackPanel Orientation="Horizontal">
-                <!-- CheckBox for Enabled state -->
-                <CheckBox IsChecked="{Binding Enabled}" VerticalAlignment="Center" Margin="0,0,5,0"/>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/> <!-- CheckBox -->
+                    <ColumnDefinition Width="Auto"/> <!-- Icon -->
+                    <ColumnDefinition Width="*"/>    <!-- Filter Text (takes available space) -->
+                    <ColumnDefinition Width="Auto"/> <!-- Color Indicator Button & Popup -->
+                </Grid.ColumnDefinitions>
 
-                <!-- NEON: Icon based on FilterType -->
-                <ContentControl Content="{Binding FilterType, Converter={StaticResource FilterTypeToIconConverter}}"
+                <CheckBox Grid.Column="0" IsChecked="{Binding Enabled}" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                
+                <ContentControl Grid.Column="1" Content="{Binding FilterType, Converter={StaticResource FilterTypeToIconConverter}}"
                                 VerticalAlignment="Center" Margin="0,0,4,0" Focusable="False"/>
-
-                <!-- Grid for Display/Edit text -->
-                <Grid VerticalAlignment="Center">
-<!-- Display TextBlock -->
+                
+                <Grid Grid.Column="2" VerticalAlignment="Center">
                     <TextBlock Text="{Binding DisplayText}"
                                Visibility="{Binding IsNotEditing, Converter={StaticResource BoolToVis}}"
                                VerticalAlignment="Center">
@@ -203,8 +95,6 @@
                             </i:EventTrigger>
                         </i:Interaction.Triggers>
                     </TextBlock>
-
-                    <!-- Edit TextBox -->
                     <TextBox Text="{Binding FilterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}"
                              helpers:TextBoxHelper.FocusOnVisible="True"
@@ -222,17 +112,94 @@
                     </TextBox>
                 </Grid>
 
-                <!-- ComboBox for Highlight Color Selection -->
-                <ComboBox ItemsSource="{Binding Source={x:Static vm:FilterViewModel.AvailableHighlightColors}}"
-                          SelectedValue="{Binding HighlightColorKey, Mode=TwoWay}"
-                          SelectedValuePath="Key"
-                          DisplayMemberPath="Name"
-                          Margin="5,0,0,0" Width="80" VerticalAlignment="Center"
-                          Visibility="{Binding IsEditable, Converter={StaticResource BoolToVis}}"
-                          ToolTip="Select highlight color for this filter"
-                          Style="{StaticResource FilterColorComboBoxStyle}">
-                </ComboBox>
-            </StackPanel>
+                <!-- Color Indicator ToggleButton and Popup -->
+                <Grid Grid.Column="3" Margin="5,0,0,0" VerticalAlignment="Center"
+                      Visibility="{Binding IsEditable, Converter={StaticResource BoolToVis}}">
+                    <Grid.Style>
+                        <Style TargetType="Grid">
+                            <Style.Triggers>
+                                <DataTrigger Value="False">
+                                    <DataTrigger.Binding>
+                                        <MultiBinding Converter="{StaticResource IsFilterTypeConverter}" 
+                                                      ConverterParameter="SubstringType|RegexType">
+                                            <Binding Path="FilterType"/>
+                                        </MultiBinding>
+                                    </DataTrigger.Binding>
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Grid.Style>
+                    
+                    <ToggleButton x:Name="ColorIndicatorToggleButton" Width="22" Height="22" Padding="1"
+                                  ToolTip="Change highlight color"
+                                  BorderThickness="1"
+                                  BorderBrush="{DynamicResource BorderBrush}">
+                        <ToggleButton.Style>
+                            <Style TargetType="ToggleButton">
+                                <!-- The Background of the ToggleButton itself will be the color indicator -->
+                                <Setter Property="Background" Value="{Binding HighlightColorKey, Converter={StaticResource HighlightKeyToBrushConverter}}"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ToggleButton">
+                                            <Border Background="{TemplateBinding Background}"
+                                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                                    CornerRadius="2">
+                                                <!-- Optional: A small visual cue like a downward triangle -->
+                                                <Path Data="M0,0 L3,3 L6,0 Z" 
+                                                      Stretch="Uniform" Width="6" Height="4"
+                                                      VerticalAlignment="Center" HorizontalAlignment="Center"
+                                                      Fill="{Binding HighlightColorKey, Converter={StaticResource HighlightKeyToBrushConverter}, ConverterParameter=Foreground}"/>
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                    </Trigger>
+                                    <Trigger Property="IsChecked" Value="True"> <!-- When popup is open -->
+                                        <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                         <!-- Optional: A slight change to indicate it's active -->
+                                        <Setter Property="Effect" Value="{DynamicResource FocusGlowEffect}"/>
+                                    </Trigger>
+                                    <Trigger Property="IsEnabled" Value="False">
+                                        <Setter Property="Opacity" Value="0.5"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ToggleButton.Style>
+                    </ToggleButton>
+
+                    <Popup x:Name="ColorPickerPopup"
+                           IsOpen="{Binding IsChecked, ElementName=ColorIndicatorToggleButton, Mode=TwoWay}"
+                           StaysOpen="False" 
+                           PlacementTarget="{Binding ElementName=ColorIndicatorToggleButton}"
+                           Placement="Bottom" VerticalOffset="3" HorizontalOffset="-2"
+                           AllowsTransparency="True"
+                           PopupAnimation="{DynamicResource {x:Static SystemParameters.MenuPopupAnimationKey}}">
+                        <Border Background="{DynamicResource PanelBackgroundBrush}"
+                                BorderBrush="{DynamicResource AccentBrush}" 
+                                BorderThickness="1" CornerRadius="3" Padding="5"
+                                Effect="{DynamicResource PanelShadowEffect}">
+                            <ComboBox x:Name="InnerColorComboBox"
+                                      ItemsSource="{Binding Source={x:Static vm:FilterViewModel.AvailableHighlightColors}}"
+                                      SelectedValue="{Binding HighlightColorKey, Mode=TwoWay}"
+                                      SelectedValuePath="Key"
+                                      DisplayMemberPath="Name"
+                                      Style="{StaticResource PopupColorComboBoxStyle}">
+                                <i:Interaction.Triggers>
+                                    <i:EventTrigger EventName="SelectionChanged">
+                                        <!-- This action closes the popup by unchecking the ToggleButton -->
+                                        <i:ChangePropertyAction TargetName="ColorIndicatorToggleButton" PropertyName="IsChecked" Value="False"/>
+                                    </i:EventTrigger>
+                                </i:Interaction.Triggers>
+                            </ComboBox>
+                        </Border>
+                    </Popup>
+                </Grid>
+            </Grid>
         </Border>
     </HierarchicalDataTemplate>
 </ResourceDictionary>

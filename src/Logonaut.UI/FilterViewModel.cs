@@ -160,7 +160,8 @@ public partial class FilterViewModel : ObservableObject, ICommandExecutorProvide
     {
         OnPropertyChanged(nameof(FilterText));
         OnPropertyChanged(nameof(DisplayText));
-        OnPropertyChanged(nameof(Enabled)); // This will now update the UI for Enabled state changes
+        OnPropertyChanged(nameof(Enabled));
+        OnPropertyChanged(nameof(HighlightColorKey));
     }
 
     #region Highlight Color Key
