@@ -118,7 +118,8 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         RedoCommand = new RelayCommand(Redo, CanRedo);
 
         CurrentBusyStates.CollectionChanged += CurrentBusyStates_CollectionChanged;
-        _disposables.Add(Disposable.Create(() => {
+        _disposables.Add(Disposable.Create(() =>
+        {
             CurrentBusyStates.CollectionChanged -= CurrentBusyStates_CollectionChanged;
         }));
 
@@ -157,7 +158,7 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
             // It's typically: YourDefaultNamespace.FolderPath.FileName.extension
             // For Logonaut.UI project, if RevisionHistory.txt is in the root, it would be "Logonaut.UI.RevisionHistory.txt"
             // If it's in a "Resources" subfolder, it might be "Logonaut.UI.Resources.RevisionHistory.txt"
-            string resourceName = "Logonaut.UI.RevisionHistory.txt"; 
+            string resourceName = "Logonaut.UI.RevisionHistory.txt";
 
             // You can list all resource names to find the correct one during debugging:
             // string[] names = assembly.GetManifestResourceNames();
@@ -385,7 +386,7 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
 
     private void ProcessTotalLinesUpdate(long count)
     {
-            TotalLogLines = count;
+        TotalLogLines = count;
     }
 
     partial void OnIsAutoScrollEnabledChanged(bool value)
@@ -547,7 +548,7 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
             SaveCurrentSettingsDelayed();
             Debug.WriteLine("AddFilter: Set new root node (outside Undo system).");
             if (SelectedFilterNode != null && SelectedFilterNode.IsEditable)
-                 SelectedFilterNode.BeginEditCommand.Execute(null);
+                SelectedFilterNode.BeginEditCommand.Execute(null);
             return;
         }
         // Case 2: A composite node is selected - add as child
@@ -559,16 +560,16 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         // Case 3: No node selected (but tree exists), or non-composite selected - Add to the root if it's composite
         else if (ActiveFilterProfile.RootFilterViewModel != null && ActiveFilterProfile.RootFilterViewModel.Filter is CompositeFilter)
         {
-             targetParentVM = ActiveFilterProfile.RootFilterViewModel;
-             targetIndex = targetParentVM.Children.Count; // Add at end of root
-             Debug.WriteLine("AddFilter: No selection or non-composite selected, adding to root.");
+            targetParentVM = ActiveFilterProfile.RootFilterViewModel;
+            targetIndex = targetParentVM.Children.Count; // Add at end of root
+            Debug.WriteLine("AddFilter: No selection or non-composite selected, adding to root.");
         }
         else // Root exists but isn't composite, and nothing valid is selected
         {
-             Debug.WriteLine("AddFilter: Cannot add filter. Select a composite node or ensure root is composite.");
-             // Optionally show a message to the user
-             // MessageBox.Show("Please select a composite filter node (AND, OR, NOR) to add a child to.", "Add Filter", MessageBoxButton.OK, MessageBoxImage.Information);
-             return;
+            Debug.WriteLine("AddFilter: Cannot add filter. Select a composite node or ensure root is composite.");
+            // Optionally show a message to the user
+            // MessageBox.Show("Please select a composite filter node (AND, OR, NOR) to add a child to.", "Add Filter", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
         }
 
         if (targetParentVM == null)
@@ -651,8 +652,8 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         var addedVM = actualTargetParentVM.Children.FirstOrDefault(vm => vm.Filter == newFilterNodeModel);
         if (addedVM == null && finalIndex < actualTargetParentVM.Children.Count) // Check specific index if not last
         {
-             addedVM = actualTargetParentVM.Children[finalIndex];
-             if(addedVM.Filter != newFilterNodeModel) addedVM = null; // double check it's the one we added
+            addedVM = actualTargetParentVM.Children[finalIndex];
+            if (addedVM.Filter != newFilterNodeModel) addedVM = null; // double check it's the one we added
         }
         // Fallback to LastOrDefault if specific index check failed or it was added at the end
         if (addedVM == null) addedVM = actualTargetParentVM.Children.LastOrDefault(vm => vm.Filter == newFilterNodeModel);
@@ -681,7 +682,7 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
     {
         return typeIdentifier switch
         {
-            "SubstringType" => new SubstringFilter(initialValue ?? ""), 
+            "SubstringType" => new SubstringFilter(initialValue ?? ""),
             "RegexType" => new RegexFilter(initialValue ?? ".*"),
             "AndType" => new AndFilter(),
             "OrType" => new OrFilter(),
@@ -747,7 +748,7 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
             }
         }
     }
-    
+
     private bool CanToggleEditNode() => SelectedFilterNode?.IsEditable ?? false;
 
     // Helper to reset document and related UI state.
@@ -772,6 +773,12 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         TargetOriginalLineNumberInput = string.Empty; // Clear jump input
         JumpStatusMessage = string.Empty;
         IsJumpTargetInvalid = false;
+
+        // Clear active matching status for filters
+        if (ActiveFilterProfile?.RootFilterViewModel != null)
+        {
+            ClearActiveFilterMatchingStatusRecursive(ActiveFilterProfile.RootFilterViewModel);
+        }
         // TotalLogLines is reset by _logFilterProcessor.Reset() via its observable
     }
 
@@ -788,8 +795,8 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         if (IsSimulatorRunning)
         {
             ExecuteStopSimulatorLogic(); // Stop generation
-            // Dispose simulator instance? Or keep it? Let's keep it for now.
-             Debug.WriteLine("---> Stopped simulator before opening file.");
+                                         // Dispose simulator instance? Or keep it? Let's keep it for now.
+            Debug.WriteLine("---> Stopped simulator before opening file.");
         }
 
         // 2. Show File Dialog
@@ -797,7 +804,8 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         if (string.IsNullOrEmpty(selectedFile)) return;
         Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} OpenLogFileAsync: '{selectedFile}'");
 
-        _uiContext.Post(_ => {
+        _uiContext.Post(_ =>
+        {
             Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} OpenLogFileAsync: Adding LoadingToken to BusyStates.");
             CurrentBusyStates.Add(LoadingToken);
         }, null);
@@ -836,7 +844,8 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         catch (Exception ex)
         {
             // Error Handling (Keep existing, ensure ResetLogDocumentAndUIState is called on failure path too)
-            _uiContext.Post(_ => {
+            _uiContext.Post(_ =>
+            {
                 CurrentBusyStates.Remove(LoadingToken);
                 CurrentBusyStates.Remove(FilteringToken);
                 ResetLogDocumentAndUIStateImmediate(); // Reset state on error
@@ -846,10 +855,10 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
                 _fileLogSource?.StopMonitoring(); // Stop file source if it got started
             }, null);
             // Re-throw might not be needed if MessageBox is sufficient user feedback
-             // throw;
+            // throw;
         }
     }
-    
+
     // Helper method to find the index in FilteredLogLines containing a character offset
     // Note: This is inefficient for large logs. See comments in SelectAndScrollToCurrentMatch.
     private int FindFilteredLineIndexContainingOffset(int offset)
@@ -912,7 +921,8 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         Debug.WriteLine($"---> TriggerFilterUpdate START"); // <<< ADDED
 
         // Ensure token isn't added multiple times if trigger fires rapidly
-        _uiContext.Post(_ => {
+        _uiContext.Post(_ =>
+        {
             if (!CurrentBusyStates.Contains(FilteringToken))
             {
                 CurrentBusyStates.Add(FilteringToken);
@@ -920,7 +930,8 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
             }
         }, null);
 
-        _uiContext.Post(_ => {
+        _uiContext.Post(_ =>
+        {
             // --- Log the filter being sent ---
             IFilter? filterToApply = ActiveFilterProfile?.Model?.RootFilter; // Get filter from model
             string filterTypeName = filterToApply?.GetType().Name ?? "null (TrueFilter assumed)";
@@ -946,7 +957,8 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         {
             var sb = new System.Text.StringBuilder();
             bool first = true;
-            foreach (var line in FilteredLogLines) {
+            foreach (var line in FilteredLogLines)
+            {
                 if (!first) sb.Append(Environment.NewLine);
                 sb.Append(line.Text);
                 first = false;
@@ -1001,6 +1013,7 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
             {
                 OnPropertyChanged(nameof(FilteredLogLinesCount));
                 ScheduleLogTextAppend(linesActuallyAdded);
+                UpdateActiveFilterMatchingStatus(); // Update active matching status after appends
                 if (IsAutoScrollEnabled) RequestScrollToEnd?.Invoke(this, EventArgs.Empty);
             }
 
@@ -1022,6 +1035,7 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
             }
 
             ScheduleLogTextUpdate(FilteredLogLines); // Update editor with the full new text
+            UpdateActiveFilterMatchingStatus();      // Update IsActivelyMatching for filters
 
             if (originalLineToRestore > 0)
             {
@@ -1036,7 +1050,8 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
                 _uiContext.Post(_ => { HighlightedFilteredLineIndex = -1; }, null);
             }
 
-            _uiContext.Post(_ => {
+            _uiContext.Post(_ =>
+            {
                 CurrentBusyStates.Remove(FilteringToken);
                 // Only remove LoadingToken if this update signals the *completion*
                 // of the initial load processing AND we were actually in the loading state.
@@ -1057,7 +1072,8 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
     {
         // Ensure we work with a copy in case the original list changes
         var linesSnapshot = linesToAppend.ToList();
-        _uiContext.Post(state => {
+        _uiContext.Post(state =>
+        {
             var lines = (List<FilteredLogLine>)state!; // Cast state first
 
             // Attempt to append to editor if available
@@ -1136,11 +1152,13 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         // Clone relevantLines if it might be modified elsewhere before Post executes?
         // ObservableCollection snapshot for Replace is safe. List passed for Append is safe.
         var linesSnapshot = relevantLines.ToList(); // Create shallow copy for safety
-        _uiContext.Post(state => {
+        _uiContext.Post(state =>
+        {
             var lines = (List<FilteredLogLine>)state!; // Cast state first
 
             // Attempt to update editor if available
-            if (_logEditorInstance?.Document != null) {
+            if (_logEditorInstance?.Document != null)
+            {
                 ReplaceLogTextInternal(lines);
             }
         }, linesSnapshot);
@@ -1186,7 +1204,8 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
     private void HandleProcessorError(string contextMessage, Exception ex)
     {
         Debug.WriteLine($"{contextMessage}: {ex}");
-        _uiContext.Post(_ => {
+        _uiContext.Post(_ =>
+        {
             CurrentBusyStates.Clear();
             MessageBox.Show($"Error processing logs: {ex.Message}", "Processing Error", MessageBoxButton.OK, MessageBoxImage.Warning);
         }, null);
@@ -1215,6 +1234,53 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
     }
 
     #endregion // --- Orchestration & Updates ---
+
+    #region Filter Active Matching Status
+
+    private void UpdateActiveFilterMatchingStatus()
+    {
+        if (ActiveFilterProfile?.RootFilterViewModel == null) return;
+
+        var directMatchTexts = FilteredLogLines
+            .Where(fl => !fl.IsContextLine)
+            .Select(fl => fl.Text)
+            .ToList(); // Materialize for multiple iterations
+
+        UpdateMatchingStatusInternal(ActiveFilterProfile.RootFilterViewModel, directMatchTexts);
+    }
+
+    private void UpdateMatchingStatusInternal(FilterViewModel fvm, List<string> directMatchTexts)
+    {
+        bool isContributing = false;
+        if (fvm.Enabled) // Only consider enabled filters
+        {
+            foreach (var text in directMatchTexts)
+            {
+                if (fvm.Filter.IsMatch(text))
+                {
+                    isContributing = true;
+                    break;
+                }
+            }
+        }
+        fvm.IsActivelyMatching = isContributing;
+
+        foreach (var child in fvm.Children)
+        {
+            UpdateMatchingStatusInternal(child, directMatchTexts);
+        }
+    }
+
+    private void ClearActiveFilterMatchingStatusRecursive(FilterViewModel fvm)
+    {
+        fvm.IsActivelyMatching = false;
+        foreach (var child in fvm.Children)
+        {
+            ClearActiveFilterMatchingStatusRecursive(child);
+        }
+    }
+
+    #endregion
 
     #region Jump To Line State
     [ObservableProperty]
@@ -1310,7 +1376,7 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         // 1. Clear the busy state collection (good practice)
         _uiContext.Post(_ => CurrentBusyStates.Clear(), null);
         SaveCurrentSettings();
-         CurrentActiveLogSource?.StopMonitoring(); // Explicitly stop monitoring before disposing
+        CurrentActiveLogSource?.StopMonitoring(); // Explicitly stop monitoring before disposing
         Dispose(); // Calls the main Dispose method which cleans everything else
     }
     #endregion // --- Lifecycle Management ---

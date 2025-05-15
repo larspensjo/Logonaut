@@ -1,4 +1,3 @@
-
 using CommunityToolkit.Mvvm.ComponentModel;
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.Input;
@@ -7,8 +6,6 @@ using Logonaut.UI.Commands;
 using System.Reactive.Linq;
 using System.ComponentModel;
 using System.Diagnostics;
-
-// TODO: Should we move all filter management here?
 
 namespace Logonaut.UI.ViewModels;
 
@@ -32,7 +29,8 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
     private bool CanManageActiveProfile() => ActiveFilterProfile != null;
 
     // // Rebuild the AvailableProfiles collection from the loaded filter profile models
-    private void LoadFilterProfiles(LogonautSettings settings) {
+    private void LoadFilterProfiles(LogonautSettings settings)
+    {
         AvailableProfiles.Clear();
         FilterProfileViewModel? profileToSelect = null;
         foreach (var profileModel in settings.FilterProfiles)
@@ -60,20 +58,24 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         settings.LastActiveProfileName = ActiveFilterProfile?.Name ?? AvailableProfiles.FirstOrDefault()?.Name ?? "Default";
 
         // Add detailed logging within the Select statement
-        settings.FilterProfiles = AvailableProfiles.Select(vm => {
-            if (vm == null) {
+        settings.FilterProfiles = AvailableProfiles.Select(vm =>
+        {
+            if (vm == null)
+            {
                 Debug.WriteLine($"---> SaveFilterProfiles: Encountered NULL FilterProfileViewModel!");
                 return null; // Should not happen, but guard
             }
             var model = vm.Model; // Get the model reference
-            if (model == null) {
+            if (model == null)
+            {
                 Debug.WriteLine($"---> SaveFilterProfiles: Profile VM '{vm.Name}' has NULL Model!");
                 return null; // Should not happen
             }
             var rootFilter = model.RootFilter; // Get the root filter reference
             string rootTypeName = rootFilter?.GetType().Name ?? "null";
             int subFilterCount = -1;
-            if (rootFilter is Logonaut.Filters.CompositeFilter cf) {
+            if (rootFilter is Logonaut.Filters.CompositeFilter cf)
+            {
                 subFilterCount = cf.SubFilters.Count; // Get count directly from the model's property
             }
             Debug.WriteLine($"---> SaveFilterProfiles: Processing Profile '{vm.Name}'. RootFilter Type: {rootTypeName}, SubFilter Count: {subFilterCount}");
@@ -107,7 +109,8 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         // Use Dispatcher.InvokeAsync to ensure UI updates (like setting ActiveFilterProfile)
         // have likely processed before trying to execute the command that relies on it being active.
         // Using BeginInvoke with Background priority can also work well here.
-        _uiContext.Post(_ => { // Use the SynchronizationContext instead
+        _uiContext.Post(_ =>
+        { // Use the SynchronizationContext instead
             if (ActiveFilterProfile == newProfileVM) // Double-check it's still the active one
             {
                 newProfileVM.BeginRenameCommand.Execute(null);
@@ -160,6 +163,12 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         _activeProfileNameSubscription?.Dispose();
         _observedActiveProfile = null;
 
+        // Clear active matching status for the old profile's filter tree
+        if (oldValue?.RootFilterViewModel != null)
+        {
+            ClearActiveFilterMatchingStatusRecursive(oldValue.RootFilterViewModel);
+        }
+
         if (newValue != null)
         {
             _observedActiveProfile = newValue;
@@ -169,22 +178,22 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
                     handler => newValue.PropertyChanged += handler, // handler is now correctly typed
                     handler => newValue.PropertyChanged -= handler)
                 .Where(pattern => pattern.EventArgs.PropertyName == nameof(FilterProfileViewModel.Name)) // Check EventArgs property name
-                // Optional: Add debounce/throttle if changes trigger too rapidly
-                // .Throttle(TimeSpan.FromMilliseconds(200), _uiScheduler)
+                                                                                                         // Optional: Add debounce/throttle if changes trigger too rapidly
+                                                                                                         // .Throttle(TimeSpan.FromMilliseconds(200), _uiScheduler)
                 .ObserveOn(_uiContext) // Ensure handler runs on UI thread
                 .Subscribe(pattern => HandleActiveProfileNameChange(pattern.Sender as FilterProfileViewModel)); // pattern.Sender is the source
 
             // Keep existing logic
             UpdateActiveTreeRootNodes(newValue);
-            SelectedFilterNode = null;
-            TriggerFilterUpdate();
+            SelectedFilterNode = null; // Reset selection in the tree
+            TriggerFilterUpdate(); // This will eventually call UpdateActiveFilterMatchingStatus
             // SaveCurrentSettings(); // Save triggered by name change or initial selection
         }
         else // No active profile
         {
             UpdateActiveTreeRootNodes(null);
             SelectedFilterNode = null;
-            TriggerFilterUpdate(); // Trigger with default filter
+            TriggerFilterUpdate(); // Trigger with default filter (will also update matching status for empty/default)
         }
         // Save immediately on selection change as well
         SaveCurrentSettings();

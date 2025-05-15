@@ -37,6 +37,7 @@ public partial class FilterViewModel : ObservableObject, ICommandExecutorProvide
     [ObservableProperty] private bool _isEditing = false;
     [ObservableProperty] private bool _isNotEditing = true;
     [ObservableProperty] private bool _isExpanded; // Relevant for CompositeFilters
+    [ObservableProperty] private bool _isActivelyMatching; // New property for visual cue
 
     public IRelayCommand<string> ChangeHighlightColorCommand { get; }
 
@@ -56,7 +57,7 @@ public partial class FilterViewModel : ObservableObject, ICommandExecutorProvide
             }
         }
     }
-    
+
     public static List<FilterHighlightColorChoice> AvailableHighlightColors { get; } = new()
     {
         new("Default", "FilterHighlight.Default"),
@@ -111,10 +112,11 @@ public partial class FilterViewModel : ObservableObject, ICommandExecutorProvide
             int index = Children.Count;
             var action = new AddFilterAction(this, childFilter, index);
             _commandExecutor.Execute(action);
-             var addedVM = Children.LastOrDefault(vm => vm.Filter == childFilter);
-             if (addedVM != null) {
-                 IsExpanded = true;
-             }
+            var addedVM = Children.LastOrDefault(vm => vm.Filter == childFilter);
+            if (addedVM != null)
+            {
+                IsExpanded = true;
+            }
         }
     }
 
@@ -180,13 +182,15 @@ public partial class FilterViewModel : ObservableObject, ICommandExecutorProvide
             {
                 var action = new ChangeFilterValueAction(this, _valueBeforeEdit, currentValue);
                 _commandExecutor.Execute(action);
-            } else {
-                 Debug.WriteLine($"EndEdit: Value unchanged ('{currentValue}'), no action executed.");
             }
-             _valueBeforeEdit = null;
+            else
+            {
+                Debug.WriteLine($"EndEdit: Value unchanged ('{currentValue}'), no action executed.");
+            }
+            _valueBeforeEdit = null;
         }
     }
-    
+
     // Helper method used by Actions to update bound properties after direct model manipulation.
     // TODO: A little kludgy. Is there a solution where we don't need to expose this method?
     // TODO: Will there be three events? That could be costly?
@@ -196,5 +200,6 @@ public partial class FilterViewModel : ObservableObject, ICommandExecutorProvide
         OnPropertyChanged(nameof(DisplayText));
         OnPropertyChanged(nameof(Enabled));
         OnPropertyChanged(nameof(HighlightColorKey));
+        // Note: IsActivelyMatching is not refreshed here as it's driven by MainViewModel logic
     }
 }

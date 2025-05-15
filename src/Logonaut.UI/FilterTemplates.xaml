@@ -72,7 +72,17 @@
                     <TextBlock Text="{Binding DisplayText}"
                                Visibility="{Binding IsNotEditing, Converter={StaticResource BoolToVis}}"
                                VerticalAlignment="Center">
-                         <i:Interaction.Triggers>
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="{DynamicResource TextForegroundBrush}"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsActivelyMatching}" Value="True">
+                                        <Setter Property="FontWeight" Value="Bold"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                        <i:Interaction.Triggers>
                             <i:EventTrigger EventName="MouseLeftButtonUp">
                                 <i:InvokeCommandAction Command="{Binding BeginEditCommand}" />
                             </i:EventTrigger>
