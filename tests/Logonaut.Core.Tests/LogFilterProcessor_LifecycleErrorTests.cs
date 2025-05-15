@@ -136,5 +136,8 @@ namespace Logonaut.Core.Tests; // File-scoped namespace
         public string TypeText => "Throwing";
         public string Value { get; set; } = "";
         public bool IsMatch(string line) => throw new InvalidOperationException("Simulated filter error");
+
+        // Default highlight color key for filters that don't override
+        public virtual string HighlightColorKey { get; set; } = "FilterHighlight.Default";
     }
 }

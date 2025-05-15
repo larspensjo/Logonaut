@@ -213,5 +213,7 @@ namespace Logonaut.Core.Tests; // File-scoped namespace
         public string TypeText => "FalseFilter";
         public string Value { get; set; } = string.Empty;
         public bool IsMatch(string line) => false; // Always returns false
+        // Default highlight color key for filters that don't override
+        public virtual string HighlightColorKey { get; set; } = "FilterHighlight.Default";
     }
 }
