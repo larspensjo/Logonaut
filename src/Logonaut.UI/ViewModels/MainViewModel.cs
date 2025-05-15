@@ -69,8 +69,6 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
     private readonly CompositeDisposable _disposables = new();
     private IDisposable? _filterSubscription;
     private IDisposable? _totalLinesSubscription;
-
-    [ObservableProperty] private bool _isAutoScrollEnabled = true;
     public event EventHandler? RequestScrollToEnd; // Triggered when Auto Scroll is enabled
     public event EventHandler<int>? RequestScrollToLineIndex; // Event passes the 0-based index to scroll to
 
@@ -330,17 +328,6 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         TotalLogLines = count;
     }
 
-    partial void OnIsAutoScrollEnabledChanged(bool value)
-    {
-        if (value == true && HighlightedFilteredLineIndex != -1)
-            HighlightedFilteredLineIndex = -1;
-
-        if (value == true)
-            RequestScrollToEnd?.Invoke(this, EventArgs.Empty);
-
-        SaveCurrentSettingsDelayed();
-    }
-
     public ThemeViewModel Theme { get; }
 
     // Central store for all original log lines, passed to processor but owned here.
@@ -361,22 +348,6 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
             ScheduleLogTextUpdate(FilteredLogLines);
         }
     }
-
-    // Configured number of context lines to display around filter matches.
-    [ObservableProperty]
-    private int _contextLines = 0;
-
-    // Controls visibility of the custom line number margin.
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsCustomLineNumberMarginVisible))]
-    private bool _showLineNumbers = true;
-    public Visibility IsCustomLineNumberMarginVisible => ShowLineNumbers ? Visibility.Visible : Visibility.Collapsed;
-
-    partial void OnShowLineNumbersChanged(bool value) => SaveCurrentSettingsDelayed();
-
-    // Controls whether timestamp highlighting rules are applied in AvalonEdit.
-    [ObservableProperty] private bool _highlightTimestamps = true;
-    partial void OnHighlightTimestampsChanged(bool value) => SaveCurrentSettingsDelayed();
 
     // Collection of filter patterns (substrings/regex) for highlighting.
     // Note: This state is derived by traversing the *active* FilterProfile.
@@ -409,15 +380,9 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
 
         // --- Load Display/Search Settings ---
         // Setting these might trigger saves, which is now safe.
-        ShowLineNumbers = settings.ShowLineNumbers;
-        HighlightTimestamps = settings.HighlightTimestamps;
-        IsCaseSensitiveSearch = settings.IsCaseSensitiveSearch;
-        ContextLines = settings.ContextLines;
-        IsAutoScrollEnabled = settings.AutoScrollToTail;
         _lastOpenedFolderPath = settings.LastOpenedFolderPath;
 
-        // --- Load Simulator Settings ---
-        // Setting these might trigger saves, which is now safe.
+        LoadUiSettings(settings);
         LoadSimulatorPersistedSettings(settings);
     }
 
@@ -428,14 +393,10 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         var settingsToSave = new LogonautSettings
         {
             // --- Save Display/Search Settings ---
-            ContextLines = this.ContextLines,
-            ShowLineNumbers = this.ShowLineNumbers,
-            HighlightTimestamps = this.HighlightTimestamps,
-            IsCaseSensitiveSearch = this.IsCaseSensitiveSearch,
-            AutoScrollToTail = this.IsAutoScrollEnabled,
             LastOpenedFolderPath = this._lastOpenedFolderPath,
         };
 
+        SaveUiSettings(settingsToSave);
         SaveSimulatorSettings(settingsToSave);
 
         // --- Save Filter Profiles ---
@@ -712,19 +673,6 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
             TraverseFilterTreeForHighlighting(ActiveFilterProfile.RootFilterViewModel, newFilterModels);
         }
         FilterHighlightModels = newFilterModels; // Update the renamed property
-    }
-
-    [RelayCommand(CanExecute = nameof(CanDecrementContextLines))]
-    private void DecrementContextLines() => ContextLines = Math.Max(0, ContextLines - 1);
-    private bool CanDecrementContextLines() => ContextLines > 0;
-
-    [RelayCommand] private void IncrementContextLines() => ContextLines++;
-
-    partial void OnContextLinesChanged(int value)
-    {
-        DecrementContextLinesCommand.NotifyCanExecuteChanged();
-        TriggerFilterUpdate();
-        SaveCurrentSettingsDelayed();
     }
 
     #endregion // --- Command Handling ---
