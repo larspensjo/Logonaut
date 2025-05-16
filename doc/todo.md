@@ -10,6 +10,12 @@ This document has a list of ideas.
 * Refactor AnimatedSpinner into a flexible BusyIndicator (see [BusyIndicatorPlan.md](BusyIndicatorPlan.md)).
 * Use MainViewModel.JumpStatusMessage for error messsages instead of MessageBox.
 * Support multiple log windows, as tabs. Every log window shall have its own selected filter profile.
+    * Investigate concerns whether undo/redo is properly supported by the TABS system.
+    * When changing filters in a profile, it will not have any effect on other TABs until you switch TAB.
+    * See separate plan at [TabbedInterfacePlan.md](Tabbed interface plan)
+    * Some UI bindings may need to be updated for the TabbedControl?
+    * MainViewModel.FilterTreeInteraction.cs: Review commands like AddFilter, RemoveFilterNode. They modify ActiveFilterProfile.RootFilterViewModel. After Execute(action) in these commands, you'll need to ensure the ActiveTabViewModel (if it's using this ActiveFilterProfile) re-evaluates its display. The current TriggerFilterUpdate() in MainViewModel.Execute() should be adapted to call ActiveTabViewModel?.ApplyCurrentFilters(...).
+    * Global UI Settings (ContextLines, HighlightTimestamps): When these global settings in MainViewModel change, the ActiveTabViewModel needs to be informed so it can update its display/processing. OnContextLinesChanged already calls ActiveTabViewModel?.ApplyCurrentFilters. A similar notification mechanism will be needed if, for instance, HighlightTimestamps is a per-tab setting visually configured through the active tab's UI. For now, if it's a global setting, the TabViewModel's AvalonEdit setup would read this global value on activation.
 * CTRL+O for quick open file.
 * Any filter change or context change while Auto Scroll is enabled shall automatically scroll to the new end.
 * Animations for UI changes:

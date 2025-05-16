@@ -1,4 +1,4 @@
-using System.Windows; // For Visibility
+using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Logonaut.Common;
@@ -6,19 +6,14 @@ using Logonaut.UI.Commands;
 
 namespace Logonaut.UI.ViewModels;
 
-// Consolidates properties and commands that directly control visual aspects and user preferences for the log display, not directly tied to filtering or searching.
 public partial class MainViewModel : ObservableObject, IDisposable, ICommandExecutor
 {
-    // Configured number of context lines to display around filter matches.
     [ObservableProperty] private int _contextLines = 0;
-
-    // Controls visibility of the custom line number margin.
     [NotifyPropertyChangedFor(nameof(IsCustomLineNumberMarginVisible))]
     [ObservableProperty] private bool _showLineNumbers = true;
 
     // Controls whether timestamp highlighting rules are applied in AvalonEdit.
     [ObservableProperty] private bool _highlightTimestamps = true;
-
     [ObservableProperty] private bool _isAutoScrollEnabled = true;
 
     [RelayCommand(CanExecute = nameof(CanDecrementContextLines))]
@@ -27,25 +22,47 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
 
     [RelayCommand] private void IncrementContextLines() => ContextLines++;
 
+    // When global ContextLines changes, the active tab's filter stream needs to be updated.
     partial void OnContextLinesChanged(int value)
     {
         DecrementContextLinesCommand.NotifyCanExecuteChanged();
-        TriggerFilterUpdate();
+        // TriggerFilterUpdate will pick up the new ContextLines value and pass it
+        // to _internalTabViewModel.ApplyFiltersFromProfile
+        TriggerFilterUpdate(); 
         SaveCurrentSettingsDelayed();
     }
     public Visibility IsCustomLineNumberMarginVisible => ShowLineNumbers ? Visibility.Visible : Visibility.Collapsed;
 
-    partial void OnShowLineNumbersChanged(bool value) => SaveCurrentSettingsDelayed();
-    partial void OnHighlightTimestampsChanged(bool value) => SaveCurrentSettingsDelayed();
+    // When these global UI settings change, the active tab might need to re-render or re-filter.
+    // HighlightTimestamps changes AvalonEdit behavior via binding.
+    // ShowLineNumbers changes margin visibility via binding.
+    // IsAutoScrollEnabled directly affects behavior.
+    partial void OnShowLineNumbersChanged(bool value) 
+    {
+        // If _internalTabViewModel's ActivateAsync depends on this, it might need re-activation or specific update call.
+        // For now, assuming bindings in AvalonEditHelper handle this.
+        SaveCurrentSettingsDelayed();
+    }
+    partial void OnHighlightTimestampsChanged(bool value) 
+    {
+        // Similar to ShowLineNumbers, AvalonEditHelper binding should react.
+        // If a re-filter/re-render of content is needed:
+        // TriggerFilterUpdate(); // Could be too heavy, but ensures consistency.
+        SaveCurrentSettingsDelayed();
+    }
 
     partial void OnIsAutoScrollEnabledChanged(bool value)
     {
-        if (value == true && HighlightedFilteredLineIndex != -1)
-            HighlightedFilteredLineIndex = -1;
-
-        if (value == true)
-            RequestScrollToEnd?.Invoke(this, EventArgs.Empty);
-
+        // Logic for HighlightedFilteredLineIndex if auto-scroll enabled is now in TabViewModel.
+        // MainViewModel might need to inform TabViewModel if this global setting changes.
+        // For Phase 0.1, TabViewModel doesn't have its own IsAutoScrollEnabled.
+        // The RequestScrollToEnd event on TabViewModel will be conditional on this global setting.
+        if (value == true && HighlightedOriginalLineNumber != -1) // Use original line number for consistency
+        {
+            // If auto-scroll is re-enabled, clear any persistent highlight to allow scrolling to end.
+            HighlightedOriginalLineNumber = -1; 
+        }
+        if (value == true) RequestGlobalScrollToEnd?.Invoke(this, EventArgs.Empty);
         SaveCurrentSettingsDelayed();
     }
 
@@ -55,7 +72,9 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         ShowLineNumbers = settings.ShowLineNumbers;
         HighlightTimestamps = settings.HighlightTimestamps;
         IsAutoScrollEnabled = settings.AutoScrollToTail;
-        IsCaseSensitiveSearch = settings.IsCaseSensitiveSearch;
+        // IsCaseSensitiveSearch is now part of TabViewModel, but the global default can be loaded here.
+        // For Phase 0.1, MainViewModel.IsCaseSensitiveSearch acts as the source for _internalTabViewModel.
+        IsCaseSensitiveSearch = settings.IsCaseSensitiveSearch; 
     }
 
     private void SaveUiSettings(LogonautSettings settings)

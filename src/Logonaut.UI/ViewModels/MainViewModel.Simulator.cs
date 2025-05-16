@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using System.Reactive.Linq;
-using System.Windows; // For Visibility
+using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Logonaut.Common;
@@ -9,284 +9,207 @@ using Logonaut.Filters;
 
 namespace Logonaut.UI.ViewModels;
 
-/*
- * Implements the portion of MainViewModel responsible for managing the log simulation feature.
- *
- * Purpose:
- * To provide user control over a simulated log data stream, allowing configuration
- * of generation parameters and interaction with the main log processing pipeline. It serves
- * as a way to test filtering and display without needing a real log file.
- *
- * Role:
- * This part of the ViewModel acts as the intermediary between the simulator UI controls
- * (sliders for rate/error/burst, start/stop/restart buttons) and the underlying
- * ISimulatorLogSource service. It manages the lifecycle of the simulator source,
- * handles switching the application's active log source between file and simulator,
- * and triggers necessary state resets (like clearing the log view when switching).
- *
- * Responsibilities:
- * - Manages simulator-specific UI state (e.g., visibility of config panel, running state).
- * - Handles commands originating from simulator UI controls.
- * - Instantiates and controls the ISimulatorLogSource via ILogSourceProvider.
- * - Updates ISimulatorLogSource parameters (rate, error frequency) based on UI interactions.
- * - Coordinates the switch of the main application's ILogSource and IReactiveFilteredLogStream.
- * - Manages simulator-specific settings persistence.
- *
- * Benefits:
- * - Isolates simulator control logic within the ViewModel layer.
- * - Facilitates testing and demonstration of log processing features.
- * - Partial class organization improves code readability for the MainViewModel.
- *
- * Implementation Notes:
- * Carefully manages the transition between file and simulator sources, including
- * conditional log clearing and processor resetting. Uses SynchronizationContext for
- * UI updates from background tasks (like burst completion).
- */
 public partial class MainViewModel : ObservableObject, IDisposable
 {
-    private ISimulatorLogSource? _simulatorLogSource; // Keep a dedicated instance
-
     [ObservableProperty] private bool _isSimulatorConfigurationVisible = false;
-    [RelayCommand] private void HideSimulatorConfig()
+    [RelayCommand] private void HideSimulatorConfig() => IsSimulatorConfigurationVisible = false;
+
+    // IsSimulatorRunning now reflects the state of the _internalTabViewModel's source
+    public bool IsSimulatorRunning
     {
-        IsSimulatorConfigurationVisible = false;
-    }
-
-    [NotifyCanExecuteChangedFor(nameof(RestartSimulatorCommand))] // Add this notification
-    [NotifyCanExecuteChangedFor(nameof(ToggleSimulatorCommand))] // Can always toggle? Or add specific CanExecute? Let's assume always for now.
-    [ObservableProperty] private bool _isSimulatorRunning = false;
-
-    [ObservableProperty] private double _simulatorLPS = 10; // Use double for Slider binding
-
-    partial void OnSimulatorLPSChanged(double value)
-    {
-        // Update the running simulator's rate immediately via interface
-        _simulatorLogSource?.UpdateRate((int)Math.Round(value));
-        SaveCurrentSettingsDelayed();
-    }
-
-    [ObservableProperty] private double _simulatorErrorFrequency = 100.0;
-    partial void OnSimulatorErrorFrequencyChanged(double value)
-    {
-        if (_simulatorLogSource != null)
+        get
         {
-            _simulatorLogSource.ErrorFrequency = (int)Math.Round(value); // Update the source
-            SaveCurrentSettingsDelayed();
+            if (_internalTabViewModel.LogSource is ISimulatorLogSource sim)
+            {
+                Debug.WriteLine($"---> MainViewModel.IsSimulatorRunning_get: Tab's LogSource is ISimulatorLogSource. IsRunning: {sim.IsRunning}");
+                return sim.IsRunning;
+            }
+            Debug.WriteLine($"---> MainViewModel.IsSimulatorRunning_get: Tab's LogSource is NOT ISimulatorLogSource (Type: {_internalTabViewModel.LogSource?.GetType().Name ?? "null"}). Returning false.");
+            return false;
         }
     }
 
-    partial void OnSimulatorBurstSizeChanged(double value)
+    // Global simulator settings remain in MainViewModel
+    [ObservableProperty] private double _simulatorLPS = 10;
+    [ObservableProperty] private double _simulatorErrorFrequency = 100.0;
+    [ObservableProperty] private double _simulatorBurstSize = 1000;
+
+    partial void OnSimulatorLPSChanged(double value)
     {
-        // Burst size doesn't directly affect the running simulator, only the next burst command
-        SaveCurrentSettingsDelayed(); // <<< Ensure this call exists
+        if (_internalTabViewModel.LogSource is ISimulatorLogSource sim)
+            sim.LinesPerSecond = (int)Math.Round(value); // Use LinesPerSecond setter
+        SaveCurrentSettingsDelayed();
+        NotifySimulatorCommandsCanExecuteChanged();
     }
 
-    [ObservableProperty] private double _simulatorBurstSize = 1000; // Default burst size (will be bound to slider)
+    partial void OnSimulatorErrorFrequencyChanged(double value)
+    {
+        if (_internalTabViewModel.LogSource is ISimulatorLogSource sim)
+            sim.ErrorFrequency = (int)Math.Round(value);
+        SaveCurrentSettingsDelayed();
+        NotifySimulatorCommandsCanExecuteChanged();
+    }
+    
+    partial void OnSimulatorBurstSizeChanged(double value)
+    {
+        SaveCurrentSettingsDelayed();
+        NotifySimulatorCommandsCanExecuteChanged();
+    }
+    
+    private void NotifySimulatorCommandsCanExecuteChanged()
+    {
+        // 1. Notify that IsSimulatorRunning might have changed.
+        // This allows UI elements bound directly to IsSimulatorRunning (like ToggleButton.IsChecked) to update.
+        OnPropertyChanged(nameof(IsSimulatorRunning));
+
+        // 2. Then, notify commands that their CanExecute status might need re-evaluation.
+        // This is important if their CanExecute depends on IsSimulatorRunning or other related states.
+        (GenerateBurstCommand as IAsyncRelayCommand)?.NotifyCanExecuteChanged();
+        (ToggleSimulatorCommand as IRelayCommand)?.NotifyCanExecuteChanged();
+        (RestartSimulatorCommand as IRelayCommand)?.NotifyCanExecuteChanged();
+    }
+
 
     [RelayCommand(CanExecute = nameof(CanGenerateBurst))]
     private async Task GenerateBurst()
     {
-        if (_simulatorLogSource == null)
+        if (_internalTabViewModel.LogSource is not ISimulatorLogSource sim)
         {
-            // Optionally: Show a message telling the user to start the simulator first
-            // Or implicitly start it? Let's require it to be "active" (started at least once).
-            Debug.WriteLine("WARN: GenerateBurst called but _simulatorLogSource is null.");
-            MessageBox.Show("Please start the simulator at least once before generating a burst.", "Simulator Not Active", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show("Simulator is not the active log source for the current view.", "Simulator Not Active", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
-
-        int burstCount = (int)Math.Round(SimulatorBurstSize); // Get size from property
+        int burstCount = (int)Math.Round(SimulatorBurstSize);
         if (burstCount <= 0) return;
 
-        // Add busy indicator token
-        _uiContext.Post(_ => CurrentBusyStates.Add(BurstToken), null);
-        Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> GenerateBurst: Starting burst of {burstCount} lines. Adding BurstToken to busy states.");
+        _uiContext.Post(_ => _internalTabViewModel.CurrentBusyStates.Add(TabViewModel.LoadingToken), null); // Use tab's busy token
+        Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> GenerateBurst: Starting burst of {burstCount} lines.");
+        try
+        {
+            await sim.GenerateBurstAsync(burstCount);
+        }
+        catch (Exception ex) { HandleSimulatorError("Error generating burst", ex); }
+        finally { _uiContext.Post(_ => _internalTabViewModel.CurrentBusyStates.Remove(TabViewModel.LoadingToken), null); }
+    }
+    private bool CanGenerateBurst() => _internalTabViewModel.LogSource is ISimulatorLogSource && SimulatorBurstSize > 0;
+
+
+    // Renamed from ExecuteStartSimulatorLogic for clarity in Phase 0.1
+    private void ActivateSimulatorInInternalTab()
+    {
+        if (IsSimulatorRunning) return;
 
         try
         {
-            // Call the simulator's burst method
-            await _simulatorLogSource.GenerateBurstAsync(burstCount);
-            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> GenerateBurst: Burst generation task completed for {burstCount} lines.");
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}!!! GenerateBurst: Error during burst: {ex.Message}");
-            // Show error to user
-            MessageBox.Show($"Error generating burst: {ex.Message}", "Burst Error", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-        finally
-        {
-            // Ensure busy indicator token is removed
-            _uiContext.Post(_ => {
-                CurrentBusyStates.Remove(BurstToken);
-                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> GenerateBurst: Removing BurstToken from busy states.");
-            }, null);
-        }
-    }
+            _internalTabViewModel.Deactivate(); // Deactivate current source in tab
+            // Reconfigure _internalTabViewModel to be a Simulator tab
+            _internalTabViewModel.SourceType = SourceType.Simulator; // Set the source type to Simulator. TODO: [Phase 1 Cleanup] Re-evaluate SourceType mutability once multiple tabs are distinct instances.
+            // typeof(TabViewModel).GetProperty("SourceType")!.SetValue(_internalTabViewModel, SourceType.Simulator); // Hacky
+            // _internalTabViewModel.SourceIdentifier = "Simulator"; // Unique ID for simulator source
+            _internalTabViewModel.Header = "Simulator";
 
-    private bool CanGenerateBurst()
-    {
-        // Enable Burst if the simulator source has been instantiated
-        // AND is the currently selected source type.
-        // This allows bursting even if the continuous rate (timer) is 0.
-        return _simulatorLogSource != null && CurrentActiveLogSource == _simulatorLogSource;
-    }
-
-    private void ExecuteStartSimulatorLogic()
-    {
-        if (IsSimulatorRunning) return; // Guard against accidental multiple starts
-
-        try
-        {
-            bool wasPreviouslyFileSource = (CurrentActiveLogSource == _fileLogSource);
-
-            // --- Stop existing source monitoring (File or previous Simulator) ---
-            if (wasPreviouslyFileSource)
-            {
-                _fileLogSource?.StopMonitoring();
-                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> StartSimulatorLogic: Stopped FileLogSource monitoring.");
-            }
-            _simulatorLogSource?.Stop(); // Stop previous simulator instance if any
-
-
-            // --- Setup Simulator ---
-            _simulatorLogSource ??= _sourceProvider.CreateSimulatorLogSource();
-            if (!_disposables.Contains((IDisposable)_simulatorLogSource))
-            {
-                _disposables.Add((IDisposable)_simulatorLogSource);
-                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> StartSimulatorLogic: Added new SimulatorLogSource to disposables.");
-            }
-
-            _simulatorLogSource.LinesPerSecond = (int)Math.Round(SimulatorLPS);
-            _simulatorLogSource.ErrorFrequency = (int)Math.Round(SimulatorErrorFrequency);
-
-            // --- Switch Active Source & Processor ---
-            DisposeAndClearFilteredStream();
-            CurrentActiveLogSource = _simulatorLogSource;
-            _reactiveFilteredLogStream = CreateFilteredStream(CurrentActiveLogSource);
-            _disposables.Add(_reactiveFilteredLogStream);
-            SubscribeToFilteredStream();
-
-            // --- Reset State CONDITIONALLY ---
-            if (wasPreviouslyFileSource)
-            {
-                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> StartSimulatorLogic: Clearing log because previous source was FileLogSource.");
-                ResetLogDocumentAndUIStateImmediate(); // CLEAR LOG ONLY IF SWITCHING FROM FILE
-            }
-            else
-            {
-                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> StartSimulatorLogic: NOT clearing log (previous source was not FileLogSource or null). Resetting processor only.");
-                _reactiveFilteredLogStream.Reset(); // ONLY RESET PROCESSOR STATE if not clearing doc
-            }
-
-            CurrentLogFilePath = "[Simulation Active]";
-
-            // --- Prepare Simulator (NO initial lines) ---
-            _simulatorLogSource.PrepareAndGetInitialLinesAsync("Simulator", AddLineToLogDocument)
-                            .ContinueWith(t => { /* Error handling */ }, TaskScheduler.Default);
-
-            // --- **** EXPLICITLY TRIGGER INITIAL FILTER **** ---
-            // This call is CRUCIAL. It ensures the fullRefilterPipeline runs once,
-            // processes the (empty) initial state, and resets _isInitialLoadInProgress to false.
-            IFilter? firstFilter = ActiveFilterProfile?.Model?.RootFilter ?? new TrueFilter();
-            _reactiveFilteredLogStream.UpdateFilterSettings(firstFilter, ContextLines);
-
-            _simulatorLogSource.Start(); // NOW start the timer
-
-            IsSimulatorRunning = _simulatorLogSource.IsRunning; // Update state
+            // Apply global simulator settings to the new source instance within TabViewModel
+            // TabViewModel.ActivateAsync will create the ISimulatorLogSource.
+            // We need to configure it *after* it's created.
+            // This implies ISimulatorLogSource properties should be settable.
+            
+            // This logic is a bit tricky. ActivateAsync will create the source.
+            // We need to ensure the *global* settings are applied *to that instance*.
+            // For Phase 0.1, let's assume ActivateAsync takes care of creating the source,
+            // and then we configure it.
+            _ = _internalTabViewModel.ActivateAsync(
+                this.AvailableProfiles, 
+                this.ContextLines,
+                this.HighlightTimestamps,
+                this.ShowLineNumbers,
+                this.IsAutoScrollEnabled
+            ).ContinueWith(t => {
+                if (t.IsFaulted) {
+                    HandleSimulatorError("Error activating simulator tab", t.Exception!);
+                    return;
+                }
+                // Post-activation: apply global settings to the newly created simulator source
+                if (_internalTabViewModel.LogSource is ISimulatorLogSource simSource)
+                {
+                    simSource.LinesPerSecond = (int)Math.Round(SimulatorLPS);
+                    simSource.ErrorFrequency = (int)Math.Round(SimulatorErrorFrequency);
+                    // simSource.Start(); // ActivateAsync should call StartMonitoring which calls simSource.Start()
+                }
+                _uiContext.Post(_ => NotifySimulatorCommandsCanExecuteChanged(), null);
+            });
+            CurrentGlobalLogFilePathDisplay = "[Simulation Active]";
         }
         catch (Exception ex)
         {
             HandleSimulatorError("Error starting simulator", ex);
-            IsSimulatorRunning = false; // Ensure state is correct on error
+            NotifySimulatorCommandsCanExecuteChanged();
         }
     }
 
-    private void ExecuteStopSimulatorLogic()
+    // Renamed from ExecuteStopSimulatorLogic
+    private void StopSimulatorInInternalTab()
     {
-        if (!IsSimulatorRunning) return; // Guard
-
+        if (!IsSimulatorRunning) return;
         try
         {
-            _simulatorLogSource?.Stop();
-            IsSimulatorRunning = _simulatorLogSource?.IsRunning ?? false; // Update state
-            Debug.WriteLine("---> Simulator Stopped");
-            // CurrentLogFilePath = "[Simulation Stopped]"; // Optional
+            if (_internalTabViewModel.LogSource is ISimulatorLogSource sim) sim.Stop();
+            NotifySimulatorCommandsCanExecuteChanged();
+            Debug.WriteLine("---> Simulator Stopped in internal tab");
         }
-        catch (Exception ex)
-        {
-            HandleSimulatorError("Error stopping simulator", ex);
-            // Optionally try to force IsSimulatorRunning to false
-            IsSimulatorRunning = false;
-        }
+        catch (Exception ex) { HandleSimulatorError("Error stopping simulator", ex); }
     }
 
     [RelayCommand(CanExecute = nameof(CanPerformActionWhileNotLoading))]
     private void ToggleSimulator()
     {
-        if (IsSimulatorRunning)
-        {
-            ExecuteStopSimulatorLogic();
-        }
-        else
-        {
-            ExecuteStartSimulatorLogic();
-        }
-        // Notify CanExecute changed for Restart command as its state depends on IsSimulatorRunning
-        RestartSimulatorCommand.NotifyCanExecuteChanged();
+        if (IsSimulatorRunning) StopSimulatorInInternalTab();
+        else ActivateSimulatorInInternalTab();
     }
 
-    private bool CanRestartSimulator() => IsSimulatorRunning && _simulatorLogSource != null;
+    private bool CanRestartSimulator() => _internalTabViewModel.LogSource is ISimulatorLogSource sim && sim.IsRunning;
     [RelayCommand(CanExecute = nameof(CanRestartSimulator))]
     private void RestartSimulator()
     {
-        if (!IsSimulatorRunning || _simulatorLogSource == null) return; // Check source exists too
-
+        if (!CanRestartSimulator()) return;
         try
         {
-            // 1. Reset State (calls processor.Reset(), sets flag=true)
-            ResetLogDocumentAndUIStateImmediate();
-
-            // 2. Explicitly Trigger Initial Filter (to reset the flag)
-            // Explicitly trigger the initial filter pipeline.
-            // This is necessary to run the logic within the fullRefilterPipeline
-            // which resets the _isInitialLoadInProgress flag after processing the
-            // initial (potentially empty) document state. This ensures the incremental
-            // pipeline is unblocked before the source starts emitting lines.
-            IFilter? currentFilter = ActiveFilterProfile?.Model?.RootFilter ?? new TrueFilter();
-            _reactiveFilteredLogStream.UpdateFilterSettings(currentFilter, ContextLines);
-
-            // 3. Restart Simulator Emissions
-            //    The internal Restart likely handles PrepareAndGetInitialLinesAsync implicitly or it's not needed again.
-            _simulatorLogSource.Restart(); // Call Restart via interface
-
-            IsSimulatorRunning = _simulatorLogSource.IsRunning; // Update running state
+            // Deactivate and Reactivate the tab, which will reset its LogDoc and restart the simulator source.
+            _internalTabViewModel.Deactivate();
+            // Ensure SourceType remains Simulator
+            typeof(TabViewModel).GetProperty("SourceType")!.SetValue(_internalTabViewModel, SourceType.Simulator); // Hacky
+             _ = _internalTabViewModel.ActivateAsync(
+                this.AvailableProfiles, 
+                this.ContextLines,
+                this.HighlightTimestamps,
+                this.ShowLineNumbers,
+                this.IsAutoScrollEnabled
+            ).ContinueWith(t => {
+                 if (t.IsFaulted)
+                 {
+                     HandleSimulatorError("Error restarting simulator tab", t.Exception!);
+                     return;
+                 }
+                 if (_internalTabViewModel.LogSource is ISimulatorLogSource newSimSource)
+                 {
+                     newSimSource.LinesPerSecond = (int)Math.Round(SimulatorLPS);
+                     newSimSource.ErrorFrequency = (int)Math.Round(SimulatorErrorFrequency);
+                     // newSimSource.Restart(); // ActivateAsync -> StartMonitoring should handle the restart
+                 }
+                 _uiContext.Post(_ => NotifySimulatorCommandsCanExecuteChanged(), null);
+             });
         }
-         catch (Exception ex)
-        {
-            HandleSimulatorError("Error restarting simulator", ex);
-        }
+        catch (Exception ex) { HandleSimulatorError("Error restarting simulator", ex); }
     }
 
     [RelayCommand(CanExecute = nameof(CanPerformActionWhileNotLoading))]
-    private void ClearLog()
+    private void ClearLog() // This command clears the data of the _internalTabViewModel
     {
         try
         {
-            ResetLogDocumentAndUIStateImmediate();
-            // If the simulator is running, it keeps running, just the view is cleared
-            if (IsSimulatorRunning)
-            {
-                // Optionally restart simulator counter? Depends on desired behavior.
-                // _simulatorLogSource?.Restart(); // Uncomment if restart desired on Clear
-            }
-            // Manually trigger a filter update on the now empty document
-             TriggerFilterUpdate();
-            Debug.WriteLine("---> Log Cleared");
+            ResetCurrentlyActiveTabData(); // This deactivates, clears, and reactivates the tab
+            Debug.WriteLine("---> Log Cleared for internal tab");
         }
         catch (Exception ex)
         {
-            // Handle potential errors during clearing (unlikely)
              Debug.WriteLine($"!!! Error clearing log: {ex.Message}");
              MessageBox.Show($"Error clearing log: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
@@ -296,11 +219,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         Debug.WriteLine($"!!! {context}: {ex.Message}");
         MessageBox.Show($"{context}: {ex.Message}", "Simulator Error", MessageBoxButton.OK, MessageBoxImage.Error);
-        // Optionally stop the simulator on error
-        if (IsSimulatorRunning)
-        {
-            ExecuteStopSimulatorLogic();
-        }
+        if (IsSimulatorRunning) StopSimulatorInInternalTab(); // Attempt to stop
+        NotifySimulatorCommandsCanExecuteChanged();
     }
 
     private void LoadSimulatorPersistedSettings(LogonautSettings settings)
@@ -308,14 +228,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
         SimulatorLPS = settings.SimulatorLPS;
         SimulatorErrorFrequency = settings.SimulatorErrorFrequency;
         SimulatorBurstSize = settings.SimulatorBurstSize;
-
-        // Ensure simulator instance reflects loaded LPS rate if it exists
-        _simulatorLogSource?.UpdateRate((int)Math.Round(SimulatorLPS));
-        // Ensure simulator instance reflects loaded Error Frequency if it exists
-        if (_simulatorLogSource != null)
-        {
-            _simulatorLogSource.ErrorFrequency = (int)Math.Round(SimulatorErrorFrequency);
-        }
+        // Applying these to an active simulator tab happens in OnSimulatorLPSChanged etc.
+        // or when a simulator tab is activated.
     }
 
     private void SaveSimulatorSettings(LogonautSettings settings)

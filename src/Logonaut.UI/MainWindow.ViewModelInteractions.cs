@@ -61,7 +61,10 @@ public partial class MainWindow : Window, IDisposable
             !string.IsNullOrEmpty(_viewModel.JumpStatusMessage) &&
             _viewModel.HighlightedOriginalLineNumber.ToString() == _viewModel.TargetOriginalLineNumberInput)
         {
-            _viewModel.JumpStatusMessage = string.Empty; // Clear message if jump succeeded
+            // _viewModel.JumpStatusMessage = string.Empty; // <<< THIS IS THE ERROR. REMOVE IT.
+            // Instead, TabViewModel should clear its own JumpStatusMessage when appropriate.
+            // For now, we can't directly tell TabViewModel to clear it from here without adding more events/methods.
+            // This logic might need to move into TabViewModel.
         }
     }
 

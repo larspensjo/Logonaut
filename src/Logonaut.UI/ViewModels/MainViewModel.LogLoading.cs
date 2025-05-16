@@ -1,212 +1,198 @@
 using System.Diagnostics;
 using System.Reactive.Linq;
 using System.Reactive.Concurrency;
-using System.Windows; // For Visibility
+using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Logonaut.Core;
 using Logonaut.Filters;
 using Logonaut.UI.Commands;
+using System.IO; // Required for Path
 
 namespace Logonaut.UI.ViewModels;
 
-// This groups all functionality related to acquiring log data from different sources (files, pasted text,
-// and indirectly, the simulator when it becomes the active source).
 public partial class MainViewModel : ObservableObject, IDisposable, ICommandExecutor
 {
     private string? _lastOpenedFolderPath;
-    private ILogSource? _fileLogSource; // Keep a reference to the file source instance
-
-    // Path of the currently monitored log file.
-    [ObservableProperty] private string? _currentLogFilePath;
-    [ObservableProperty] private ILogSource _currentActiveLogSource;
-
+    
     [RelayCommand(CanExecute = nameof(CanPerformActionWhileNotLoading))]
     private async Task OpenLogFileAsync()
     {
-        // 1. Stop Simulator if running
-        if (IsSimulatorRunning)
+        if (_internalTabViewModel.LogSource is ISimulatorLogSource sim && sim.IsRunning)
         {
-            ExecuteStopSimulatorLogic(); // Stop generation
-                                         // Dispose simulator instance? Or keep it? Let's keep it for now.
-            Debug.WriteLine("---> Stopped simulator before opening file.");
+            StopSimulatorInInternalTab(); // Stop global simulator if running
         }
 
-        // 2. Show File Dialog
         string? selectedFile = _fileDialogService.OpenFile("Select a log file", "Log Files|*.log;*.txt|All Files|*.*", _lastOpenedFolderPath);
         if (string.IsNullOrEmpty(selectedFile)) return;
-        Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} OpenLogFileAsync: '{selectedFile}'");
+        Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} MainViewModel.OpenLogFileAsync: '{selectedFile}'");
 
-        _uiContext.Post(_ =>
-        {
-            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} OpenLogFileAsync: Adding LoadingToken to BusyStates.");
-            CurrentBusyStates.Add(LoadingToken);
-        }, null);
+        // Use internal tab's busy state
+        _uiContext.Post(_ => _internalTabViewModel.CurrentBusyStates.Add(TabViewModel.LoadingToken), null);
+        CurrentGlobalLogFilePathDisplay = selectedFile; // Update global display
 
         try
         {
-            // 3. Ensure FileLogSource instance exists (reuse or create via provider)
-            _fileLogSource ??= _sourceProvider.CreateFileLogSource(); // Create if null
-            if (!_disposables.Contains(_fileLogSource)) _disposables.Add(_fileLogSource); // Add if new
+            // Deactivate first to clean up existing source/stream, if any
+            _internalTabViewModel.Deactivate(); 
+            
+            // Reconfigure the internal tab for the new file
+            _internalTabViewModel.Header = Path.GetFileName(selectedFile);
+            // _internalTabViewModel.SourceType is implicitly set by how ActivateAsync works or needs explicit setter if we add one.
+            // For now, ActivateAsync will determine source type based on how it's called or its existing SourceIdentifier
+            // Let's assume for file loading, we need to ensure its SourceType and SourceIdentifier are set correctly before activation.
+            // This part needs careful design for TabViewModel's reconfigurability.
+            // For Phase 0.1, we might be "recreating" the LogSource within TabViewModel upon activation based on a new SourceIdentifier.
+            // The plan for TabViewModel.ActivateAsync: "Creates/recreates ILogSource... based on SourceType and SourceIdentifier"
+            // So, we update SourceIdentifier here.
+            
+            // A more explicit way if TabViewModel had a method like `ReconfigureForFile(string path)`:
+            // await _internalTabViewModel.ReconfigureForFile(selectedFile, ActiveFilterProfile.Name);
 
-            _fileLogSource.StopMonitoring();
+            // For now, directly modify TabViewModel state then activate:
+            // This is a simplified approach for Phase 0.1 with a single internal tab.
+            // In a multi-tab scenario, we'd create a new TabViewModel or find existing.
+            // For this phase, we are re-purposing the single _internalTabViewModel.
+            // Effectively, we are changing its "identity" to the new file.
+            
+            // Manually set SourceType and SourceIdentifier before ActivateAsync.
+            // This is a bit of a hack for Phase 0.1. Ideally, TabViewModel would have a specific LoadFile method.
+            // For now, we modify its state and rely on ActivateAsync to pick it up.
+            // This assumes TabViewModel's constructor logic for SourceType is not re-run.
+            // This is okay because we are not creating a new TabViewModel instance.
+            
+            // This requires _internalTabViewModel to allow changing SourceIdentifier and SourceType after construction or using a specific load method.
+            // The plan: "TabViewModel constructor should accept: ... SourceType initialSourceType, string? initialSourceIdentifier"
+            // This implies they are set at construction. If we re-purpose the single _internalTabViewModel,
+            // we need a way to tell it "you are now a file tab for this file".
+            
+            // Let's simulate creating a "new" conceptual source for the _internalTabViewModel
+            _internalTabViewModel.Deactivate(); // Ensure it's fully stopped
+            // Reset its LogDoc and other states as if it's a new file load
+            _internalTabViewModel.LogDoc.Clear(); 
+            _internalTabViewModel.FilteredLogLines.Clear();
+            // _internalTabViewModel.TotalLogLines = 0; // This is updated by stream
+            _internalTabViewModel.SourceIdentifier = selectedFile; 
+            // We need to ensure TabViewModel uses File source type on next activation
+            // This is problematic with current TabViewModel constructor.
+            // For Phase 0.1, the _internalTabViewModel is fixed as one type at construction.
+            // OpenLogFileAsync should operate on a TabViewModel of SourceType.File.
+            // If _internalTabViewModel is not SourceType.File, this logic is flawed for Phase 0.1.
 
-            // 5. Switch Active Source and Recreate Processor
-            DisposeAndClearFilteredStream();
-            CurrentActiveLogSource = _fileLogSource; // Set file source as active
-            _reactiveFilteredLogStream = CreateFilteredStream(CurrentActiveLogSource);
-            _disposables.Add(_reactiveFilteredLogStream);
-            SubscribeToFilteredStream();
+            // *** Re-evaluation for Phase 0.1: MainViewModel orchestrates _internalTabViewModel ***
+            // _internalTabViewModel will already have its LogSource and Stream from its initial activation.
+            // When opening a new file, we need to:
+            // 1. Deactivate the current LogSource/Stream in _internalTabViewModel.
+            // 2. Re-initialize _internalTabViewModel's LogSource to a new FileLogSource.
+            // 3. Call _internalTabViewModel's ActivateAsync (or a part of it) to load the new file.
 
-            ResetLogDocumentAndUIStateImmediate();
-            CurrentLogFilePath = selectedFile;
-            long initialLines = await _fileLogSource.PrepareAndGetInitialLinesAsync(selectedFile, AddLineToLogDocument).ConfigureAwait(true);
-            _uiContext.Post(_ => TotalLogLines = initialLines, null);
-            _fileLogSource.StartMonitoring();
-            _uiContext.Post(_ => CurrentBusyStates.Add(FilteringToken), null);
-            IFilter? firstFilter = ActiveFilterProfile?.Model?.RootFilter ?? new TrueFilter();
-            _reactiveFilteredLogStream.UpdateFilterSettings(firstFilter, ContextLines);
-            UpdateFilterSubstrings();
+            // The plan: "TabViewModel.ActivateAsync(): Creates/recreates ILogSource... based on SourceType and SourceIdentifier"
+            // So, we update SourceIdentifier on _internalTabViewModel and ensure its SourceType is 'File'
+            // (which it should be if OpenLogFile is called).
+            // If _internalTabViewModel was, say, a Simulator, this needs careful handling.
+            // For Phase 0.1, let's assume OpenLogFileAsync MEANS the _internalTabViewModel BECOMES a File tab.
 
-            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} OpenLogFileAsync: Prepare/Start completed ({initialLines} lines). First filter triggered.");
+            // This will force _internalTabViewModel.ActivateAsync to create a FileLogSource
+            // This is a conceptual change of the single tab's nature.
+            // A cleaner way would be:
+            // _internalTabViewModel.LoadAsFileSource(selectedFile, ...);
+            // For now, we set properties and rely on ActivateAsync.
+            typeof(TabViewModel).GetProperty("SourceType")!.SetValue(_internalTabViewModel, SourceType.File); // Hacky, need better way or method
+            _internalTabViewModel.SourceIdentifier = selectedFile;
 
-            // Store the directory of the successfully opened file
+
+            await _internalTabViewModel.ActivateAsync(
+                this.AvailableProfiles, 
+                this.ContextLines,
+                this.HighlightTimestamps,
+                this.ShowLineNumbers,
+                this.IsAutoScrollEnabled
+            );
+            // TotalLogLines is updated by _internalTabViewModel's stream subscription.
+
+            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} OpenLogFileAsync: Tab activated for '{selectedFile}'.");
+
             _lastOpenedFolderPath = System.IO.Path.GetDirectoryName(selectedFile);
-            SaveCurrentSettingsDelayed(); // Trigger saving the settings including the new path
+            SaveCurrentSettingsDelayed();
         }
         catch (Exception ex)
         {
-            // Error Handling (Keep existing, ensure ResetLogDocumentAndUIState is called on failure path too)
             _uiContext.Post(_ =>
             {
-                CurrentBusyStates.Remove(LoadingToken);
-                CurrentBusyStates.Remove(FilteringToken);
-                ResetLogDocumentAndUIStateImmediate(); // Reset state on error
+                _internalTabViewModel.CurrentBusyStates.Remove(TabViewModel.LoadingToken);
+                _internalTabViewModel.CurrentBusyStates.Remove(TabViewModel.FilteringToken);
+                // Tell tab to reset its state if error
+                _internalTabViewModel.LogDoc.Clear(); 
+                _internalTabViewModel.FilteredLogLines.Clear();
+                // Consider calling a more comprehensive reset on _internalTabViewModel
                 Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} OpenLogFileAsync: Error opening file '{selectedFile}': {ex.Message}");
                 MessageBox.Show($"Error opening or reading log file '{selectedFile}':\n{ex.Message}", "File Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                CurrentLogFilePath = null;
-                _fileLogSource?.StopMonitoring(); // Stop file source if it got started
+                CurrentGlobalLogFilePathDisplay = null;
+                _internalTabViewModel.LogSource?.StopMonitoring();
             }, null);
-            // Re-throw might not be needed if MessageBox is sufficient user feedback
-            // throw;
+        }
+        finally
+        {
+            // This should be handled by TabViewModel.ActivateAsync or its error path.
+            // _uiContext.Post(_ => _internalTabViewModel.CurrentBusyStates.Remove(TabViewModel.LoadingToken), null);
         }
     }
 
     public void LoadLogFromText(string text)
     {
-        CurrentActiveLogSource?.StopMonitoring(); // Stop current source
-        _reactiveFilteredLogStream.Reset();
-        Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} LoadLogFromText: Calling Clear() on LogDoc. thread={Environment.CurrentManagedThreadId}.");
-        LogDoc.Clear();
-        FilteredLogLines.Clear();
-        OnPropertyChanged(nameof(FilteredLogLinesCount));
-        ResetSearchState();
-        HighlightedFilteredLineIndex = -1;
-        LogDoc.AddInitialLines(text); // Use existing storage
-        // No need to manually start source here; TriggerFilterUpdate handles processing
-        TriggerFilterUpdate();
-        CurrentLogFilePath = "[Pasted Content]"; // Indicate non-file source
-    }
-
-    // Helper to reset document and related UI state.
-    // IMPORTANT: Do not use a context.Post() method here, as the clearing operations and state changes must be done immediately.
-    private void ResetLogDocumentAndUIStateImmediate()
-    {
-        // Reset Core State
-        _reactiveFilteredLogStream.Reset(); // Resets processor's internal index and total lines observable
-
-        // Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} ResetLogDocumentAndUIState: Calling Clear() on LogDoc (without using _uicontext.Post). thread={Environment.CurrentManagedThreadId}. Stack trace:");
-        // Debug.WriteLine(Environment.StackTrace);
-        LogDoc.Clear();
-        FilteredLogLines.Clear();
-        OnPropertyChanged(nameof(FilteredLogLinesCount)); // Notify count changed
-        ScheduleLogTextUpdate(FilteredLogLines); // Clear editor
-        SearchMarkers.Clear();
-        _searchMatches.Clear();
-        _currentSearchIndex = -1;
-        OnPropertyChanged(nameof(SearchStatusText));
-        HighlightedFilteredLineIndex = -1;
-        HighlightedOriginalLineNumber = -1;
-        TargetOriginalLineNumberInput = string.Empty; // Clear jump input
-        JumpStatusMessage = string.Empty;
-        IsJumpTargetInvalid = false;
-
-        // Clear active matching status for filters
-        if (ActiveFilterProfile?.RootFilterViewModel != null)
+        if (_internalTabViewModel.LogSource is ISimulatorLogSource sim && sim.IsRunning)
         {
-            ClearActiveFilterMatchingStatusRecursive(ActiveFilterProfile.RootFilterViewModel);
+            StopSimulatorInInternalTab();
         }
-        // TotalLogLines is reset by _logFilterProcessor.Reset() via its observable
-    }
+        CurrentGlobalLogFilePathDisplay = "[Pasted Content]";
 
-    // Responsible for reacting to the switch of CurrentActiveLogSource
-    partial void OnCurrentActiveLogSourceChanged(ILogSource? oldValue, ILogSource newValue)
+        // Reconfigure internal tab for pasted content
+        _internalTabViewModel.Deactivate();
+        typeof(TabViewModel).GetProperty("SourceType")!.SetValue(_internalTabViewModel, SourceType.Pasted); // Hacky
+        _internalTabViewModel.SourceIdentifier = null; // No file path for pasted
+
+        _internalTabViewModel.LoadPastedContent(text); // This populates LogDoc
+
+        // Activate to set up stream and apply filters
+         _ = _internalTabViewModel.ActivateAsync(
+            this.AvailableProfiles, 
+            this.ContextLines,
+            this.HighlightTimestamps,
+            this.ShowLineNumbers,
+            this.IsAutoScrollEnabled
+        ).ContinueWith(t => {
+            if (t.IsFaulted) Debug.WriteLine($"Error activating internal tab after paste: {t.Exception}");
+        });
+    }
+    
+    // ResetLogDocumentAndUIStateImmediate is now mostly a TabViewModel concern.
+    // MainViewModel might have a "ClearCurrentTabData" command.
+    private void ResetCurrentlyActiveTabData() // Renamed for clarity
     {
-        Debug.WriteLine($"---> CurrentActiveLogSource changed from {oldValue?.GetType().Name ?? "null"} to {newValue.GetType().Name}");
+        _internalTabViewModel.Deactivate(); // Deactivate to stop sources/streams
+        // Tell the tab to clear its specific data
+        _internalTabViewModel.LogDoc.Clear(); 
+        _internalTabViewModel.FilteredLogLines.Clear(); // Clears UI collection bound through delegation
+        // Reset search etc. within tab through a dedicated method or as part of Load/Activate
+        // _internalTabViewModel.ResetSearchState(); // Example
+        // _internalTabViewModel.HighlightedFilteredLineIndex = -1; // Example
 
-
-        // 1. Update CanExecute for GenerateBurstCommand
-        GenerateBurstCommand.NotifyCanExecuteChanged();
+        // Reactivate if it was active, or prepare for new content.
+        // For Phase 0.1, reactivating it will make it process its (now empty) LogDoc.
+         _ = _internalTabViewModel.ActivateAsync(
+            this.AvailableProfiles, 
+            this.ContextLines,
+            this.HighlightTimestamps,
+            this.ShowLineNumbers,
+            this.IsAutoScrollEnabled
+        ).ContinueWith(t => {
+             if (t.IsFaulted) Debug.WriteLine($"Error reactivating internal tab after reset: {t.Exception}");
+         });;
+        CurrentGlobalLogFilePathDisplay = "[Cleared]";
     }
 
-    private IReactiveFilteredLogStream CreateFilteredStream(ILogSource source)
-    {
-        Debug.WriteLine($"---> Creating ReactiveFilteredLogStream with source: {source.GetType().Name}");
-        return new ReactiveFilteredLogStream(
-            source,
-            LogDoc,
-            _uiContext,
-            AddLineToLogDocument,
-            _backgroundScheduler);
-    }
 
-    private void SubscribeToFilteredStream()
-    {
-        // Dispose previous subscriptions if they exist
-        _filterSubscription?.Dispose();
-        _totalLinesSubscription?.Dispose();
-
-        Debug.WriteLine($"---> Subscribing to processor: {_reactiveFilteredLogStream.GetType().Name}");
-
-        _filterSubscription = _reactiveFilteredLogStream.FilteredUpdates
-            .ObserveOn(_uiContext) // Ensure UI thread for updates
-            .Subscribe(
-                update => ApplyFilteredUpdate(update),
-                ex => HandleProcessorError("Log Processing Error", ex)
-            );
-
-        var samplingScheduler = Scheduler.Default;
-        _totalLinesSubscription = _reactiveFilteredLogStream.TotalLinesProcessed
-            .Sample(TimeSpan.FromMilliseconds(200), samplingScheduler)
-            .ObserveOn(_uiContext) // Ensure UI thread for updates
-            .Subscribe(
-                count => ProcessTotalLinesUpdate(count),
-                ex => HandleProcessorError("Total Lines Error", ex)
-            );
-
-        _disposables.Add(_filterSubscription);
-        _disposables.Add(_totalLinesSubscription);
-    }
-
-    // Dispose processor and its subscriptions
-    private void DisposeAndClearFilteredStream()
-    {
-        Debug.WriteLine($"---> Disposing processor and subscriptions.");
-        _filterSubscription?.Dispose();
-        _totalLinesSubscription?.Dispose();
-        _filterSubscription = null;
-        _totalLinesSubscription = null;
-
-        // Assuming processor was added to _disposables when created
-        if (_reactiveFilteredLogStream != null)
-        {
-            _disposables.Remove(_reactiveFilteredLogStream); // Remove from main collection before disposing
-            _reactiveFilteredLogStream.Dispose();
-        }
-    }
-
-    private void ProcessTotalLinesUpdate(long count)
-    {
-        TotalLogLines = count;
-    }
+    // OnCurrentActiveLogSourceChanged is removed from MainViewModel. TabViewModel handles its own LogSource.
+    // CreateFilteredStream, SubscribeToFilteredStream, DisposeAndClearFilteredStream are removed. TabViewModel handles these.
+    // ProcessTotalLinesUpdate is removed. TotalLogLines is delegated.
 }

@@ -7,6 +7,7 @@ using System.Reactive.Concurrency;
 using System.Reflection;
 using System.IO; // For Stream
 using System.Windows; // For Visibility
+using System.ComponentModel; // For PropertyChangedEventArgs
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Logonaut.Common;
@@ -18,66 +19,36 @@ using ICSharpCode.AvalonEdit;
 
 namespace Logonaut.UI.ViewModels;
 
-/*
- * Implements the primary ViewModel for Logonaut's main window.
- *
- * Purpose:
- * Orchestrates the application's core functionality, acting as the central hub
- * connecting services (settings, log sources, file dialogs) with the UI (MainWindow).
- * It manages application state and exposes data and commands for data binding.
- *
- * Role & Responsibilities:
- * - Owns and manages the overall application state (current log file, filter profiles,
- *   UI settings like line numbers/timestamps, search state, busy indicators).
- * - Coordinates the log processing pipeline by interacting with ILogSource and ILogFilterProcessor.
- * - Holds the canonical LogDocument and the derived FilteredLogLines collection for UI display.
- * - Manages the active filter profile and its associated filter tree ViewModel.
- * - Exposes commands for user actions (opening files, managing filters, searching, etc.).
- * - Loads and saves application settings via ISettingsService.
- * - Mediates communication between the View (MainWindow) and the Core/Service layers,
- *   adhering to the MVVM pattern.
- *
- * Benefits:
- * - Centralizes application logic and state management.
- * - Decouples the View (MainWindow) from the Core services and models.
- * - Enhances testability by allowing the UI logic to be tested independently.
- *
- * It utilizes the CommunityToolkit.Mvvm for observable properties and commands and manages
- * its lifecycle and resources via IDisposable.
- */
 public partial class MainViewModel : ObservableObject, IDisposable, ICommandExecutor
 {
     #region Fields
 
-    // --- Services & Context ---
-    private readonly IScheduler? _backgroundScheduler; // Make it possible to inject your own background scheduler
+    private readonly IScheduler? _backgroundScheduler;
     private readonly ILogSourceProvider _sourceProvider;
-    public static readonly object LoadingToken = new();
-    public static readonly object FilteringToken = new();
-    public static readonly object BurstToken = new();
+    // Global Busy States - For operations not tied to a single tab (e.g., initial app load, global settings save)
+    public static readonly object GlobalLoadingToken = new(); 
     private readonly IFileDialogService _fileDialogService;
     private readonly ISettingsService _settingsService;
-
     private readonly SynchronizationContext _uiContext;
-    private IReactiveFilteredLogStream _reactiveFilteredLogStream; // This will be recreated when switching sources
-
-    private readonly HashSet<int> _existingOriginalLineNumbers = new HashSet<int>(); // A helper HashSet to efficiently track existing original line numbers
-
-    // --- Lifecycle Management ---
+    
     private readonly CompositeDisposable _disposables = new();
-    private IDisposable? _filterSubscription;
-    private IDisposable? _totalLinesSubscription;
-    public event EventHandler? RequestScrollToEnd; // Triggered when Auto Scroll is enabled
-    public event EventHandler<int>? RequestScrollToLineIndex; // Event passes the 0-based index to scroll to
+    public event EventHandler? RequestGlobalScrollToEnd; // If needed for a global "tail" concept
+    public event EventHandler<int>? RequestGlobalScrollToLineIndex; // If needed
 
-    #endregion // --- Fields ---
+    // The single, implicit tab for Phase 0.1
+    private readonly TabViewModel _internalTabViewModel;
 
-    #region Stats Properties
+    public ThemeViewModel Theme { get; }
 
-    [ObservableProperty] private long _totalLogLines;
-    public int FilteredLogLinesCount => FilteredLogLines.Count;
+    #endregion
 
-    #endregion // --- Stats Properties ---
+    #region Stats Properties (Now Delegated or Global)
+
+    // These now delegate to the _internalTabViewModel for Phase 0.1
+    public long TotalLogLines => _internalTabViewModel.TotalLogLines;
+    public int FilteredLogLinesCount => _internalTabViewModel.FilteredLogLinesCount;
+
+    #endregion
 
     #region Constructor
 
@@ -94,39 +65,67 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         _uiContext = uiContext ?? SynchronizationContext.Current ?? throw new InvalidOperationException("Could not capture or receive a valid SynchronizationContext.");
         _backgroundScheduler = backgroundScheduler;
 
-        // Initialize with FileLogSource as the default
-        _fileLogSource = _sourceProvider.CreateFileLogSource();
-        CurrentActiveLogSource = _fileLogSource; // Start with file source active
-        _disposables.Add(_fileLogSource); // Add file source to disposables
-
-        // Create the initial processor with the file source
-        _reactiveFilteredLogStream = CreateFilteredStream(CurrentActiveLogSource);
-        _disposables.Add(_reactiveFilteredLogStream); // Add processor to disposables
-        SubscribeToFilteredStream(); // Subscribe to the initial processor
-
         UndoCommand = new RelayCommand(Undo, CanUndo);
         RedoCommand = new RelayCommand(Redo, CanRedo);
 
-        CurrentBusyStates.CollectionChanged += CurrentBusyStates_CollectionChanged;
+        CurrentGlobalBusyStates.CollectionChanged += CurrentGlobalBusyStates_CollectionChanged;
         _disposables.Add(Disposable.Create(() =>
         {
-            CurrentBusyStates.CollectionChanged -= CurrentBusyStates_CollectionChanged;
+            CurrentGlobalBusyStates.CollectionChanged -= CurrentGlobalBusyStates_CollectionChanged;
         }));
 
         Theme = new ThemeViewModel();
-        LoadPersistedSettings(); // Loads basic settings, not files yet
 
-        PopulateFilterPalette();
+        // STEP 1: Initialize _internalTabViewModel FIRST
+        // It needs a default AssociatedFilterProfileName. We can't get it from ActiveFilterProfile yet,
+        // so use a sensible default like "Default". It will be updated shortly by OnActiveFilterProfileChanged.
+        _internalTabViewModel = new TabViewModel(
+            initialHeader: "Main Log",
+            initialAssociatedProfileName: "Default",
+            initialSourceType: SourceType.Pasted,
+            initialSourceIdentifier: null,
+            _sourceProvider,
+            this,
+            _uiContext,
+            _backgroundScheduler
+        );
+        _disposables.Add(_internalTabViewModel);
+
+        _internalTabViewModel.RequestScrollToEnd += (s, e) => RequestGlobalScrollToEnd?.Invoke(s, e);
+        _internalTabViewModel.RequestScrollToLineIndex += (s, e) => RequestGlobalScrollToLineIndex?.Invoke(s, e);
+        _internalTabViewModel.PropertyChanged += InternalTabViewModel_PropertyChanged;
+        _disposables.Add(Disposable.Create(() => _internalTabViewModel.PropertyChanged -= InternalTabViewModel_PropertyChanged));
+
+        // STEP 2: Now load settings, which will set ActiveFilterProfile and trigger its OnChanged ---
+        // OnActiveFilterProfileChanged will then correctly update _internalTabViewModel.AssociatedFilterProfileName
+        LoadPersistedSettings();
+
+        // STEP 3: "Activate" the internal tab
+        // Now that ActiveFilterProfile is set, _internalTabViewModel's AssociatedFilterProfileName
+        // should have been correctly updated by OnActiveFilterProfileChanged.
+        // Its ActivateAsync will use its (now correct) AssociatedFilterProfileName.
+        _ = _internalTabViewModel.ActivateAsync(
+            this.AvailableProfiles,
+            this.ContextLines,
+            this.HighlightTimestamps,
+            this.ShowLineNumbers,
+            this.IsAutoScrollEnabled
+            ).ContinueWith(t => {
+                if (t.IsFaulted) Debug.WriteLine($"Error activating internal tab: {t.Exception}");
+            });
+
+        PopulateFilterPalette(); // Remains in MainViewModel as palette is global
 
         ToggleAboutOverlayCommand = new RelayCommand(ExecuteToggleAboutOverlay);
         LoadRevisionHistory();
     }
 
-    #region About command
+    #endregion
 
+    #region About command
     [ObservableProperty] private bool _isAboutOverlayVisible;
     [ObservableProperty] private string? _aboutRevisionHistory;
-    public string ApplicationVersion => Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0"; // Shows Major.Minor.Build
+    public string ApplicationVersion => Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0";
     public IRelayCommand ToggleAboutOverlayCommand { get; }
 
     private void ExecuteToggleAboutOverlay()
@@ -138,7 +137,6 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
             LoadRevisionHistory();
         }
     }
-
     private void LoadRevisionHistory()
     {
         try
@@ -149,24 +147,15 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
             // For Logonaut.UI project, if RevisionHistory.txt is in the root, it would be "Logonaut.UI.RevisionHistory.txt"
             // If it's in a "Resources" subfolder, it might be "Logonaut.UI.Resources.RevisionHistory.txt"
             string resourceName = "Logonaut.UI.RevisionHistory.txt";
-
-            // You can list all resource names to find the correct one during debugging:
-            // string[] names = assembly.GetManifestResourceNames();
-            // Debug.WriteLine("Available resources: " + string.Join(", ", names));
-
-            using (Stream? stream = assembly.GetManifestResourceStream(resourceName))
+            using Stream? stream = assembly.GetManifestResourceStream(resourceName);
+            if (stream == null)
             {
-                if (stream == null)
-                {
-                    AboutRevisionHistory = "Error: Revision history resource not found.";
-                    Debug.WriteLine($"Error: Could not find embedded resource '{resourceName}'");
-                    return;
-                }
-                using (StreamReader reader = new StreamReader(stream))
-                {
-                    AboutRevisionHistory = reader.ReadToEnd();
-                }
+                AboutRevisionHistory = "Error: Revision history resource not found.";
+                Debug.WriteLine($"Error: Could not find embedded resource '{resourceName}'");
+                return;
             }
+            using StreamReader reader = new StreamReader(stream);
+            AboutRevisionHistory = reader.ReadToEnd();
         }
         catch (Exception ex)
         {
@@ -174,162 +163,164 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
             Debug.WriteLine($"Exception loading revision history: {ex}");
         }
     }
+    #endregion
 
-    #endregion // About command
+    const int MaxPaletteDisplayTextLength = 20;
 
-    const int MaxPaletteDisplayTextLength = 20; // Or whatever fits your UI
+    // --- Global Busy State ---
+    public ObservableCollection<object> CurrentGlobalBusyStates { get; } = new();
+    public bool IsGloballyLoading => CurrentGlobalBusyStates.Any(); // Simplified global loading state
 
-    private void CurrentBusyStates_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    private void CurrentGlobalBusyStates_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        // Whenever the collection changes (add, remove, reset),
-        // notify the UI that the IsLoading property *might* have changed.
-        // The binding system will then re-query the IsLoading getter.
-        OnPropertyChanged(nameof(IsLoading));
+        OnPropertyChanged(nameof(IsGloballyLoading));
     }
 
-    #endregion // --- Constructor ---
-
-    #region Highlighted Line State
-
-    // The 0-based index of the highlighted line within the FilteredLogLines collection.
-    // Bound to the PersistentLineHighlightRenderer.HighlightedLineIndex DP.
-    [ObservableProperty] private int _highlightedFilteredLineIndex = -1;
-
-    // The original line number (1-based) corresponding to the highlighted line.
-    // Used to restore selection after re-filtering.
-    [ObservableProperty] private int _highlightedOriginalLineNumber = -1;
-
-    // Update original line number whenever the filtered index changes
-    partial void OnHighlightedFilteredLineIndexChanged(int value)
+    private void InternalTabViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (value >= 0 && value < FilteredLogLines.Count)
+        if (sender != _internalTabViewModel) return; // Ensure it's our internal tab
+
+        if (e.PropertyName == nameof(TabViewModel.IsLoading))
         {
-            HighlightedOriginalLineNumber = FilteredLogLines[value].OriginalLineNumber;
+            // The tab's loading state changed. This affects CanPerformActionWhileNotLoading.
+            // Re-evaluate CanExecute for commands that use it.
+            _uiContext.Post(_ =>
+            {
+                (OpenLogFileCommand as IAsyncRelayCommand)?.NotifyCanExecuteChanged();
+                ToggleSimulatorCommand.NotifyCanExecuteChanged(); // This is IRelayCommand
+                (RestartSimulatorCommand as IRelayCommand)?.NotifyCanExecuteChanged();
+                (ClearLogCommand as IRelayCommand)?.NotifyCanExecuteChanged();
+                // GenerateBurstCommand's CanExecute is different (CanGenerateBurst),
+                // but if Simulator becomes active/inactive, IsSimulatorRunning changes,
+                // which should trigger GenerateBurstCommand.NotifyCanExecuteChanged() via NotifySimulatorCommandsCanExecuteChanged().
+                // However, to be safe, or if CanGenerateBurst also checks general loading:
+                (GenerateBurstCommand as IAsyncRelayCommand)?.NotifyCanExecuteChanged();
+
+            }, null);
+            Debug.WriteLine($"---> MainViewModel: Tab IsLoading changed to {_internalTabViewModel.IsLoading}. Notified relevant CanExecuteChanged.");
         }
-        else
+        else if (e.PropertyName == nameof(TabViewModel.TotalLogLines))
         {
-            HighlightedOriginalLineNumber = -1; // No valid line highlighted
+            OnPropertyChanged(nameof(TotalLogLines)); // Forward notification for UI binding to MainViewModel.TotalLogLines
         }
+        // Add other property forwarding if necessary
+        // else if (e.PropertyName == nameof(TabViewModel.FilteredLogLinesCount))
+        // {
+        //     OnPropertyChanged(nameof(FilteredLogLinesCount));
+        // }
+        // For FilteredLogLinesCount, since it's a simple getter in MainViewModel,
+        // it will re-evaluate when something else causes a MainViewModel.OnPropertyChanged.
+        // If you need it to update more proactively, TabViewModel would need to raise PropertyChanged for it too.
+        // TabViewModel does not currently have FilteredLogLinesCount, but it does for TotalLogLines.
+        // Let's make TabViewModel explicitly raise PropertyChanged for FilteredLogLinesCount.
+
+        // In TabViewModel.cs, after FilteredLogLines is modified:
+        // OnPropertyChanged(nameof(FilteredLogLinesCount));
+        // This is already done in ApplyFilteredUpdateToThisTab.
+    }
+    #region Delegated Properties and Commands for UI Binding (Phase 0.1)
+
+    // These properties allow existing UI bindings to MainViewModel to continue working by delegating to _internalTabViewModel.
+    // In Phase 1, UI bindings will change to MainViewModel.ActiveTab.Property.
+
+    public ObservableCollection<FilteredLogLine> FilteredLogLines => _internalTabViewModel.FilteredLogLines;
+    public ObservableCollection<IFilter> FilterHighlightModels => _internalTabViewModel.FilterHighlightModels; // For AvalonEdit
+    
+    public int HighlightedFilteredLineIndex
+    {
+        get => _internalTabViewModel.HighlightedFilteredLineIndex;
+        set => _internalTabViewModel.HighlightedFilteredLineIndex = value;
+    }
+    public int HighlightedOriginalLineNumber 
+    {
+        get => _internalTabViewModel.HighlightedOriginalLineNumber;
+        set => _internalTabViewModel.HighlightedOriginalLineNumber = value;
     }
 
-    // Update original line number whenever the filtered index changes
-    // ALSO: Update the Target Input box when a line is clicked (if not focused)
-    partial void OnHighlightedOriginalLineNumberChanged(int value)
+    public string TargetOriginalLineNumberInput 
     {
-        // Only update the input box if the user isn't actively editing it.
-        // We need a way to know if the TextBox has focus. We can approximate
-        // by checking if the new value matches the input, but a dedicated
-        // IsFocused property (updated via triggers in XAML) would be more robust.
-        // For simplicity now, let's just update it. The user might lose input,
-        // which is a minor inconvenience.
-        TargetOriginalLineNumberInput = (value > 0) ? value.ToString() : string.Empty;
+        get => _internalTabViewModel.TargetOriginalLineNumberInput;
+        set => _internalTabViewModel.TargetOriginalLineNumberInput = value;
     }
-
-    #endregion // --- Highlighted Line State ---
-
-    #region Jump To Line Command
-
-    [RelayCommand(CanExecute = nameof(CanJumpToLine))]
-    private async Task JumpToLine() // Make async for delay
+    public string? JumpStatusMessage 
     {
-        IsJumpTargetInvalid = false; // Reset feedback
-        JumpStatusMessage = string.Empty;
+        get => _internalTabViewModel.JumpStatusMessage;
+        // set => _internalTabViewModel.JumpStatusMessage = value; // Usually read-only from VM side
+    }
+    public bool IsJumpTargetInvalid 
+    {
+        get => _internalTabViewModel.IsJumpTargetInvalid;
+        // set => _internalTabViewModel.IsJumpTargetInvalid = value; // Usually read-only from VM side
+    }
+    public IRelayCommand JumpToLineCommand => _internalTabViewModel.JumpToLineCommand;
 
-        if (!int.TryParse(TargetOriginalLineNumberInput, out int targetLineNumber) || targetLineNumber <= 0)
+
+    public string SearchText 
+    {
+        get => _internalTabViewModel.SearchText;
+        set => _internalTabViewModel.SearchText = value;
+    }
+    public bool IsCaseSensitiveSearch // This UI setting is global, but applies to the tab's search
+    {
+        get => _internalTabViewModel.IsCaseSensitiveSearch;
+        set 
         {
-            JumpStatusMessage = "Invalid line number.";
-            await TriggerInvalidInputFeedback();
-            return;
-        }
-
-        // Find the line in the *current* filtered list
-        var foundLine = FilteredLogLines
-            .Select((line, index) => new { line.OriginalLineNumber, Index = index })
-            .FirstOrDefault(item => item.OriginalLineNumber == targetLineNumber);
-
-        if (foundLine != null)
-        {
-            // Found the line in the filtered view!
-
-            // 1. Set the highlighted index (for the visual highlight)
-            HighlightedFilteredLineIndex = foundLine.Index;
-
-            // 2. Explicitly request the View to scroll to this index
-            RequestScrollToLineIndex?.Invoke(this, foundLine.Index); // <<< ADD THIS
-        }
-        else
-        {
-            // Line exists in original log but not in filtered view
-            // OR line number is beyond the original log's total lines
-            // (We can't easily distinguish without checking LogDoc count, which might be large)
-            JumpStatusMessage = $"Line {targetLineNumber} not found in filtered view.";
-            await TriggerInvalidInputFeedback();
-            // No need to change HighlightedFilteredLineIndex if not found
+            if (_internalTabViewModel.IsCaseSensitiveSearch != value)
+            {
+                _internalTabViewModel.IsCaseSensitiveSearch = value;
+                OnPropertyChanged(); // Notify UI if MainViewModel has direct binding
+                SaveCurrentSettingsDelayed(); // Global setting change
+            }
         }
     }
+    public ObservableCollection<SearchResult> SearchMarkers => _internalTabViewModel.SearchMarkers;
+    public int CurrentMatchOffset => _internalTabViewModel.CurrentMatchOffset;
+    public int CurrentMatchLength => _internalTabViewModel.CurrentMatchLength;
+    public string SearchStatusText => _internalTabViewModel.SearchStatusText;
+    public IRelayCommand PreviousSearchCommand => _internalTabViewModel.PreviousSearchCommand;
+    public IRelayCommand NextSearchCommand => _internalTabViewModel.NextSearchCommand;
+    
+    // For BusyIndicator specific to the tab's loading/filtering
+    public ObservableCollection<object> CurrentBusyStates => _internalTabViewModel.CurrentBusyStates;
+    public bool IsLoading => _internalTabViewModel.IsLoading;
 
-    private bool CanJumpToLine() => !string.IsNullOrWhiteSpace(TargetOriginalLineNumberInput);
 
-    private async Task TriggerInvalidInputFeedback()
-    {
-        IsJumpTargetInvalid = true;
-        await Task.Delay(2500); // Use Task.Delay
-        if (IsJumpTargetInvalid)
-        {
-            IsJumpTargetInvalid = false;
-            JumpStatusMessage = string.Empty;
-        }
-    }
-
-    #endregion // Jump To Line Command
-
-    #region UI State Management
-
-    public ThemeViewModel Theme { get; }
-
-    // Central store for all original log lines, passed to processor but owned here.
-    // The content is managed by current class.
-    public LogDocument LogDoc { get; } = new();
-
-    // Collection of filtered lines currently displayed in the UI.
-    public ObservableCollection<FilteredLogLine> FilteredLogLines { get; } = new();
-
-    // While not pure MVVM, the simplest way for this specific performance optimization is to allow the ViewModel to interact directly (but safely via the dispatcher)
-    // with the TextEditor's document. This isn't always available, for example when running unit tests.
-    private TextEditor? _logEditorInstance;
+    // Editor instance management
+    private TextEditor? _logEditorInstance; // MainViewModel still holds this, but passes to TabViewModel
     public void SetLogEditorInstance(TextEditor editor)
     {
         _logEditorInstance = editor;
-        if (FilteredLogLines.Any())
-        {
-            ScheduleLogTextUpdate(FilteredLogLines);
-        }
+        _internalTabViewModel.SetLogEditorInstance(editor);
     }
 
-    // Collection of filter patterns (substrings/regex) for highlighting.
-    // Note: This state is derived by traversing the *active* FilterProfile.
-    [ObservableProperty] private ObservableCollection<string> _filterSubstrings = new();
+    // CurrentLogFilePath is a bit special. MainViewModel still shows it globally.
+    // TabViewModel.SourceIdentifier will hold the actual path for its source.
+    [ObservableProperty] private string? _currentGlobalLogFilePathDisplay;
 
-    // Observable collection holding tokens representing active background tasks.
-    // Bound to the UI's BusyIndicator; the indicator spins if this collection is not empty.
-    // Add/remove specific tokens (e.g., LoadingToken) to control the busy state.
-    public ObservableCollection<object> CurrentBusyStates { get; } = new();
-    public bool IsLoading => CurrentBusyStates.Contains(LoadingToken) || CurrentBusyStates.Contains(BurstToken);
+
+    #endregion
+
 
     private void LoadPersistedSettings()
     {
+        // Add GlobalLoadingToken:
+        _uiContext.Post(_ => CurrentGlobalBusyStates.Add(GlobalLoadingToken), null);
+
         LogonautSettings settings = _settingsService.LoadSettings();
+        LoadFilterProfiles(settings); // This sets ActiveFilterProfile
+        
+        // After profiles are loaded and ActiveFilterProfile is known,
+        // update the _internalTabViewModel's AssociatedFilterProfileName
+        if (ActiveFilterProfile != null)
+        {
+            _internalTabViewModel.AssociatedFilterProfileName = ActiveFilterProfile.Name;
+        }
 
-        // --- Load Filter Profiles FIRST ---
-        // This ensures ActiveFilterProfile is set before any saves are triggered.
-        LoadFilterProfiles(settings);
-
-        // --- Load Display/Search Settings ---
-        // Setting these might trigger saves, which is now safe.
         _lastOpenedFolderPath = settings.LastOpenedFolderPath;
-
-        LoadUiSettings(settings);
+        LoadUiSettings(settings); // Loads ContextLines, ShowLineNumbers etc.
         LoadSimulatorPersistedSettings(settings);
+
+        _uiContext.Post(_ => CurrentGlobalBusyStates.Remove(GlobalLoadingToken), null);
     }
 
     private void SaveCurrentSettingsDelayed() => _uiContext.Post(_ => SaveCurrentSettings(), null);
@@ -338,367 +329,84 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
     {
         var settingsToSave = new LogonautSettings
         {
-            // --- Save Display/Search Settings ---
             LastOpenedFolderPath = this._lastOpenedFolderPath,
         };
-
         SaveUiSettings(settingsToSave);
         SaveSimulatorSettings(settingsToSave);
-
-        // --- Save Filter Profiles ---
-        SaveFilterProfiles(settingsToSave); // Handles LastActiveProfileName and the list
-
-        // --- Save to Service ---
+        SaveFilterProfiles(settingsToSave);
         _settingsService.SaveSettings(settingsToSave);
     }
-    #endregion // --- UI State Management ---
-
-    #region Command Handling
 
     private bool CanPerformActionWhileNotLoading()
     {
-        // Check if the loading token is NOT present
-        return !CurrentBusyStates.Contains(LoadingToken);
+        bool tabIsLoading = _internalTabViewModel.IsLoading; // Call the getter
+        bool mainIsLoading = IsGloballyLoading;
+        bool canPerform = !mainIsLoading && !tabIsLoading;
+        Debug.WriteLine($"---> MainViewModel.CanPerformActionWhileNotLoading: Result={canPerform}. MainLoading={mainIsLoading}, TabLoading={tabIsLoading}");
+        return canPerform;
     }
 
-    // Helper method to find the index in FilteredLogLines containing a character offset
-    // Note: This is inefficient for large logs. See comments in SelectAndScrollToCurrentMatch.
-    private int FindFilteredLineIndexContainingOffset(int offset)
-    {
-        int currentOffset = 0;
-        for (int i = 0; i < FilteredLogLines.Count; i++)
-        {
-            int lineLength = FilteredLogLines[i].Text.Length;
-            int lineEndOffset = currentOffset + lineLength;
-            if (offset >= currentOffset && offset <= lineEndOffset) return i;
-            currentOffset = lineEndOffset + Environment.NewLine.Length;
-        }
-        return -1;
-    }
-
-    #endregion // --- Command Handling ---
-
-    #region Orchestration & Updates
-
-    private void AddLineToLogDocument(string line) => LogDoc.AppendLine(line);
+    #region Orchestration & Updates (Altered)
 
     private void TriggerFilterUpdate()
     {
-        Debug.WriteLine($"---> TriggerFilterUpdate START"); // <<< ADDED
-
-        // Ensure token isn't added multiple times if trigger fires rapidly
-        _uiContext.Post(_ =>
+        Debug.WriteLine($"---> MainViewModel: TriggerFilterUpdate START");
+        
+        IFilter? filterToApply = ActiveFilterProfile?.Model?.RootFilter ?? new TrueFilter();
+        
+        // Update FilterHighlightModels on the internal tab
+        var newFilterModels = new ObservableCollection<IFilter>();
+        if (ActiveFilterProfile?.RootFilterViewModel != null)
         {
-            if (!CurrentBusyStates.Contains(FilteringToken))
-            {
-                CurrentBusyStates.Add(FilteringToken);
-                Debug.WriteLine($"---> TriggerFilterUpdate: Added FilteringToken"); // <<< ADDED
-            }
-        }, null);
+            TraverseFilterTreeForHighlighting(ActiveFilterProfile.RootFilterViewModel, newFilterModels);
+        }
+        _internalTabViewModel.FilterHighlightModels = newFilterModels; // Pass to tab
 
-        _uiContext.Post(_ =>
-        {
-            // --- Log the filter being sent ---
-            IFilter? filterToApply = ActiveFilterProfile?.Model?.RootFilter; // Get filter from model
-            string filterTypeName = filterToApply?.GetType().Name ?? "null (TrueFilter assumed)";
-            Debug.WriteLine($"---> TriggerFilterUpdate: Posting call to UpdateFilterSettings. Filter Type: {filterTypeName}, Context: {ContextLines}"); // <<< ADDED
-            // ---
-
-            _reactiveFilteredLogStream.UpdateFilterSettings(filterToApply ?? new TrueFilter(), ContextLines);
-            UpdateFilterSubstrings(); // This reads the tree, might be good to log its result too if needed
-        }, null);
-
-        Debug.WriteLine($"---> TriggerFilterUpdate END"); // <<< ADDED
+        // Tell the internal tab to update its filters
+        _internalTabViewModel.ApplyFiltersFromProfile(this.AvailableProfiles, this.ContextLines);
+        
+        UpdateActiveFilterMatchingStatus(); // This uses _internalTabViewModel.FilteredLogLines
+        Debug.WriteLine($"---> MainViewModel: TriggerFilterUpdate END");
     }
-
+    
+    // GetCurrentDocumentText for MainViewModel (e.g., for filter matching status)
+    // should now get it from the internal tab's perspective.
     private string GetCurrentDocumentText()
     {
-        // Priority 1: Use the actual editor document if available (running in UI)
-        // Reading Text property is generally thread-safe.
-        if (_logEditorInstance?.Document != null) return _logEditorInstance.Document.Text;
-        // Priority 2: Fallback for testing or before editor is initialized.
-        // Simulate the document content by joining the FilteredLogLines.
-        // This allows internal logic like search to work correctly in unit tests.
-        if (FilteredLogLines.Any())
+        // In Phase 0.1, the editor instance is still managed by MainWindow and passed down.
+        // TabViewModel will have its own GetCurrentDocumentTextForSearch.
+        // This one is for MainViewModel's direct needs if any, like UpdateActiveFilterMatchingStatus.
+        if (_internalTabViewModel.FilteredLogLines.Any())
         {
-            var sb = new System.Text.StringBuilder();
-            bool first = true;
-            foreach (var line in FilteredLogLines)
-            {
-                if (!first) sb.Append(Environment.NewLine);
-                sb.Append(line.Text);
-                first = false;
-                Debug.WriteLine($"GetCurrentDocumentText (Fallback): Appended '{line.Text}'");
-            }
-            string result = sb.ToString();
-            Debug.WriteLine($"GetCurrentDocumentText (Fallback): Returning '{result}'");
-            return result;
+            // This mirrors TabViewModel's fallback if its editor isn't set.
+            return string.Join(Environment.NewLine, _internalTabViewModel.FilteredLogLines.Select(fll => fll.Text));
         }
-        Debug.WriteLine($"GetCurrentDocumentText (Fallback): Returning Empty String.");
         return string.Empty;
     }
 
-    /*
-    * Processes updates from the LogFilterProcessor to update the UI state.
-    *
-    * Responsibilities include:
-    *   - Updating the FilteredLogLines collection based on update type.
-    *   - Scheduling direct TextEditor.Document updates (Append/Replace) on the UI thread.
-    *   - Managing busy indicators (FilteringToken, LoadingToken).
-    *   - Preserving highlighted line selection during Replace updates.
-    *   - Ensuring unique original line numbers during Append updates.
-    *
-    * Accepts explicit FilteredUpdateBase subtypes (ReplaceFilteredUpdate or AppendFilteredUpdate).
-    */
-    private void ApplyFilteredUpdate(FilteredUpdateBase update)
-    {
-        bool wasInitialLoad = CurrentBusyStates.Contains(LoadingToken);
-        bool linesAdded = false; // Track if any lines were actually added in append
+    // ApplyFilteredUpdate is now largely handled by TabViewModel.
+    // MainViewModel's role here diminishes significantly for Phase 0.1.
+    // The subscriptions in MainViewModel's constructor to _reactiveFilteredLogStream are removed.
+    // TabViewModel will have its own subscriptions.
 
-        if (update is AppendFilteredUpdate appendUpdate)
-        {
-            var linesActuallyAdded = new List<FilteredLogLine>(); // Store only the truly new lines for editor append
-
-            // --- Check for duplicates before adding ---
-            foreach (var lineToAdd in appendUpdate.Lines)
-            {
-                // Add only if the original line number is not already present
-                if (_existingOriginalLineNumbers.Add(lineToAdd.OriginalLineNumber))
-                {
-                    FilteredLogLines.Add(lineToAdd); // Add to UI collection
-                    linesActuallyAdded.Add(lineToAdd); // Add to list for editor update
-                    linesAdded = true;
-                }
-                // Optional: Handle the case where a line previously added as context now arrives as a match?
-                // For now, just preventing duplicates is the main goal. We could potentially update
-                // the IsContextLine flag on the existing entry if needed, but it adds complexity.
-            }
-
-            // Only proceed if lines were actually added
-            if (linesAdded)
-            {
-                OnPropertyChanged(nameof(FilteredLogLinesCount));
-                ScheduleLogTextAppend(linesActuallyAdded);
-                UpdateActiveFilterMatchingStatus(); // Update active matching status after appends
-                if (IsAutoScrollEnabled) RequestScrollToEnd?.Invoke(this, EventArgs.Empty);
-            }
-
-            _uiContext.Post(_ => { CurrentBusyStates.Remove(FilteringToken); }, null);
-        }
-        else if (update is ReplaceFilteredUpdate replaceUpdate)
-        {
-            int originalLineToRestore = HighlightedOriginalLineNumber;
-
-            // --- Clear tracking set before replacing ---
-            _existingOriginalLineNumbers.Clear();
-
-            ReplaceFilteredLines(replaceUpdate.Lines); // This clears FilteredLogLines
-
-            // --- Re-populate tracking set ---
-            foreach (var line in replaceUpdate.Lines)
-            {
-                _existingOriginalLineNumbers.Add(line.OriginalLineNumber);
-            }
-
-            ScheduleLogTextUpdate(FilteredLogLines); // Update editor with the full new text
-            UpdateActiveFilterMatchingStatus();      // Update IsActivelyMatching for filters
-
-            if (originalLineToRestore > 0)
-            {
-                int newIndex = FilteredLogLines
-                    .Select((line, index) => new { line.OriginalLineNumber, Index = index })
-                    .FirstOrDefault(item => item.OriginalLineNumber == originalLineToRestore)?.Index ?? -1;
-                _uiContext.Post(idx => { HighlightedFilteredLineIndex = (int)idx!; }, newIndex);
-            }
-            else
-            {
-                // No line to restore, ensure highlight is cleared
-                _uiContext.Post(_ => { HighlightedFilteredLineIndex = -1; }, null);
-            }
-
-            _uiContext.Post(_ =>
-            {
-                CurrentBusyStates.Remove(FilteringToken);
-                // Only remove LoadingToken if this update signals the *completion*
-                // of the initial load processing AND we were actually in the loading state.
-                if (wasInitialLoad && replaceUpdate.IsInitialLoadProcessingComplete)
-                {
-                    CurrentBusyStates.Remove(LoadingToken);
-                    Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} ApplyFilteredUpdate: LoadingToken removed (InitialLoadComplete).");
-                }
-            }, null);
-        }
-        else
-        {
-            throw new InvalidOperationException($"Unknown update type: {update.GetType().Name}");
-        }
-    }
-
-    private void ScheduleLogTextAppend(IReadOnlyList<FilteredLogLine> linesToAppend)
-    {
-        // Ensure we work with a copy in case the original list changes
-        var linesSnapshot = linesToAppend.ToList();
-        _uiContext.Post(state =>
-        {
-            var lines = (List<FilteredLogLine>)state!; // Cast state first
-
-            // Attempt to append to editor if available
-            if (_logEditorInstance?.Document != null)
-                AppendLogTextInternal(lines);
-
-            // Update search matches *after* FilteredLogLines is updated (which happens before this Post)
-            // and regardless of whether editor append happened. This can haååen when running from unit tests.
-            UpdateSearchMatches(); // <<< Moved outside the editor check
-
-        }, linesSnapshot);
-    }
-
-    private void AppendLogTextInternal(IReadOnlyList<FilteredLogLine> linesToAppend)
-    {
-        // Guard against null editor or document, or empty append list
-        if (_logEditorInstance?.Document == null || !linesToAppend.Any()) return;
-
-        try
-        {
-            var sb = new System.Text.StringBuilder();
-            bool needsLeadingNewline = false;
-
-            // Check if editor has content AND if it doesn't already end with a newline
-            if (_logEditorInstance.Document.TextLength > 0)
-            {
-                // Avoid GetText if possible for performance, check last char directly
-                char lastChar = _logEditorInstance.Document.GetCharAt(_logEditorInstance.Document.TextLength - 1);
-                if (lastChar != '\n' && lastChar != '\r') // Simple check, might need refinement for \r\n vs \n
-                {
-                    needsLeadingNewline = true;
-                }
-            }
-
-            for (int i = 0; i < linesToAppend.Count; i++)
-            {
-                // Add newline BEFORE the line if needed (either leading or between lines)
-                if (needsLeadingNewline || i > 0)
-                {
-                    sb.Append(Environment.NewLine);
-                }
-                sb.Append(linesToAppend[i].Text);
-            }
-
-            string textToAppend = sb.ToString();
-            // Use BeginUpdate/EndUpdate for potentially large appends
-            _logEditorInstance.Document.BeginUpdate();
-            _logEditorInstance.Document.Insert(_logEditorInstance.Document.TextLength, textToAppend);
-            _logEditorInstance.Document.EndUpdate();
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"Error appending text to AvalonEdit: {ex.Message}");
-            // Consider how to handle errors here - maybe log to a status bar?
-        }
-    }
-
-    // Helper methods called by ApplyFilteredUpdate to modify UI collections.
-    private void AddFilteredLines(IReadOnlyList<FilteredLogLine> linesToAdd)
-    {
-        foreach (var line in linesToAdd) FilteredLogLines.Add(line);
-        OnPropertyChanged(nameof(FilteredLogLinesCount));
-    }
-
-    private void ReplaceFilteredLines(IReadOnlyList<FilteredLogLine> newLines)
-    {
-        ResetSearchState();
-        FilteredLogLines.Clear();
-        foreach (var line in newLines) FilteredLogLines.Add(line);
-        OnPropertyChanged(nameof(FilteredLogLinesCount));
-    }
-
-    // Schedules the LogText update to run after current UI operations.
-    private void ScheduleLogTextUpdate(IReadOnlyList<FilteredLogLine> relevantLines)
-    {
-        // Clone relevantLines if it might be modified elsewhere before Post executes?
-        // ObservableCollection snapshot for Replace is safe. List passed for Append is safe.
-        var linesSnapshot = relevantLines.ToList(); // Create shallow copy for safety
-        _uiContext.Post(state =>
-        {
-            var lines = (List<FilteredLogLine>)state!; // Cast state first
-
-            // Attempt to update editor if available
-            if (_logEditorInstance?.Document != null)
-            {
-                ReplaceLogTextInternal(lines);
-            }
-        }, linesSnapshot);
-    }
-
-    private void ReplaceLogTextInternal(IReadOnlyList<FilteredLogLine> allLines)
-    {
-        if (_logEditorInstance?.Document == null) return;
-
-        // Generate the full text string *once*
-        // Use StringBuilder for efficiency with many lines
-        var sb = new System.Text.StringBuilder();
-        bool first = true;
-        foreach (var line in allLines)
-        {
-            if (!first) { sb.Append(Environment.NewLine); }
-            sb.Append(line.Text);
-            first = false;
-        }
-
-        // Set the document text (must be on UI thread)
-        _logEditorInstance.Document.Text = sb.ToString();
-
-        // No auto-scroll on replace typically
-    }
-
-    private void HandleProcessorError(string contextMessage, Exception ex)
-    {
-        Debug.WriteLine($"{contextMessage}: {ex}");
-        _uiContext.Post(_ =>
-        {
-            CurrentBusyStates.Clear();
-            MessageBox.Show($"Error processing logs: {ex.Message}", "Processing Error", MessageBoxButton.OK, MessageBoxImage.Warning);
-        }, null);
-    }
-
-
-    #endregion // --- Orchestration & Updates ---
-
-    #region Jump To Line State
-    [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(JumpToLineCommand))]
-    private string _targetOriginalLineNumberInput = string.Empty;
-
-    [ObservableProperty]
-    private string? _jumpStatusMessage;
-
-    [ObservableProperty]
-    private bool _isJumpTargetInvalid;
     #endregion
 
     #region Lifecycle Management ---
-    public void Dispose()
-    {
-        Dispose(true);
-        GC.SuppressFinalize(this);
-    }
+    public void Dispose() { Dispose(true); GC.SuppressFinalize(this); }
     protected virtual void Dispose(bool disposing)
     {
         if (disposing)
         {
             _activeProfileNameSubscription?.Dispose();
-            _disposables.Dispose(); // Disposes processor, subscriptions, and log source
+            _disposables.Dispose(); // Disposes _internalTabViewModel
         }
     }
-
-    // Called explicitly from the Window's Closing event.
     public void Cleanup()
     {
-        // 1. Clear the busy state collection (good practice)
-        _uiContext.Post(_ => CurrentBusyStates.Clear(), null);
+        _uiContext.Post(_ => CurrentGlobalBusyStates.Clear(), null);
         SaveCurrentSettings();
-        CurrentActiveLogSource?.StopMonitoring(); // Explicitly stop monitoring before disposing
-        Dispose(); // Calls the main Dispose method which cleans everything else
+        // _internalTabViewModel.LogSource?.StopMonitoring(); // TabViewModel's Dispose/Deactivate handles this
+        Dispose();
     }
-    #endregion // --- Lifecycle Management ---
+    #endregion
 }

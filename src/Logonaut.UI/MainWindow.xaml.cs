@@ -102,8 +102,8 @@ public partial class MainWindow : Window, IDisposable
         _viewModel = viewModel;
 
         _viewModel.PropertyChanged += ViewModel_PropertyChanged;
-        _viewModel.RequestScrollToEnd += ViewModel_RequestScrollToEnd;
-        _viewModel.RequestScrollToLineIndex += ViewModel_RequestScrollToLineIndex;
+        _viewModel.RequestGlobalScrollToEnd += ViewModel_RequestScrollToEnd;
+        _viewModel.RequestGlobalScrollToLineIndex += ViewModel_RequestScrollToLineIndex;
 
         // Apply dark title bar if supported
         if (IsWindows10OrGreater())
@@ -147,8 +147,8 @@ public partial class MainWindow : Window, IDisposable
             if (_viewModel != null)
             {
                 _viewModel.PropertyChanged -= ViewModel_PropertyChanged;
-                _viewModel.RequestScrollToEnd -= ViewModel_RequestScrollToEnd;
-                _viewModel.RequestScrollToLineIndex -= ViewModel_RequestScrollToLineIndex;
+                _viewModel.RequestGlobalScrollToEnd -= ViewModel_RequestScrollToEnd;
+                _viewModel.RequestGlobalScrollToLineIndex -= ViewModel_RequestScrollToLineIndex;
                 _viewModel.Cleanup();
             }
 
