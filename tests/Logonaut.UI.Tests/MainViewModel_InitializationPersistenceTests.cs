@@ -1,11 +1,11 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Logonaut.Filters;
 using Logonaut.TestUtils;
-using Logonaut.Common; // For LogonautSettings
-using Logonaut.UI.ViewModels; // For MainViewModel
-using System.Windows; // For Visibility
-using System.Linq; // For LINQ
-using Logonaut.Core; // For FilteredUpdateBase etc.
+using Logonaut.Common; // For LogonautSettings 
+using Logonaut.UI.ViewModels; // For MainViewModel 
+using System.Windows; // For Visibility 
+using System.Linq; // For LINQ 
+using Logonaut.Core; // Required for Task
 
 namespace Logonaut.UI.Tests.ViewModels;
 
@@ -16,7 +16,7 @@ namespace Logonaut.UI.Tests.ViewModels;
 [TestClass]
 public class MainViewModel_InitializationPersistenceTests : MainViewModelTestBase // Inherits mocks, context, VM setup
 {
-    // Verifies: [ReqPersistSettingAutoScrollv1]
+// Verifies: [ReqPersistSettingAutoScrollv1]
     [TestMethod] public void Constructor_LoadsAutoScrollSetting_True()
     {
         // Arrange
@@ -35,24 +35,24 @@ public class MainViewModel_InitializationPersistenceTests : MainViewModelTestBas
         localViewModel.Dispose(); // Clean up the local instance
     }
 
-    // Verifies: [ReqPersistSettingAutoScrollv1]
-    [TestMethod] public void Constructor_LoadsAutoScrollSetting_False()
+// Verifies: [ReqPersistSettingAutoScrollv1]
+    [TestMethod]     public void Constructor_LoadsAutoScrollSetting_False()
     {
         // Arrange
         var settings = MockSettingsService.CreateDefaultTestSettings();
         settings.AutoScrollToTail = false;
         _mockSettings.SettingsToReturn = settings;
 
-        // Act: Recreate ViewModel
+// Act: Recreate ViewModel
         var localViewModel = new MainViewModel(_mockSettings, _mockSourceProvider, _mockFileDialog, _testContext);
-
+        
         // Assert
         Assert.IsFalse(localViewModel.IsAutoScrollEnabled);
         localViewModel.Dispose();
     }
 
-    // Verifies: [ReqPersistSettingAutoScrollv1]
-    [TestMethod] public void IsAutoScrollEnabled_Set_SavesSettings()
+// Verifies: [ReqPersistSettingAutoScrollv1]
+    [TestMethod]     public void IsAutoScrollEnabled_Set_SavesSettings()
     {
         // Arrange: _viewModel created in TestInitialize uses default settings (AutoScroll=true)
         Assert.IsTrue(_viewModel.IsAutoScrollEnabled, "Initial state should be true");
@@ -60,7 +60,6 @@ public class MainViewModel_InitializationPersistenceTests : MainViewModelTestBas
 
         // Act
         _viewModel.IsAutoScrollEnabled = false;
-        _testContext.Send(_ => { }, null); // Ensure Post callback for save runs
 
         // Assert
         Assert.IsNotNull(_mockSettings.SavedSettings, "Settings should have been saved.");
@@ -69,7 +68,6 @@ public class MainViewModel_InitializationPersistenceTests : MainViewModelTestBas
 
         // Act
         _viewModel.IsAutoScrollEnabled = true;
-        _testContext.Send(_ => { }, null); // Ensure Post callback for save runs
 
         // Assert
         Assert.IsNotNull(_mockSettings.SavedSettings, "Settings should have been saved again.");
@@ -88,76 +86,60 @@ public class MainViewModel_InitializationPersistenceTests : MainViewModelTestBas
         Assert.AreEqual(1, _viewModel.AvailableProfiles.Count);
         Assert.IsNotNull(_viewModel.ActiveFilterProfile);
         Assert.AreEqual("Default", _viewModel.ActiveFilterProfile.Name);
-        Assert.IsNull(_viewModel.ActiveFilterProfile.Model.RootFilter); // Model check
-        Assert.IsNull(_viewModel.ActiveFilterProfile.RootFilterViewModel); // ViewModel check
+        Assert.IsNull(_viewModel.ActiveFilterProfile.Model.RootFilter);
+        Assert.IsNull(_viewModel.ActiveFilterProfile.RootFilterViewModel);
         Assert.AreEqual(0, _viewModel.ContextLines);
         Assert.IsTrue(_viewModel.ShowLineNumbers);
         Assert.IsTrue(_viewModel.HighlightTimestamps);
         Assert.IsFalse(_viewModel.IsCaseSensitiveSearch);
-        // Assert Busy State *after* constructor finished and triggered update via OnActiveProfileChanged
-        Assert.AreEqual(1, _viewModel.CurrentBusyStates.Count, "Busy states should contain FilteringToken after constructor trigger.");
-        CollectionAssert.Contains(_viewModel.CurrentBusyStates, MainViewModel.FilteringToken, "FilteringToken should be present after constructor trigger.");
+
+        // Assert Busy State on the TabViewModel after constructor and activation
+        Assert.AreEqual(1, _tabViewModel.CurrentBusyStates.Count, "Tab's Busy states should contain FilteringToken after constructor trigger.");
+        CollectionAssert.Contains(_tabViewModel.CurrentBusyStates, TabViewModel.FilteringToken, "Tab's FilteringToken should be present after constructor trigger.");
+        Assert.AreEqual(0, _viewModel.CurrentGlobalBusyStates.Count, "MainViewModel's GlobalBusyStates should be empty.");
     }
 
-    // Verifies internal mechanism of initial filter trigger and its observable effect on VM state
-    [TestMethod] public void Constructor_TriggersInitialFilter_ResultsInEmptyFilteredLinesAndBusyState() // Renamed for clarity
+    [TestMethod] public void Constructor_TriggersInitialFilter_ResultsInEmptyFilteredLinesAndTabBusyState()
     {
-        // Arrange: Use the _viewModel created in the base TestInitialize,
-        // which has already gone through the constructor logic.
 
-        // Act: Flush the context queue to ensure any actions posted during
-        // the constructor (like setting busy state or initial filter update) have completed.
-        _testContext.Send(_ => { }, null);
+        // Assert: Check the resulting public state of the ViewModel and TabViewModel
+        Assert.AreEqual(0, _viewModel.FilteredLogLines.Count, "Initial FilteredLogLines count (delegated) should be 0.");
+        Assert.AreEqual(0, _tabViewModel.FilteredLogLinesCount, "TabViewModel's FilteredLogLinesCount should be 0.");
 
-        // Assert: Check the resulting public state of the ViewModel
-        // The internal processor ran an initial filter on an empty LogDoc.
-        Assert.AreEqual(0, _viewModel.FilteredLogLines.Count, "Initial FilteredLogLines count should be 0.");
-        Assert.AreEqual(0, _viewModel.FilteredLogLinesCount, "Initial FilteredLogLinesCount should be 0.");
-
-        // Assert Busy State after constructor logic and context flush
-        Assert.AreEqual(1, _viewModel.CurrentBusyStates.Count, "Busy states should contain FilteringToken after constructor trigger.");
-        CollectionAssert.Contains(_viewModel.CurrentBusyStates, MainViewModel.FilteringToken, "FilteringToken should be present initially.");
-        CollectionAssert.DoesNotContain(_viewModel.CurrentBusyStates, MainViewModel.LoadingToken, "LoadingToken should not be present initially.");
-
+        // Assert Busy State on TabViewModel
+        Assert.AreEqual(1, _tabViewModel.CurrentBusyStates.Count, "Tab's Busy states should contain FilteringToken initially.");
+        CollectionAssert.Contains(_tabViewModel.CurrentBusyStates, TabViewModel.FilteringToken, "Tab's FilteringToken should be present initially.");
+        CollectionAssert.DoesNotContain(_tabViewModel.CurrentBusyStates, TabViewModel.LoadingToken, "Tab's LoadingToken should not be present initially.");
+        
         // No local VM or subscription needed/possible here anymore.
     }
 
     // Verifies: [ReqGeneralBusyIndicatorv1] (Initial state) - More direct check
     [TestMethod] public void Constructor_SetsInitialBusyState_ViaFirstFilterTrigger()
     {
-        // Arrange & Act: ViewModel created in TestInitialize automatically triggers first filter
-
-        // Assert Busy State *after* constructor finished
-        // The filter trigger happens within the constructor logic (via OnActiveFilterProfileChanged)
-        // and posts the busy state addition.
-        _testContext.Send(_ => { }, null); // Flush the context queue AFTER construction completes
-
-        Assert.AreEqual(1, _viewModel.CurrentBusyStates.Count, "CurrentBusyStates count should be 1 after constructor.");
-        CollectionAssert.Contains(_viewModel.CurrentBusyStates, MainViewModel.FilteringToken, "FilteringToken should be present.");
-        CollectionAssert.DoesNotContain(_viewModel.CurrentBusyStates, MainViewModel.LoadingToken, "LoadingToken should NOT be present.");
-    }
+        // Assert Busy State on TabViewModel
+        Assert.AreEqual(1, _tabViewModel.CurrentBusyStates.Count, "Tab's CurrentBusyStates count should be 1 after constructor.");
+        CollectionAssert.Contains(_tabViewModel.CurrentBusyStates, TabViewModel.FilteringToken, "Tab's FilteringToken should be present.");
+        CollectionAssert.DoesNotContain(_tabViewModel.CurrentBusyStates, TabViewModel.LoadingToken, "Tab's LoadingToken should NOT be present.");
+        }
 
     // Verifies: [ReqPersistSettingContextLinesv1], [ReqFilterContextLinesv1] (indirectly by triggering update)
-    [TestMethod] public void ContextLines_Set_UpdatesViewModel_TriggersUpdate_SavesSettings() // Renamed slightly
+    [TestMethod] public void ContextLines_Set_UpdatesViewModel_TriggersUpdate_SavesSettings()
     {
         // Arrange
-        int initialContextLines = _viewModel.ContextLines; // Usually 0 from defaults
-        _mockSettings.Reset(); // Clear save status before Act
+        int initialContextLines = _viewModel.ContextLines;
+        _mockSettings.Reset();
 
         // Act
         _viewModel.ContextLines = 5;
-        _testContext.Send(_ => { }, null); // Flush context queue for update trigger and save
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(500).Ticks); // For filter update debounce
 
         // Assert: Check ViewModel state
         Assert.AreEqual(5, _viewModel.ContextLines, "ContextLines property was not updated.");
 
-        // Assert: Check observable effects (indirectly)
-        // Since the LogDoc is empty, changing context lines should still result
-        // in an empty filtered list after the internal update runs.
+        // Assert: Check observable effects 
         Assert.AreEqual(0, _viewModel.FilteredLogLines.Count, "FilteredLogLines should remain empty after context change on empty doc.");
-        Assert.AreEqual(0, _viewModel.FilteredLogLinesCount);
-        // We can infer the update was triggered because the state didn't unexpectedly change,
-        // and saving occurred. A more robust check would involve setting up a LogDoc with lines.
+        Assert.AreEqual(0, _tabViewModel.FilteredLogLinesCount);
 
         // Assert: Check side effects (saving)
         Assert.IsNotNull(_mockSettings.SavedSettings, "Settings were not saved.");
@@ -175,8 +157,7 @@ public class MainViewModel_InitializationPersistenceTests : MainViewModelTestBas
         Assert.AreEqual(Visibility.Visible, initialVisibility, "Default visibility should be Visible");
 
         // Act
-        _viewModel.ShowLineNumbers = !initialState; // Set to false
-        _testContext.Send(_ => { }, null); // Flush context queue
+        _viewModel.ShowLineNumbers = !initialState;
 
         // Assert
         Assert.AreEqual(!initialState, _viewModel.ShowLineNumbers); // Now false
@@ -186,7 +167,7 @@ public class MainViewModel_InitializationPersistenceTests : MainViewModelTestBas
         Assert.AreEqual(!initialState, _mockSettings.SavedSettings?.ShowLineNumbers); // Saved as false
     }
 
-    // Verifies: [ReqPersistSettingHighlightTimev1], [ReqHighlightTimestampsv1]
+// Verifies: [ReqPersistSettingHighlightTimev1], [ReqHighlightTimestampsv1]
     [TestMethod] public void HighlightTimestamps_Set_SavesSettings()
     {
         // Arrange
@@ -195,8 +176,7 @@ public class MainViewModel_InitializationPersistenceTests : MainViewModelTestBas
         Assert.IsTrue(initialState, "Default state should be true");
 
         // Act
-        _viewModel.HighlightTimestamps = !initialState; // Set to false
-        _testContext.Send(_ => { }, null); // Flush context queue
+        _viewModel.HighlightTimestamps = !initialState;
 
         // Assert
         Assert.AreEqual(!initialState, _viewModel.HighlightTimestamps); // Now false
@@ -204,49 +184,38 @@ public class MainViewModel_InitializationPersistenceTests : MainViewModelTestBas
         Assert.AreEqual(!initialState, _mockSettings.SavedSettings?.HighlightTimestamps); // Saved as false
     }
 
-    // Verifies: [ReqPersistSettingSearchCasev1], [ReqSearchCaseSensitiveOptionv1]
+// Verifies: [ReqPersistSettingSearchCasev1], [ReqSearchCaseSensitiveOptionv1]
     [TestMethod] public async Task IsCaseSensitiveSearch_Set_SavesSettings_UpdatesSearch() // Keep async Task
     {
         // Arrange
-        var activeSource = GetActiveMockSource();
-        activeSource.LinesForInitialRead = new List<string> { "Test test" };
+        _mockFileLogSource.LinesForInitialRead = new List<string> { "Test test" };
+        _mockFileDialog.FileToReturn = "test.log"; // Ensure a file is "opened"
 
-        // 1. Open File
-        await _viewModel.OpenLogFileCommand.ExecuteAsync(null); // Await the command
+        await _viewModel.OpenLogFileCommand.ExecuteAsync(null);
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(500).Ticks);
 
-        // 2. Advance background scheduler to allow filtering pipeline to run
-        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Adjust time if needed
+        Assert.AreEqual(1, _viewModel.FilteredLogLines.Count, "FilteredLogLines not populated.");
+        Assert.AreEqual("Test test", _viewModel.FilteredLogLines[0].Text, "FilteredLogLines content.");
 
-        // 3. Process UI queue to handle the ApplyFilteredUpdate posted by the filter pipeline
-        _testContext.Send(_ => { }, null);
+        // MainViewModel.IsCaseSensitiveSearch directly sets TabViewModel.IsCaseSensitiveSearch
+        _viewModel.SearchText = "Test"; // This sets TabViewModel.SearchText via delegation
+        _viewModel.IsCaseSensitiveSearch = false; // This sets TabViewModel.IsCaseSensitiveSearch
 
-        // --- ASSERTION POINT: Verify FilteredLogLines is populated ---
-        Assert.AreEqual(1, _viewModel.FilteredLogLines.Count, "FilteredLogLines not populated after file open and UI update.");
-        Assert.AreEqual("Test test", _viewModel.FilteredLogLines[0].Text, "FilteredLogLines content mismatch.");
 
-        // 4. NOW perform the initial search
-        _viewModel.SearchText = "Test";
-        _viewModel.IsCaseSensitiveSearch = false;
-
-        // 5. Process UI queue for the UpdateSearchMatches call (likely synchronous here, but good practice)
-        _testContext.Send(_ => { }, null);
-
-        // 6. Assert initial search results
-        Assert.AreEqual(2, _viewModel.SearchMarkers.Count, "Initial case-insensitive search failed."); // Should pass now
-        _mockSettings.Reset(); // Clear save state AFTER initial search setup
+        Assert.AreEqual(2, _tabViewModel.SearchMarkers.Count, "Initial case-insensitive search failed.");
+        _mockSettings.Reset();
 
         // Act
-        _viewModel.IsCaseSensitiveSearch = true; // Change to case-sensitive
-
-        // Process UI queue for UpdateSearchMatches AND the SaveCurrentSettings post
-        _testContext.Send(_ => { }, null);
+        _viewModel.IsCaseSensitiveSearch = true; // This sets TabViewModel.IsCaseSensitiveSearch
 
         // Assert
-        Assert.IsTrue(_viewModel.IsCaseSensitiveSearch);
-        Assert.AreEqual(1, _viewModel.SearchMarkers.Count, "Case-sensitive search marker count mismatch.");
+        Assert.IsTrue(_viewModel.IsCaseSensitiveSearch); // MainViewModel's property
+        Assert.IsTrue(_tabViewModel.IsCaseSensitiveSearch); // TabViewModel's property
+        Assert.AreEqual(1, _tabViewModel.SearchMarkers.Count, "Case-sensitive search marker count mismatch.");
         Assert.IsNotNull(_mockSettings.SavedSettings, "Settings save failed.");
         Assert.IsTrue(_mockSettings.SavedSettings?.IsCaseSensitiveSearch, "Saved case sensitivity mismatch.");
     }
+
     // Verifies: [ReqPersistSettingSimulatorV1] (Loading part)
     [TestMethod] public void Constructor_LoadsSimulatorSettings()
     {
@@ -257,30 +226,27 @@ public class MainViewModel_InitializationPersistenceTests : MainViewModelTestBas
         settings.SimulatorBurstSize = 4567.0;
         _mockSettings.SettingsToReturn = settings;
 
-        // Act: Recreate the ViewModel to force loading the arranged settings
-        // The base TestInitialize runs before each test, so _viewModel uses the settings above.
         var localViewModel = new MainViewModel(_mockSettings, _mockSourceProvider, _mockFileDialog, _testContext, _backgroundScheduler);
-
 
         // Assert
         Assert.AreEqual(55.5, localViewModel.SimulatorLPS);
         Assert.AreEqual(123.0, localViewModel.SimulatorErrorFrequency);
         Assert.AreEqual(4567.0, localViewModel.SimulatorBurstSize);
 
-        localViewModel.Dispose(); // Dispose the local instance
+        localViewModel.Dispose();
     }
 
     // Verifies: [ReqPersistSettingSimulatorV1] (Saving LPS)
     [TestMethod] public void SimulatorLPS_Set_SavesSettings()
     {
-        // Arrange: ViewModel starts with default settings (10.0)
-        _mockSettings.Reset(); // Clear save status
+        // Arrange
+        _mockSettings.Reset();
 
         // Act
-        _viewModel.ToggleSimulatorCommand.Execute(null); // Start simulator mode
-        _viewModel.SimulatorLPS = 77.0;
-        _testContext.Send(_ => { }, null); // Process the SaveCurrentSettingsDelayed post
+        _viewModel.ToggleSimulatorCommand.Execute(null);
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(500).Ticks);
 
+        _viewModel.SimulatorLPS = 77.0;
         // Assert
         Assert.IsNotNull(_mockSettings.SavedSettings, "Settings should have been saved.");
         Assert.AreEqual(77.0, _mockSettings.SavedSettings?.SimulatorLPS, "Saved SimulatorLPS mismatch.");
@@ -289,15 +255,14 @@ public class MainViewModel_InitializationPersistenceTests : MainViewModelTestBas
     // Verifies: [ReqPersistSettingSimulatorV1] (Saving Error Frequency)
     [TestMethod] public void SimulatorErrorFrequency_Set_SavesSettings()
     {
-        // Arrange: ViewModel starts with default settings (100.0)
+        // Arrange
         _mockSettings.Reset();
 
         // Act
-        _viewModel.ToggleSimulatorCommand.Execute(null); // Start simulator mode
-        _testContext.Send(_ => { }, null);
+        _viewModel.ToggleSimulatorCommand.Execute(null);
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(500).Ticks);
 
         _viewModel.SimulatorErrorFrequency = 50.0;
-        _testContext.Send(_ => { }, null);
 
         // Assert
         Assert.IsNotNull(_mockSettings.SavedSettings);
@@ -307,13 +272,12 @@ public class MainViewModel_InitializationPersistenceTests : MainViewModelTestBas
     // Verifies: [ReqPersistSettingSimulatorV1] (Saving Burst Size)
     [TestMethod] public void SimulatorBurstSize_Set_SavesSettings()
     {
-        // Arrange: ViewModel starts with default settings (1000.0)
+        // Arrange
         _mockSettings.Reset();
 
         // Act
-        _viewModel.ToggleSimulatorCommand.Execute(null); // Start simulator mode
+        _viewModel.ToggleSimulatorCommand.Execute(null);
         _viewModel.SimulatorBurstSize = 9999.0;
-        _testContext.Send(_ => { }, null);
 
         // Assert
         Assert.IsNotNull(_mockSettings.SavedSettings);

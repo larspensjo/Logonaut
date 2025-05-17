@@ -17,16 +17,23 @@ public partial class MainViewModel : ObservableObject, IDisposable
     // IsSimulatorRunning now reflects the state of the _internalTabViewModel's source
     public bool IsSimulatorRunning
     {
-        get
-        {
-            if (_internalTabViewModel.LogSource is ISimulatorLogSource sim)
-            {
-                Debug.WriteLine($"---> MainViewModel.IsSimulatorRunning_get: Tab's LogSource is ISimulatorLogSource. IsRunning: {sim.IsRunning}");
-                return sim.IsRunning;
-            }
-            Debug.WriteLine($"---> MainViewModel.IsSimulatorRunning_get: Tab's LogSource is NOT ISimulatorLogSource (Type: {_internalTabViewModel.LogSource?.GetType().Name ?? "null"}). Returning false.");
-            return false;
-        }
+         get
+         {            
+             // Check if the tab is configured as a Simulator type AND its LogSource is an ISimulatorLogSource
+             if (_internalTabViewModel.SourceType == SourceType.Simulator &&
+                 _internalTabViewModel.LogSource is ISimulatorLogSource sim)
+             {
+                 Debug.WriteLine($"---> MainViewModel.IsSimulatorRunning_get: Tab's SourceType is Simulator. LogSource is ISimulatorLogSource. IsRunning: {sim.IsRunning}");
+                 return sim.IsRunning;
+             }
+             // Log detailed reason if not considered running
+             if (_internalTabViewModel.SourceType != SourceType.Simulator) {
+                 Debug.WriteLine($"---> MainViewModel.IsSimulatorRunning_get: Tab's SourceType is NOT Simulator (Type: {_internalTabViewModel.SourceType}, LogSource: {_internalTabViewModel.LogSource?.GetType().Name ?? "null"}). Returning false.");
+             } else { // SourceType IS Simulator, but LogSource is not ISimulatorLogSource or is null
+                  Debug.WriteLine($"---> MainViewModel.IsSimulatorRunning_get: Tab's SourceType is Simulator, but LogSource is not ISimulatorLogSource (Type: {_internalTabViewModel.LogSource?.GetType().Name ?? "null"}). Returning false.");
+             }
+             return false;
+         }
     }
 
     // Global simulator settings remain in MainViewModel
@@ -92,51 +99,38 @@ public partial class MainViewModel : ObservableObject, IDisposable
     }
     private bool CanGenerateBurst() => _internalTabViewModel.LogSource is ISimulatorLogSource && SimulatorBurstSize > 0;
 
-
-    // Renamed from ExecuteStartSimulatorLogic for clarity in Phase 0.1
-    private void ActivateSimulatorInInternalTab()
+    private async Task ActivateSimulatorInInternalTab()
     {
+        Debug.WriteLine($"---> ActivateSimulatorInInternalTab: Entry.");
         if (IsSimulatorRunning) return;
 
         try
         {
             _internalTabViewModel.Deactivate(); // Deactivate current source in tab
             // Reconfigure _internalTabViewModel to be a Simulator tab
-            _internalTabViewModel.SourceType = SourceType.Simulator; // Set the source type to Simulator. TODO: [Phase 1 Cleanup] Re-evaluate SourceType mutability once multiple tabs are distinct instances.
-            // typeof(TabViewModel).GetProperty("SourceType")!.SetValue(_internalTabViewModel, SourceType.Simulator); // Hacky
-            // _internalTabViewModel.SourceIdentifier = "Simulator"; // Unique ID for simulator source
+            _internalTabViewModel.SourceType = SourceType.Simulator;
+            _internalTabViewModel.SourceIdentifier = "Simulator"; // Ensure non-empty identifier
             _internalTabViewModel.Header = "Simulator";
 
-            // Apply global simulator settings to the new source instance within TabViewModel
-            // TabViewModel.ActivateAsync will create the ISimulatorLogSource.
-            // We need to configure it *after* it's created.
-            // This implies ISimulatorLogSource properties should be settable.
-            
-            // This logic is a bit tricky. ActivateAsync will create the source.
-            // We need to ensure the *global* settings are applied *to that instance*.
-            // For Phase 0.1, let's assume ActivateAsync takes care of creating the source,
-            // and then we configure it.
-            _ = _internalTabViewModel.ActivateAsync(
-                this.AvailableProfiles, 
+            // Await the activation of the tab
+            await _internalTabViewModel.ActivateAsync(
+                this.AvailableProfiles,
                 this.ContextLines,
                 this.HighlightTimestamps,
                 this.ShowLineNumbers,
                 this.IsAutoScrollEnabled
-            ).ContinueWith(t => {
-                if (t.IsFaulted) {
-                    HandleSimulatorError("Error activating simulator tab", t.Exception!);
-                    return;
-                }
-                // Post-activation: apply global settings to the newly created simulator source
-                if (_internalTabViewModel.LogSource is ISimulatorLogSource simSource)
-                {
-                    simSource.LinesPerSecond = (int)Math.Round(SimulatorLPS);
-                    simSource.ErrorFrequency = (int)Math.Round(SimulatorErrorFrequency);
-                    // simSource.Start(); // ActivateAsync should call StartMonitoring which calls simSource.Start()
-                }
-                _uiContext.Post(_ => NotifySimulatorCommandsCanExecuteChanged(), null);
-            });
+            );
+
+            // Post-activation: apply global settings to the newly created simulator source
+            if (_internalTabViewModel.LogSource is ISimulatorLogSource simSource)
+            {
+                simSource.LinesPerSecond = (int)Math.Round(SimulatorLPS);
+                simSource.ErrorFrequency = (int)Math.Round(SimulatorErrorFrequency);
+                // StartMonitoring is called within TabViewModel's ActivateAsync for Simulator source type
+            }
+            _uiContext.Post(_ => NotifySimulatorCommandsCanExecuteChanged(), null);
             CurrentGlobalLogFilePathDisplay = "[Simulation Active]";
+            Debug.WriteLine($"---> ActivateSimulatorInInternalTab: Exit.");
         }
         catch (Exception ex)
         {
@@ -145,9 +139,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
+
     // Renamed from ExecuteStopSimulatorLogic
     private void StopSimulatorInInternalTab()
     {
+        Debug.WriteLine($"---> StopSimulatorInInternalTab: Entry.");
         if (!IsSimulatorRunning) return;
         try
         {
@@ -156,13 +152,24 @@ public partial class MainViewModel : ObservableObject, IDisposable
             Debug.WriteLine("---> Simulator Stopped in internal tab");
         }
         catch (Exception ex) { HandleSimulatorError("Error stopping simulator", ex); }
+        Debug.WriteLine($"---> StopSimulatorInInternalTab: Exit.");
     }
 
     [RelayCommand(CanExecute = nameof(CanPerformActionWhileNotLoading))]
-    private void ToggleSimulator()
+    private async Task ToggleSimulator()
     {
-        if (IsSimulatorRunning) StopSimulatorInInternalTab();
-        else ActivateSimulatorInInternalTab();
+        Debug.WriteLine($"---> ToggleSimulatorCommand: Entry. IsSimulatorRunning (before action): {IsSimulatorRunning}");
+        if (IsSimulatorRunning)
+        {
+            Debug.WriteLine($"---> ToggleSimulatorCommand: Calling StopSimulatorInInternalTab.");
+            StopSimulatorInInternalTab();
+        }
+        else
+        {
+            Debug.WriteLine($"---> ToggleSimulatorCommand: Calling ActivateSimulatorInInternalTab.");
+            await ActivateSimulatorInInternalTab();
+        }
+        Debug.WriteLine($"---> ToggleSimulatorCommand: Exit. IsSimulatorRunning (after action): {IsSimulatorRunning}");
     }
 
     private bool CanRestartSimulator() => _internalTabViewModel.LogSource is ISimulatorLogSource sim && sim.IsRunning;
@@ -175,7 +182,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             // Deactivate and Reactivate the tab, which will reset its LogDoc and restart the simulator source.
             _internalTabViewModel.Deactivate();
             // Ensure SourceType remains Simulator
-            typeof(TabViewModel).GetProperty("SourceType")!.SetValue(_internalTabViewModel, SourceType.Simulator); // Hacky
+            _internalTabViewModel.SourceType = SourceType.Simulator;
              _ = _internalTabViewModel.ActivateAsync(
                 this.AvailableProfiles, 
                 this.ContextLines,

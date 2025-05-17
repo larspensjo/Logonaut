@@ -1,42 +1,56 @@
-// tests/Logonaut.UI.Tests/MainViewModel_ProfileManagementTests.cs
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Linq;
 using Logonaut.Filters;
 using Logonaut.Common;
-using Logonaut.UI.ViewModels; // Explicitly use ViewModels namespace
+using Logonaut.UI.ViewModels;
+using System.Collections.ObjectModel;
+using System; // For TimeSpan
+using CommunityToolkit.Mvvm.Input;
 
 namespace Logonaut.UI.Tests.ViewModels;
 
-/// <summary>
-/// Tests related to creating, deleting, renaming, selecting filter profiles.
-/// Verifies ViewModel state changes and persistence.
-/// </summary>
-[TestClass] public class MainViewModel_ProfileManagementTests : MainViewModelTestBase // Inherits mocks, VM setup
+[TestClass] public class MainViewModel_ProfileManagementTests : MainViewModelTestBase
 {
-    // Verifies: [ReqCreateMultipleFilterProfilesv1], [ReqFilterProfileNamingv1], [ReqFilterProfileSelectActivev1],
-    //           [ReqPersistSettingFilterProfilesv1], [ReqPersistSettingLastProfilev1]
+
+    [TestInitialize] public override void TestInitialize()
+    {
+        // Arrange
+        base.TestInitialize();
+
+        var defaultProfileVM = _viewModel.AvailableProfiles.FirstOrDefault(p => p.Name == "Default");
+        Assert.IsNotNull(defaultProfileVM, "Default profile VM not found after base initialization.");
+
+        if (defaultProfileVM.Model.RootFilter is not AndFilter)
+        {
+            defaultProfileVM.SetModelRootFilter(new AndFilter());
+        }
+        if (_viewModel.ActiveFilterProfile != defaultProfileVM)
+        {
+            _viewModel.ActiveFilterProfile = defaultProfileVM;
+        }
+        _mockSettings?.Reset();
+    }
+
     [TestMethod] public void CreateNewProfileCommand_AddsUniqueProfile_SetsActive_SavesSettings()
     {
         // Arrange
         int initialCount = _viewModel.AvailableProfiles.Count;
-        _mockSettings.Reset(); // Clear save status
+        _mockSettings.Reset();
 
         // Act
         _viewModel.CreateNewProfileCommand.Execute(null);
-        _testContext.Send(_ => { }, null); // Process potential posts like BeginEdit and Save
 
         // Assert ViewModel State
         Assert.AreEqual(initialCount + 1, _viewModel.AvailableProfiles.Count);
         var newProfile = _viewModel.AvailableProfiles.Last();
         Assert.AreEqual("New Profile 1", newProfile.Name);
         Assert.AreSame(newProfile, _viewModel.ActiveFilterProfile, "Newly created profile should be active.");
-        Assert.IsTrue(newProfile.IsEditing, "Newly created profile should be in edit mode."); // Check edit mode
+        Assert.IsTrue(newProfile.IsEditing, "Newly created profile should be in edit mode.");
 
         // Assert Persistence
         Assert.IsNotNull(_mockSettings.SavedSettings, "Settings were not saved.");
         Assert.AreEqual(newProfile.Name, _mockSettings.SavedSettings?.LastActiveProfileName);
         Assert.AreEqual(initialCount + 1, _mockSettings.SavedSettings?.FilterProfiles.Count);
-        // Assert that the new profile has a null filter initially in the saved settings
         var savedNewProfile = _mockSettings.SavedSettings?.FilterProfiles.FirstOrDefault(p => p.Name == "New Profile 1");
         Assert.IsNotNull(savedNewProfile, "New profile not found in saved settings.");
         Assert.IsNull(savedNewProfile.RootFilter, "New profile's saved filter should be null.");
@@ -48,13 +62,11 @@ namespace Logonaut.UI.Tests.ViewModels;
         // Arrange: ViewModel starts with "Default"
 
         // Act
-        _viewModel.CreateNewProfileCommand.Execute(null); // Creates "New Profile 1"
-        _testContext.Send(_ => { }, null);
-        _viewModel.CreateNewProfileCommand.Execute(null); // Creates "New Profile 2"
-        _testContext.Send(_ => { }, null);
+        _viewModel.CreateNewProfileCommand.Execute(null);
+        _viewModel.CreateNewProfileCommand.Execute(null);
 
         // Assert
-        Assert.AreEqual(3, _viewModel.AvailableProfiles.Count); // Default, NP1, NP2
+        Assert.AreEqual(3, _viewModel.AvailableProfiles.Count);
         Assert.IsNotNull(_viewModel.AvailableProfiles.FirstOrDefault(p => p.Name == "Default"));
         Assert.IsNotNull(_viewModel.AvailableProfiles.FirstOrDefault(p => p.Name == "New Profile 1"));
         Assert.IsNotNull(_viewModel.AvailableProfiles.FirstOrDefault(p => p.Name == "New Profile 2"));
@@ -69,11 +81,10 @@ namespace Logonaut.UI.Tests.ViewModels;
         Assert.IsNotNull(activeProfile, "Need an active profile to test rename.");
         string oldName = activeProfile.Name;
         string newValidName = "Renamed Profile";
-        _mockSettings.Reset(); // Clear previous save status
+        _mockSettings.Reset();
 
-        // Act: Simulate the Name property being changed via binding (which triggers internal handler)
+        // Act
         activeProfile.Name = newValidName;
-        _testContext.Send(_ => { }, null); // Allow handler and save to run
 
         // Assert
         Assert.AreEqual(newValidName, activeProfile.Name, "VM Name should be updated.");
@@ -91,7 +102,6 @@ namespace Logonaut.UI.Tests.ViewModels;
     {
         // Arrange: Create a second profile to cause a duplicate name conflict
         _viewModel.CreateNewProfileCommand.Execute(null); // Creates "New Profile 1" and selects it
-        _testContext.Send(_ => { }, null);
         var profileToRename = _viewModel.ActiveFilterProfile;
         Assert.IsNotNull(profileToRename);
         Assert.AreEqual("New Profile 1", profileToRename.Name);
@@ -104,7 +114,6 @@ namespace Logonaut.UI.Tests.ViewModels;
 
         // Act: Simulate setting the Name property to a duplicate value
         profileToRename.Name = duplicateName;
-        _testContext.Send(_ => { }, null); // Allow handler to run
 
         // Assert
         Assert.AreEqual(originalName, profileToRename.Name, "VM Name should be reverted back to the original.");
@@ -126,7 +135,6 @@ namespace Logonaut.UI.Tests.ViewModels;
 
         // Act: Simulate setting the Name property to an empty/whitespace value
         activeProfile.Name = "   "; // Whitespace
-        _testContext.Send(_ => { }, null); // Allow handler to run
 
         // Assert
         Assert.AreEqual(originalName, activeProfile.Name, "VM Name should be reverted back to the original.");
@@ -141,18 +149,17 @@ namespace Logonaut.UI.Tests.ViewModels;
     [TestMethod] public void DeleteProfileCommand_RemovesActive_SelectsPrevious_SavesSettings()
     {
         // Arrange
-        _viewModel.CreateNewProfileCommand.Execute(null); _testContext.Send(_ => { }, null); // NP1
-        _viewModel.CreateNewProfileCommand.Execute(null); _testContext.Send(_ => { }, null); // NP2 (Active)
-        int initialCount = _viewModel.AvailableProfiles.Count; // Should be 3
+        _viewModel.CreateNewProfileCommand.Execute(null);
+        _viewModel.CreateNewProfileCommand.Execute(null);
+        int initialCount = _viewModel.AvailableProfiles.Count;
         var profileToDelete = _viewModel.ActiveFilterProfile;
         Assert.IsNotNull(profileToDelete);
         Assert.AreEqual("New Profile 2", profileToDelete.Name);
-        var expectedNextActive = _viewModel.AvailableProfiles[initialCount - 2]; // Should be NP1
+        var expectedNextActive = _viewModel.AvailableProfiles[initialCount - 2];
         _mockSettings.Reset();
 
         // Act
-        _viewModel.DeleteProfileCommand.Execute(null); // Assumes user confirms MessageBox
-        _testContext.Send(_ => { }, null); // Allow save and state updates
+        _viewModel.DeleteProfileCommand.Execute(null);
 
         // Assert ViewModel State
         Assert.AreEqual(initialCount - 1, _viewModel.AvailableProfiles.Count);
@@ -165,8 +172,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         Assert.AreEqual(expectedNextActive.Name, _mockSettings.SavedSettings?.LastActiveProfileName);
         Assert.AreEqual(initialCount - 1, _mockSettings.SavedSettings?.FilterProfiles.Count);
 
-        // Assert Observable Effects (Filter should be updated based on new selection)
-        // We expect FilteredLogLines to be empty because doc is empty and filter is null for NP1
+        // Assert Observable Effects (FilteredLogLines is on TabViewModel, accessed via MainViewModel delegate)
         Assert.AreEqual(0, _viewModel.FilteredLogLines.Count, "Filtered lines incorrect after profile delete/select.");
 
         Assert.Inconclusive("MessageBox verification requires UI testing framework.");
@@ -175,7 +181,7 @@ namespace Logonaut.UI.Tests.ViewModels;
     // Verifies: [ReqFilterProfileManageCRUDv1] (Delete last), [ReqFilterProfileSelectActivev1]
     // Keep Ignore as it relies on UI feedback mechanism not mocked here
     [Ignore("Requires mocking/intercepting MessageBox.Show")]
-    [TestMethod]public void DeleteProfileCommand_DeletesLastProfile_CreatesAndSelectsDefault()
+    [TestMethod] public void DeleteProfileCommand_DeletesLastProfile_CreatesAndSelectsDefault()
     {
         // Arrange
         Assert.AreEqual(1, _viewModel.AvailableProfiles.Count);
@@ -185,8 +191,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         _mockSettings.Reset();
 
         // Act
-        _viewModel.DeleteProfileCommand.Execute(null); // Assumes user confirms MessageBox
-        _testContext.Send(_ => { }, null); // Allow save and state updates
+        _viewModel.DeleteProfileCommand.Execute(null);
 
         // Assert ViewModel State
         Assert.AreEqual(1, _viewModel.AvailableProfiles.Count);
@@ -204,7 +209,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         Assert.AreEqual("Default", _mockSettings.SavedSettings?.FilterProfiles[0].Name);
         Assert.IsNull(_mockSettings.SavedSettings?.FilterProfiles[0].RootFilter);
 
-        // Assert Observable Effects (Filter should update to TrueFilter for empty default)
+        // Assert Observable Effects
         Assert.AreEqual(0, _viewModel.FilteredLogLines.Count, "Filtered lines incorrect after deleting last profile.");
 
         Assert.Inconclusive("MessageBox verification requires UI testing framework.");
@@ -214,25 +219,29 @@ namespace Logonaut.UI.Tests.ViewModels;
     [TestMethod] public void ActiveFilterProfile_Set_UpdatesState_TriggersUpdate_SavesSettings()
     {
         // Arrange
-        _viewModel.CreateNewProfileCommand.Execute(null); // Adds "New Profile 1", saves
-        _testContext.Send(_ => { }, null);
-        var profile1 = _viewModel.AvailableProfiles.First(p => p.Name == "Default"); // Get "Default"
-        var profile2 = _viewModel.ActiveFilterProfile; // Currently "New Profile 1"
+        _viewModel.CreateNewProfileCommand.Execute(null); // Creates "New Profile 1" and sets it active
+        _testContext.Send(_ => { ((RelayCommand)_viewModel.ActiveFilterProfile!.CancelRenameCommand).Execute(null); }, null); // End edit mode
+
+        var profile1 = _viewModel.AvailableProfiles.First(p => p.Name == "Default");
+        var profile2 = _viewModel.ActiveFilterProfile; // This is "New Profile 1"
         Assert.IsNotNull(profile2);
         Assert.AreEqual("New Profile 1", profile2.Name);
         _mockSettings.Reset();
 
-        // Act: Select the first profile ("Default")
-        _viewModel.ActiveFilterProfile = profile1;
-        _testContext.Send(_ => { }, null); // Allow save and state/filter update
+        // Act
+        _viewModel.ActiveFilterProfile = profile1; // Switch to "Default" profile
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(500).Ticks);
 
         // Assert ViewModel State
         Assert.AreSame(profile1, _viewModel.ActiveFilterProfile);
-        Assert.AreEqual(0, _viewModel.ActiveTreeRootNodes.Count, "Default profile initially has no root VM");
+        // "Default" profile has an AndFilter root from TestInitialize.
+        Assert.AreEqual(1, _viewModel.ActiveTreeRootNodes.Count, "Default profile (profile1) has an AndFilter root, so tree should have 1 node.");
+        Assert.IsNotNull(_viewModel.ActiveTreeRootNodes[0]);
+        Assert.AreSame(profile1.RootFilterViewModel, _viewModel.ActiveTreeRootNodes[0]);
         Assert.IsNull(_viewModel.SelectedFilterNode);
 
-        // Assert Observable Effects (Filter should update to TrueFilter for empty default profile)
-         Assert.AreEqual(0, _viewModel.FilteredLogLines.Count, "Filtered lines incorrect after profile selection.");
+        // Assert Observable Effects
+        Assert.AreEqual(0, _viewModel.FilteredLogLines.Count, "Filtered lines incorrect after profile selection.");
 
         // Assert Persistence
         Assert.IsNotNull(_mockSettings.SavedSettings, "Settings should be saved on profile change.");

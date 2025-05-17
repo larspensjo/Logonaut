@@ -70,12 +70,11 @@ public partial class MainWindow : Window, IDisposable
 
     private void ViewModel_RequestScrollToEnd(object? sender, EventArgs e)
     {
-        // Ensure this runs on the UI thread if there's any doubt,
-        // but it should be called from the VM's Post callback.
-        // Dispatcher.BeginInvoke(new Action(() =>
-        // {
-                _logOutputEditor?.ScrollToEnd();
-        // }), DispatcherPriority.Background); // Background is usually safe
+        // Check the ViewModel's IsAutoScrollEnabled property before scrolling
+        if (_viewModel.IsAutoScrollEnabled)
+        {
+            _logOutputEditor?.ScrollToEnd();
+        }
     }
 
     private void ViewModel_RequestScrollToLineIndex(object? sender, int lineIndex)

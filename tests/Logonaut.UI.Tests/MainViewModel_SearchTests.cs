@@ -1,169 +1,165 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Logonaut.Common;
+using Logonaut.UI.ViewModels;
+using System; // For StringComparison, Environment
 
 namespace Logonaut.UI.Tests.ViewModels;
 
- /// Tests related to search text, navigation, case sensitivity, markers
-[TestClass] public class MainViewModel_SearchTests : MainViewModelTestBase
+[TestClass] public class TabViewModel_SearchTests : MainViewModelTestBase
 {
-    // Verifies: [ReqSearchTextEntryv1], [ReqSearchHighlightResultsv1], [ReqSearchStatusIndicatorv1],
-    //           [ReqSearchCaseSensitiveOptionv1], [ReqSearchRulerMarkersv1]
+
+    [TestInitialize] public override void TestInitialize()
+    {
+        // Arrange
+        base.TestInitialize();
+        _tabViewModel.FilteredLogLines.Clear();
+    }
+
+    // Verifies: [ReqSearchTextEntryv1], [ReqSearchHighlightResultsv1], [ReqSearchCaseSensitiveOptionv1], [ReqStatusBarSearchStatusv1]
     [TestMethod] public void SearchText_Set_UpdatesMatchesAndStatus_CaseSensitivity()
     {
         // Arrange
-        _viewModel.FilteredLogLines.Clear();
-        _viewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Line one with test"));
-        _viewModel.FilteredLogLines.Add(new FilteredLogLine(2, "Line two NO MATCH"));
-        _viewModel.FilteredLogLines.Add(new FilteredLogLine(3, "Line three with TEST"));
-        // Simulate internal text update
-        var updateMethod = _viewModel.GetType().GetMethod("ReplaceLogTextInternal", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        updateMethod?.Invoke(_viewModel, new object[] { _viewModel.FilteredLogLines.ToList() });
+        _tabViewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Line one with test"));
+        _tabViewModel.FilteredLogLines.Add(new FilteredLogLine(2, "Line two NO MATCH"));
+        _tabViewModel.FilteredLogLines.Add(new FilteredLogLine(3, "Line three with TEST"));
 
         // Act & Assert: Case Insensitive
-        _viewModel.IsCaseSensitiveSearch = false;
-        _viewModel.SearchText = "test";
-        _testContext.Send(_ => { }, null); // Allow update
+        _tabViewModel.IsCaseSensitiveSearch = false;
+        _tabViewModel.SearchText = "test";
 
-        Assert.AreEqual(2, _viewModel.SearchMarkers.Count, "Case-insensitive marker count mismatch.");
-        StringAssert.Contains(_viewModel.SearchStatusText, "2 matches found", "Case-insensitive status text mismatch.");
-        Assert.AreEqual(14, _viewModel.SearchMarkers[0].Offset, "Case-insensitive offset 1 mismatch.");
-        Assert.AreEqual(55, _viewModel.SearchMarkers[1].Offset, "Case-insensitive offset 2 mismatch.");
+        Assert.AreEqual(2, _tabViewModel.SearchMarkers.Count, "Case-insensitive marker count mismatch.");
+        StringAssert.Contains(_tabViewModel.SearchStatusText, "Match 1 of 2", "Case-insensitive status text mismatch."); // First match is selected
+        Assert.AreEqual(CalculateExpectedOffsetForTab(0, "test"), _tabViewModel.SearchMarkers[0].Offset, "Case-insensitive offset 1 mismatch.");
+        Assert.AreEqual(CalculateExpectedOffsetForTab(2, "TEST"), _tabViewModel.SearchMarkers[1].Offset, "Case-insensitive offset 2 mismatch.");
 
         // Act & Assert: Case Sensitive
-        _viewModel.IsCaseSensitiveSearch = true; // This triggers UpdateSearchMatches via its property changed handler
-        _testContext.Send(_ => { }, null); // Allow update
+        _tabViewModel.IsCaseSensitiveSearch = true; // This will re-trigger search via property changed
 
-        Assert.AreEqual(1, _viewModel.SearchMarkers.Count, "Case-sensitive marker count mismatch.");
-        StringAssert.Contains(_viewModel.SearchStatusText, "1 matches found", "Case-sensitive status text mismatch.");
-        Assert.AreEqual(14, _viewModel.SearchMarkers[0].Offset, "Case-sensitive offset mismatch.");
+        Assert.AreEqual(1, _tabViewModel.SearchMarkers.Count, "Case-sensitive marker count mismatch.");
+        StringAssert.Contains(_tabViewModel.SearchStatusText, "Match 1 of 1", "Case-sensitive status text mismatch."); // First match is selected
+        Assert.AreEqual(CalculateExpectedOffsetForTab(0, "test"), _tabViewModel.SearchMarkers[0].Offset, "Case-sensitive offset mismatch.");
     }
 
     // Verifies: [ReqSearchNavigateResultsv1] (Next), [ReqHighlightSelectedLinev1] (Indirectly)
     [TestMethod] public void NextSearchCommand_CyclesThroughMatches_UpdatesSelectionAndHighlight()
     {
         // Arrange
-        _viewModel.FilteredLogLines.Clear();
-        _viewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Test 1")); // Index 0
-        _viewModel.FilteredLogLines.Add(new FilteredLogLine(2, "Test 2")); // Index 1
-        _viewModel.FilteredLogLines.Add(new FilteredLogLine(3, "Other"));
-        _viewModel.FilteredLogLines.Add(new FilteredLogLine(4, "Test 3")); // Index 3 (in collection)
-        // Simulate internal text update
-        var updateMethod = _viewModel.GetType().GetMethod("ReplaceLogTextInternal", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        updateMethod?.Invoke(_viewModel, new object[] { _viewModel.FilteredLogLines.ToList() });
-        _viewModel.SearchText = "Test"; // Triggers initial search
-        _testContext.Send(_ => { }, null); // Ensure search runs
-        Assert.AreEqual(3, _viewModel.SearchMarkers.Count);
+        _tabViewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Test 1"));
+        _tabViewModel.FilteredLogLines.Add(new FilteredLogLine(2, "Test 2"));
+        _tabViewModel.FilteredLogLines.Add(new FilteredLogLine(3, "Other"));
+        _tabViewModel.FilteredLogLines.Add(new FilteredLogLine(4, "Test 3"));
+        _tabViewModel.SearchText = "Test"; // Selects the first match ("Test 1")
+        Assert.AreEqual(3, _tabViewModel.SearchMarkers.Count);
 
-        int expectedOffset1 = CalculateExpectedOffset(0, "Test");
-        int expectedOffset2 = CalculateExpectedOffset(1, "Test");
-        int expectedOffset3 = CalculateExpectedOffset(3, "Test");
+        int expectedOffset1 = CalculateExpectedOffsetForTab(0, "Test");
+        int expectedOffset2 = CalculateExpectedOffsetForTab(1, "Test");
+        int expectedOffset3 = CalculateExpectedOffsetForTab(3, "Test");
+
+        Assert.AreEqual(expectedOffset1, _tabViewModel.CurrentMatchOffset, "Initial selection after SearchText set.");
+        StringAssert.Contains(_tabViewModel.SearchStatusText, "Match 1 of 3", "Initial status.");
 
         // Act & Assert Cycle
-        _viewModel.NextSearchCommand.Execute(null);
-        Assert.AreEqual(expectedOffset1, _viewModel.CurrentMatchOffset, "Cycle 1 Offset mismatch.");
-        Assert.AreEqual(0, _viewModel.HighlightedFilteredLineIndex, "Cycle 1 Highlight mismatch.");
-        StringAssert.Contains(_viewModel.SearchStatusText, "Match 1 of 3", "Cycle 1 Status mismatch.");
+        _tabViewModel.NextSearchCommand.Execute(null); // Moves to 2nd match ("Test 2")
+        Assert.AreEqual(expectedOffset2, _tabViewModel.CurrentMatchOffset, "Cycle 1 Offset mismatch.");
+        Assert.AreEqual(1, _tabViewModel.HighlightedFilteredLineIndex, "Cycle 1 Highlight mismatch.");
+        StringAssert.Contains(_tabViewModel.SearchStatusText, "Match 2 of 3", "Cycle 1 Status mismatch.");
 
-        _viewModel.NextSearchCommand.Execute(null);
-        Assert.AreEqual(expectedOffset2, _viewModel.CurrentMatchOffset, "Cycle 2 Offset mismatch.");
-        Assert.AreEqual(1, _viewModel.HighlightedFilteredLineIndex, "Cycle 2 Highlight mismatch.");
-        StringAssert.Contains(_viewModel.SearchStatusText, "Match 2 of 3", "Cycle 2 Status mismatch.");
+        _tabViewModel.NextSearchCommand.Execute(null); // Moves to 3rd match ("Test 3")
+        Assert.AreEqual(expectedOffset3, _tabViewModel.CurrentMatchOffset, "Cycle 2 Offset mismatch.");
+        Assert.AreEqual(3, _tabViewModel.HighlightedFilteredLineIndex, "Cycle 2 Highlight mismatch.");
+        StringAssert.Contains(_tabViewModel.SearchStatusText, "Match 3 of 3", "Cycle 2 Status mismatch.");
 
-        _viewModel.NextSearchCommand.Execute(null);
-        Assert.AreEqual(expectedOffset3, _viewModel.CurrentMatchOffset, "Cycle 3 Offset mismatch.");
-        Assert.AreEqual(3, _viewModel.HighlightedFilteredLineIndex, "Cycle 3 Highlight mismatch."); // Corresponds to the item at index 3
-        StringAssert.Contains(_viewModel.SearchStatusText, "Match 3 of 3", "Cycle 3 Status mismatch.");
-
-        _viewModel.NextSearchCommand.Execute(null); // Wrap
-        Assert.AreEqual(expectedOffset1, _viewModel.CurrentMatchOffset, "Wrap Offset mismatch.");
-        Assert.AreEqual(0, _viewModel.HighlightedFilteredLineIndex, "Wrap Highlight mismatch.");
-        StringAssert.Contains(_viewModel.SearchStatusText, "Match 1 of 3", "Wrap Status mismatch.");
+        _tabViewModel.NextSearchCommand.Execute(null); // Wraps to 1st match ("Test 1")
+        Assert.AreEqual(expectedOffset1, _tabViewModel.CurrentMatchOffset, "Wrap Offset mismatch.");
+        Assert.AreEqual(0, _tabViewModel.HighlightedFilteredLineIndex, "Wrap Highlight mismatch.");
+        StringAssert.Contains(_tabViewModel.SearchStatusText, "Match 1 of 3", "Wrap Status mismatch.");
     }
 
     // Verifies: [ReqSearchNavigateResultsv1] (Previous)
     [TestMethod] public void PreviousSearchCommand_CyclesThroughMatches_UpdatesSelectionAndHighlight()
     {
         // Arrange
-        _viewModel.FilteredLogLines.Clear();
-        _viewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Test 1")); // Index 0
-        _viewModel.FilteredLogLines.Add(new FilteredLogLine(2, "Test 2")); // Index 1
-        _viewModel.FilteredLogLines.Add(new FilteredLogLine(3, "Other"));
-        _viewModel.FilteredLogLines.Add(new FilteredLogLine(4, "Test 3")); // Index 3
-        // Simulate internal text update
-        var updateMethod = _viewModel.GetType().GetMethod("ReplaceLogTextInternal", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        updateMethod?.Invoke(_viewModel, new object[] { _viewModel.FilteredLogLines.ToList() });
-        _viewModel.SearchText = "Test";
-        _testContext.Send(_ => { }, null);
-        Assert.AreEqual(3, _viewModel.SearchMarkers.Count);
+        _tabViewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Test 1"));
+        _tabViewModel.FilteredLogLines.Add(new FilteredLogLine(2, "Test 2"));
+        _tabViewModel.FilteredLogLines.Add(new FilteredLogLine(3, "Other"));
+        _tabViewModel.FilteredLogLines.Add(new FilteredLogLine(4, "Test 3"));
+        _tabViewModel.SearchText = "Test"; // Selects the first match ("Test 1")
+        Assert.AreEqual(3, _tabViewModel.SearchMarkers.Count);
 
-        int expectedOffset1 = CalculateExpectedOffset(0, "Test");
-        int expectedOffset2 = CalculateExpectedOffset(1, "Test");
-        int expectedOffset3 = CalculateExpectedOffset(3, "Test");
+        int expectedOffset1 = CalculateExpectedOffsetForTab(0, "Test");
+        int expectedOffset2 = CalculateExpectedOffsetForTab(1, "Test");
+        int expectedOffset3 = CalculateExpectedOffsetForTab(3, "Test");
+
+        Assert.AreEqual(expectedOffset1, _tabViewModel.CurrentMatchOffset, "Initial selection after SearchText set.");
 
         // Act & Assert Cycle
-        _viewModel.PreviousSearchCommand.Execute(null); // Wrap to last
-        Assert.AreEqual(expectedOffset3, _viewModel.CurrentMatchOffset, "Cycle 1 Offset mismatch.");
-        Assert.AreEqual(3, _viewModel.HighlightedFilteredLineIndex, "Cycle 1 Highlight mismatch.");
-        StringAssert.Contains(_viewModel.SearchStatusText, "Match 3 of 3", "Cycle 1 Status mismatch.");
+        _tabViewModel.PreviousSearchCommand.Execute(null); // Wraps to 3rd match ("Test 3")
+        Assert.AreEqual(expectedOffset3, _tabViewModel.CurrentMatchOffset, "Cycle 1 Offset mismatch.");
+        Assert.AreEqual(3, _tabViewModel.HighlightedFilteredLineIndex, "Cycle 1 Highlight mismatch.");
+        StringAssert.Contains(_tabViewModel.SearchStatusText, "Match 3 of 3", "Cycle 1 Status mismatch.");
 
-        _viewModel.PreviousSearchCommand.Execute(null);
-        Assert.AreEqual(expectedOffset2, _viewModel.CurrentMatchOffset, "Cycle 2 Offset mismatch.");
-        Assert.AreEqual(1, _viewModel.HighlightedFilteredLineIndex, "Cycle 2 Highlight mismatch.");
-        StringAssert.Contains(_viewModel.SearchStatusText, "Match 2 of 3", "Cycle 2 Status mismatch.");
+        _tabViewModel.PreviousSearchCommand.Execute(null); // Moves to 2nd match ("Test 2")
+        Assert.AreEqual(expectedOffset2, _tabViewModel.CurrentMatchOffset, "Cycle 2 Offset mismatch.");
+        Assert.AreEqual(1, _tabViewModel.HighlightedFilteredLineIndex, "Cycle 2 Highlight mismatch.");
+        StringAssert.Contains(_tabViewModel.SearchStatusText, "Match 2 of 3", "Cycle 2 Status mismatch.");
 
-        _viewModel.PreviousSearchCommand.Execute(null);
-        Assert.AreEqual(expectedOffset1, _viewModel.CurrentMatchOffset, "Cycle 3 Offset mismatch.");
-        Assert.AreEqual(0, _viewModel.HighlightedFilteredLineIndex, "Cycle 3 Highlight mismatch.");
-        StringAssert.Contains(_viewModel.SearchStatusText, "Match 1 of 3", "Cycle 3 Status mismatch.");
-
-        _viewModel.PreviousSearchCommand.Execute(null); // Wrap to last
-        Assert.AreEqual(expectedOffset3, _viewModel.CurrentMatchOffset, "Wrap Offset mismatch.");
-        Assert.AreEqual(3, _viewModel.HighlightedFilteredLineIndex, "Wrap Highlight mismatch.");
-        StringAssert.Contains(_viewModel.SearchStatusText, "Match 3 of 3", "Wrap Status mismatch.");
+        _tabViewModel.PreviousSearchCommand.Execute(null); // Moves to 1st match ("Test 1")
+        Assert.AreEqual(expectedOffset1, _tabViewModel.CurrentMatchOffset, "Cycle 3 Offset mismatch.");
+        Assert.AreEqual(0, _tabViewModel.HighlightedFilteredLineIndex, "Cycle 3 Highlight mismatch.");
+        StringAssert.Contains(_tabViewModel.SearchStatusText, "Match 1 of 3", "Cycle 3 Status mismatch.");
     }
 
-     // Verifies: [ReqSearchNavigateResultsv1] (Next/CanExecute)
-    [TestMethod] public void NextSearch_WithNonEmptySearchText_ShouldNavigate() // Kept from original
+    // Verifies: [ReqSearchNavigateResultsv1] (Next/CanExecute)
+    [TestMethod] public void NextSearch_WithNonEmptySearchText_ShouldNavigate()
     {
-         // Arrange
-         _viewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Test 1"));
-         _viewModel.FilteredLogLines.Add(new FilteredLogLine(2, "Test 2"));
-         // Simulate internal text update
-         var updateMethod = _viewModel.GetType().GetMethod("ReplaceLogTextInternal", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-         updateMethod?.Invoke(_viewModel, new object[] { _viewModel.FilteredLogLines.ToList() });
-         _viewModel.SearchText = "Test";
-         _testContext.Send(_ => { }, null); // Allow UpdateSearchMatches
-         int initialOffset = _viewModel.CurrentMatchOffset;
+        // Arrange
+        _tabViewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Test 1"));
+        _tabViewModel.FilteredLogLines.Add(new FilteredLogLine(2, "Test 2"));
+        _tabViewModel.SearchText = "Test"; // Selects first match
+        // CurrentMatchOffset is now at the first "Test" (offset for "Test 1")
 
-         // Act
-         Assert.IsTrue(_viewModel.NextSearchCommand.CanExecute(null), "NextSearch should be enabled.");
-         _viewModel.NextSearchCommand.Execute(null); // Should go to first match
+        // Act
+        Assert.IsTrue(_tabViewModel.NextSearchCommand.CanExecute(null), "NextSearch should be enabled.");
+        _tabViewModel.NextSearchCommand.Execute(null); // Moves to the second "Test"
 
-         // Assert
-         Assert.AreNotEqual(initialOffset, _viewModel.CurrentMatchOffset, "CurrentMatchOffset should change.");
-         Assert.AreEqual(0, _viewModel.CurrentMatchOffset, "Should select the first match.");
-         StringAssert.Contains(_viewModel.SearchStatusText, "Match 1 of 2");
+        // Assert
+        Assert.AreEqual(CalculateExpectedOffsetForTab(1, "Test"), _tabViewModel.CurrentMatchOffset, "Should select the second match.");
+        StringAssert.Contains(_tabViewModel.SearchStatusText, "Match 2 of 2");
     }
 
-     // Verifies: [ReqSearchNavigateResultsv1] (Previous/CanExecute)
-    [TestMethod] public void PreviousSearch_WithNonEmptySearchText_ShouldNavigate() // Kept from original
+    // Verifies: [ReqSearchNavigateResultsv1] (Previous/CanExecute)
+    [TestMethod] public void PreviousSearch_WithNonEmptySearchText_ShouldNavigate()
     {
-         // Arrange
-         _viewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Test 1"));
-         _viewModel.FilteredLogLines.Add(new FilteredLogLine(2, "Test 2"));
-          // Simulate internal text update
-         var updateMethod = _viewModel.GetType().GetMethod("ReplaceLogTextInternal", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-         updateMethod?.Invoke(_viewModel, new object[] { _viewModel.FilteredLogLines.ToList() });
-         _viewModel.SearchText = "Test";
-         _testContext.Send(_ => { }, null); // Allow UpdateSearchMatches
-         int initialOffset = _viewModel.CurrentMatchOffset;
+        // Arrange
+        _tabViewModel.FilteredLogLines.Add(new FilteredLogLine(1, "Test 1"));
+        _tabViewModel.FilteredLogLines.Add(new FilteredLogLine(2, "Test 2"));
+        _tabViewModel.SearchText = "Test"; // Selects first match
+        // CurrentMatchOffset is now at the first "Test" (offset for "Test 1")
 
-         // Act
-         Assert.IsTrue(_viewModel.PreviousSearchCommand.CanExecute(null), "PreviousSearch should be enabled.");
-         _viewModel.PreviousSearchCommand.Execute(null); // Should wrap to last match
+        // Act
+        Assert.IsTrue(_tabViewModel.PreviousSearchCommand.CanExecute(null), "PreviousSearch should be enabled.");
+        _tabViewModel.PreviousSearchCommand.Execute(null); // Wraps to the second "Test"
 
-         // Assert
-         Assert.AreNotEqual(initialOffset, _viewModel.CurrentMatchOffset, "CurrentMatchOffset should change.");
-         StringAssert.Contains(_viewModel.SearchStatusText, "Match 2 of 2"); // Assuming 2 matches
+        // Assert
+        Assert.AreEqual(CalculateExpectedOffsetForTab(1, "Test"), _tabViewModel.CurrentMatchOffset, "Should select the second match on previous from start.");
+        StringAssert.Contains(_tabViewModel.SearchStatusText, "Match 2 of 2");
+    }
+
+    // Helper specifically for TabViewModel's context
+    private int CalculateExpectedOffsetForTab(int targetLineIndex, string searchTerm)
+    {
+        if (targetLineIndex < 0 || targetLineIndex >= _tabViewModel.FilteredLogLines.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(targetLineIndex), $"Target line index {targetLineIndex} is out of bounds for TabViewModel's FilteredLogLines count {_tabViewModel.FilteredLogLines.Count}.");
+        }
+
+        int offset = 0;
+        for (int i = 0; i < targetLineIndex; i++)
+        {
+            offset += _tabViewModel.FilteredLogLines[i].Text.Length + Environment.NewLine.Length;
+        }
+        int indexInLine = _tabViewModel.FilteredLogLines[targetLineIndex].Text.IndexOf(searchTerm, _tabViewModel.IsCaseSensitiveSearch ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase);
+
+        return indexInLine == -1 ? -1 : offset + indexInLine;
     }
 }

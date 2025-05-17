@@ -53,6 +53,7 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
 
     partial void OnIsAutoScrollEnabledChanged(bool value)
     {
+        _internalTabViewModel.IsAutoScrollEnabled = value;
         // Logic for HighlightedFilteredLineIndex if auto-scroll enabled is now in TabViewModel.
         // MainViewModel might need to inform TabViewModel if this global setting changes.
         // For Phase 0.1, TabViewModel doesn't have its own IsAutoScrollEnabled.
@@ -60,7 +61,7 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         if (value == true && HighlightedOriginalLineNumber != -1) // Use original line number for consistency
         {
             // If auto-scroll is re-enabled, clear any persistent highlight to allow scrolling to end.
-            HighlightedOriginalLineNumber = -1; 
+            HighlightedOriginalLineNumber = -1;
         }
         if (value == true) RequestGlobalScrollToEnd?.Invoke(this, EventArgs.Empty);
         SaveCurrentSettingsDelayed();

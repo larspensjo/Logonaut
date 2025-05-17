@@ -96,8 +96,8 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
             // This is a conceptual change of the single tab's nature.
             // A cleaner way would be:
             // _internalTabViewModel.LoadAsFileSource(selectedFile, ...);
-            // For now, we set properties and rely on ActivateAsync.
-            typeof(TabViewModel).GetProperty("SourceType")!.SetValue(_internalTabViewModel, SourceType.File); // Hacky, need better way or method
+            // For now, we set properties and rely on ActivateAsync.            
+            _internalTabViewModel.SourceType = SourceType.File;
             _internalTabViewModel.SourceIdentifier = selectedFile;
 
 

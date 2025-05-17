@@ -40,7 +40,7 @@ This step should now be complete.
         *   Create an `IValueConverter` (`CollectionContainsToVisibilityConverter`) that takes a collection and a `ConverterParameter` (the token to check for). It returns `Visibility.Visible` if the collection contains the parameter, otherwise `Visibility.Collapsed`.
         *   Add an instance of this converter to resources.
         *   Make the `LoadingToken` (and potentially others) `public static readonly` in `MainViewModel` so it can be referenced in XAML binding.
-        *   Bind `LoadingOverlay.Visibility` to `MainViewModel.CurrentBusyStates` using this converter, passing `{x:Static vm:MainViewModel.LoadingToken}` as the `ConverterParameter` (requires adding `vm:` namespace mapping to `ViewModels`).
+        *   Bind `LoadingOverlay.Visibility` to `MainViewModel.CurrentBusyStates` using this converter, passing `{x:Static vm:TabViewModel.LoadingToken}` as the `ConverterParameter` (requires adding `vm:` namespace mapping to `ViewModels`).
     *   **Animation Implementation (Recommended - Custom Element):**
         *   Create a new `FrameworkElement`-derived control (e.g., `LoadingScanlineOverlay`) responsible for drawing the "Soft Vertical Scanlines" animation.
         *   Place this custom control *inside* the `LoadingOverlay` Border/Canvas.
@@ -60,7 +60,7 @@ This step should now be complete.
 *   **Why:** Separate the visual feedback: overlay for loading, external indicator for other tasks like filtering.
 *   **Tasks:**
     *   Modify `BusyIndicator.UpdateRenderingBasedOnState`: Change the condition to check if `ActiveStates` contains *any token other than* `LoadingToken`.
-        *   `bool shouldBeSpinning = ActiveStates?.Any(s => s != MainViewModel.LoadingToken) == true;` (Ensure `MainViewModel.LoadingToken` is accessible or pass it).
+        *   `bool shouldBeSpinning = ActiveStates?.Any(s => s != TabViewModel.LoadingToken) == true;` (Ensure `TabViewModel.LoadingToken` is accessible or pass it).
     *   Design and implement drawing logic for the "Filtering" state visual in `BusyIndicator` (e.g., orange arc, different shape). Create a separate drawing function.
     *   Modify `BusyIndicator.OnRender`:
         *   Check if the rendering subscription is active (meaning a non-loading state is present).

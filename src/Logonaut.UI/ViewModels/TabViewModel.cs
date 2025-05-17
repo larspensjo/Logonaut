@@ -66,9 +66,10 @@ public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecu
     [ObservableProperty] private ObservableCollection<FilteredLogLine> _filteredLogLines = new();
     [ObservableProperty] private long _totalLogLines;
     [ObservableProperty] private string? _sourceIdentifier; // File path or pasted content temp path
+    [ObservableProperty] private bool _isAutoScrollEnabled = true; // Default to true, will be updated by MainViewModel
 
     public SourceType SourceType
-    { 
+    {
         get;
         set; // TODO: [Phase 1 Cleanup] Re-evaluate SourceType mutability once multiple tabs are distinct instances.
     }
@@ -135,7 +136,7 @@ public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecu
         CloseTabCommand = new RelayCommand(() => RequestCloseTab?.Invoke(this, EventArgs.Empty));
         PreviousSearchCommand = new RelayCommand(ExecutePreviousSearch, CanExecuteSearch);
         NextSearchCommand = new RelayCommand(ExecuteNextSearch, CanExecuteSearch);
-        JumpToLineCommand = new RelayCommand(ExecuteJumpToLine, CanExecuteJumpToLine);
+        JumpToLineCommand = new AsyncRelayCommand(ExecuteJumpToLine, CanExecuteJumpToLine);
 
         CurrentBusyStates.CollectionChanged += (_, _) => OnPropertyChanged(nameof(IsLoading));
     }
@@ -214,6 +215,9 @@ public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecu
 
         // Apply filters using the tab's associated profile and global context settings
         ApplyFiltersFromProfile(availableProfiles, globalContextLines);
+        
+        IsAutoScrollEnabled = globalAutoScrollEnabled;
+
         _uiContext.Post(_ => CurrentBusyStates.Remove(LoadingToken), null);
         Debug.WriteLine($"---> TabViewModel '{Header}': Activation complete.");
     }
@@ -323,18 +327,17 @@ public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecu
                 _uiContext.Post(_ => { if (wasInitialLoad) CurrentBusyStates.Remove(LoadingToken); }, null);
             }
         }
-        OnPropertyChanged(nameof(FilteredLogLinesCount));
-        UpdateSearchMatches(); // Update search after any filter update
-        // TODO: Update active filter matching status on the global filter tree.
-        _uiContext.Post(_ => CurrentBusyStates.Remove(FilteringToken), null);
 
-        // If new lines were appended, raise the event.
-        // MainViewModel will decide whether to act on it based on IsAutoScrollEnabled.
-        if (newLinesWereAppended)
+        if (newLinesWereAppended && IsAutoScrollEnabled)
         {
             RequestScrollToEnd?.Invoke(this, EventArgs.Empty);
-            Debug.WriteLine($"---> TabViewModel '{Header}': Raised RequestScrollToEnd.");
+            Debug.WriteLine($"---> TabViewModel '{Header}': Raised RequestScrollToEnd (AutoScroll Enabled).");
         }
+        else if (newLinesWereAppended) // Still log if lines were appended but scroll not requested
+        {
+            Debug.WriteLine($"---> TabViewModel '{Header}': New lines appended, RequestScrollToEnd NOT raised (AutoScroll Disabled: {IsAutoScrollEnabled}).");
+        }
+        _uiContext.Post(_ => CurrentBusyStates.Remove(FilteringToken), null); // Now remove token
     }
 
     public int FilteredLogLinesCount => FilteredLogLines.Count;
@@ -592,13 +595,15 @@ public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecu
     }
 
     // --- Jump To Line Logic ---
-    public IRelayCommand JumpToLineCommand { get; }
-    private async void ExecuteJumpToLine()
+    public IAsyncRelayCommand JumpToLineCommand { get; }
+    private async Task ExecuteJumpToLine()
     {
         IsJumpTargetInvalid = false; JumpStatusMessage = string.Empty;
         if (!int.TryParse(TargetOriginalLineNumberInput, out int targetLineNumber) || targetLineNumber <= 0)
         {
-            JumpStatusMessage = "Invalid line number."; await TriggerInvalidInputFeedback(); return;
+            JumpStatusMessage = "Invalid line number.";
+            await TriggerInvalidInputFeedback();
+            return;
         }
         var foundLine = FilteredLogLines.Select((line, index) => new { line.OriginalLineNumber, Index = index })
                                        .FirstOrDefault(item => item.OriginalLineNumber == targetLineNumber);
@@ -607,13 +612,23 @@ public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecu
             HighlightedFilteredLineIndex = foundLine.Index;
             RequestScrollToLineIndex?.Invoke(this, foundLine.Index);
         }
-        else { JumpStatusMessage = $"Line {targetLineNumber} not found in filtered view."; await TriggerInvalidInputFeedback(); }
+        else
+        {
+            JumpStatusMessage = $"Line {targetLineNumber} not found in filtered view.";
+            await TriggerInvalidInputFeedback();
+        }
     }
+
     private bool CanExecuteJumpToLine() => !string.IsNullOrWhiteSpace(TargetOriginalLineNumberInput) && FilteredLogLines.Any();
     private async Task TriggerInvalidInputFeedback()
     {
-        IsJumpTargetInvalid = true; await Task.Delay(2500);
-        if (IsJumpTargetInvalid) { IsJumpTargetInvalid = false; JumpStatusMessage = string.Empty; }
+        IsJumpTargetInvalid = true;
+        await Task.Delay(2500); // This real delay is fine for the app. Tests will await the command.
+        if (IsJumpTargetInvalid) // Check if still relevant to clear
+        {
+            IsJumpTargetInvalid = false;
+            JumpStatusMessage = string.Empty;
+        }
     }
 
     partial void OnHighlightedFilteredLineIndexChanged(int oldValue, int newValue)
