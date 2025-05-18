@@ -12,6 +12,7 @@ namespace Logonaut.UI.Tests.ViewModels;
     {
         // Arrange
         base.TestInitialize();
+        base.SetupMainAndTabViewModel();
         _tabViewModel.FilteredLogLines.Clear();
     }
 

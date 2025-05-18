@@ -18,19 +18,24 @@ using System.Reflection; // For accessing internal members for testing if necess
 
 namespace Logonaut.UI.Tests.ViewModels;
 
+/**
+ * Base class for setting up common testing infrastructure for ViewModels,
+ * including mocks, a TestScheduler for Rx.NET, and an STA thread for UI-related tests.
+ */
 [TestClass] public abstract class MainViewModelTestBase
 {
-    protected TabViewModel _tabViewModel = null!; // To hold the internal TabViewModel instance
-
     // --- Shared Mocks & Context ---
     protected MockSettingsService _mockSettings = null!;
     protected MockLogSourceProvider _mockSourceProvider = null!;
     protected MockLogSource _mockFileLogSource = null!;
     protected MockFileDialogService _mockFileDialog = null!;
-    protected MockLogSource _mockSimulatorSource = null!; // Use the correct mock type
+    protected MockLogSource _mockSimulatorSource = null!;
     protected SynchronizationContext _testContext = null!;
-    protected MainViewModel _viewModel = null!;
     protected TestScheduler _backgroundScheduler = null!;
+
+    // --- Specific to MainViewModel testing, can be ignored by other derived classes ---
+    protected MainViewModel _viewModel = null!;
+    protected TabViewModel _tabViewModel = null!; // To hold the internal TabViewModel instance
 
     // --- Test State ---
     protected bool _requestScrollToEndEventFired = false;
@@ -70,17 +75,20 @@ namespace Logonaut.UI.Tests.ViewModels;
     {
         // Instantiate mocks
         _mockSettings = new MockSettingsService();
-        _mockSourceProvider = new MockLogSourceProvider(); // This creates MockFileLogSource and MockSimulatorLogSource
+        _mockSourceProvider = new MockLogSourceProvider();
         _mockFileLogSource = _mockSourceProvider.MockFileSource;
-        _mockSimulatorSource = _mockSourceProvider.MockSimulatorSource; // Get the simulator mock
+        _mockSimulatorSource = _mockSourceProvider.MockSimulatorSource;
         _mockFileDialog = new MockFileDialogService();
-        // The use of our ImmediateSynchronizationContext means that there is no need for _testContext.Send(_ => { }, null);
-        _testContext = new ImmediateSynchronizationContext();
+        _testContext = new ImmediateSynchronizationContext(); // No need for _testContext.Send
         _backgroundScheduler = new TestScheduler();
 
         _mockSettings.SettingsToReturn = MockSettingsService.CreateDefaultTestSettings();
 
-        // Instantiate ViewModel using the provider
+        _requestScrollToEndEventFired = false;
+    }
+
+    protected void SetupMainAndTabViewModel()
+    {
         _viewModel = new MainViewModel(
             _mockSettings,
             _mockSourceProvider,
@@ -88,11 +96,7 @@ namespace Logonaut.UI.Tests.ViewModels;
             _testContext,
             _backgroundScheduler
         );
-
-        // Reset test state variables
-        _requestScrollToEndEventFired = false;
-
-        _tabViewModel = GetInternalTabViewModel(_viewModel); // Get the TabViewModel instance
+        _tabViewModel = GetInternalTabViewModel(_viewModel);
         _tabViewModel.RequestScrollToEnd += ViewModel_RequestScrollToEndHandler;
     }
 
@@ -101,14 +105,11 @@ namespace Logonaut.UI.Tests.ViewModels;
     {
         RunOnSta(() =>
         {
-            if (_viewModel != null)
+            if (_viewModel != null && _tabViewModel != null) // Check if _tabViewModel was initialized
             {
                 _tabViewModel.RequestScrollToEnd -= ViewModel_RequestScrollToEndHandler;
             }
-            _viewModel?.Dispose(); // This will dispose the internal TabViewModel
-            // Mocks are managed by _mockSourceProvider; their disposal is handled if necessary
-            // _mockFileLogSource?.Dispose(); // Disposed by TabViewModel -> LogSource.Dispose()
-            // _mockSimulatorSource?.Dispose(); // Disposed by TabViewModel -> LogSource.Dispose()
+            _viewModel?.Dispose();
         });
     }
 
@@ -119,8 +120,10 @@ namespace Logonaut.UI.Tests.ViewModels;
 
     #region Helper Methods
 
-    // Helper to get the _internalTabViewModel instance from MainViewModel using reflection
-    // This is for testing purposes. In a real scenario, you'd test through public APIs.
+    /**
+     * Retrieves the internal TabViewModel instance from a MainViewModel using reflection.
+     * This is intended for testing purposes to access an internal component.
+     */
     protected TabViewModel GetInternalTabViewModel(MainViewModel mainVm)
     {
         var fieldInfo = typeof(MainViewModel).GetField("_internalTabViewModel", BindingFlags.NonPublic | BindingFlags.Instance);
@@ -136,11 +139,20 @@ namespace Logonaut.UI.Tests.ViewModels;
         return tabVm;
     }
 
-
+    /**
+     * Gets the currently active mock log source based on the MainViewModel's state.
+     * This helps tests interact with the correct mock source (file or simulator).
+     */
     protected MockLogSource GetActiveMockSource()
     {
-        // The LogSource on TabViewModel is the actual ILogSource instance.
-        // We expect this to be one of our mocks.
+        if (_tabViewModel == null)
+        {
+            // If _tabViewModel isn't set up (e.g., in tests not focusing on MainViewModel),
+            // we might need a different way to determine the active source, or this method shouldn't be called.
+            // For now, assume it's called in a context where _tabViewModel is valid.
+            throw new InvalidOperationException("_tabViewModel is not initialized. Cannot determine active mock source.");
+        }
+
         if (_tabViewModel.LogSourceExposeDeprecated == _mockSimulatorSource)
         {
             return _mockSimulatorSource;
@@ -149,16 +161,14 @@ namespace Logonaut.UI.Tests.ViewModels;
         {
             return _mockFileLogSource;
         }
-        // If it's null or some other type, it means the tab's source isn't one of the primary mocks.
-        // This could happen if the tab is for pasted content (NullLogSource) or hasn't been activated properly.
-        // For tests specifically targeting file/simulator, ensure the tab is configured for that.
-        // If the current LogSource is null, it implies the tab might not be fully active or is misconfigured.
-        // For many tests, we might want to default to _mockFileLogSource if the simulator isn't explicitly running.
-        // However, _viewModel.IsSimulatorRunning directly queries the tab's source type.
-        return _viewModel.IsSimulatorRunning ? _mockSimulatorSource : _mockFileLogSource;
+        // Fallback or if using NullLogSource etc.
+        return _mockFileLogSource; // Default to file source if no specific simulator is active
     }
 
-
+    /**
+     * Finds a visual child of a specific type within a DependencyObject's visual tree.
+     * Can optionally filter by name.
+     */
     protected static T? FindVisualChild<T>(DependencyObject parent, string name = "") where T : FrameworkElement
     {
         T? foundChild = null;
@@ -184,7 +194,9 @@ namespace Logonaut.UI.Tests.ViewModels;
                     }
                     else
                     {
-                        foundChild = FindVisualChild<T>(child, name);
+                        // If name is specified, but current child doesn't match,
+                        // still need to search its children.
+                        foundChild = FindVisualChild<T>(childType, name);
                         if (foundChild != null) break;
                     }
                 }
@@ -198,9 +210,15 @@ namespace Logonaut.UI.Tests.ViewModels;
         return foundChild;
     }
 
+    /**
+     * Calculates the expected character offset of a search term within a specific line of the filtered log.
+     * Used for verifying search result positions.
+     */
     protected int CalculateExpectedOffset(int targetLineIndex, string searchTerm)
     {
-        // Ensure index is valid before accessing
+        if (_tabViewModel == null)
+             throw new InvalidOperationException("_tabViewModel is not initialized. Cannot calculate offset.");
+
         if (targetLineIndex < 0 || targetLineIndex >= _tabViewModel.FilteredLogLines.Count)
         {
             throw new ArgumentOutOfRangeException(nameof(targetLineIndex), $"Target line index {targetLineIndex} is out of bounds for FilteredLogLines count {_tabViewModel.FilteredLogLines.Count}.");
@@ -211,17 +229,15 @@ namespace Logonaut.UI.Tests.ViewModels;
         {
             offset += _tabViewModel.FilteredLogLines[i].Text.Length + Environment.NewLine.Length;
         }
-        // Find the term within the target line
         int indexInLine = _tabViewModel.FilteredLogLines[targetLineIndex].Text.IndexOf(searchTerm, _tabViewModel.IsCaseSensitiveSearch ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase);
 
-        if (indexInLine == -1)
-        {
-            return -1;
-        }
-
-        return offset + indexInLine;
+        return indexInLine == -1 ? -1 : offset + indexInLine;
     }
 
+    /**
+     * Executes an action on the STA thread, ensuring UI-related operations are performed safely.
+     * Propagates any exceptions from the action.
+     */
     protected void RunOnSta(Action action)
     {
         Exception? threadException = null;
@@ -239,12 +255,17 @@ namespace Logonaut.UI.Tests.ViewModels;
         if (threadException != null) throw threadException;
     }
 
+    /**
+     * Helper method for MainViewModel tests to simulate the filter update trigger.
+     * Advances the TestScheduler to allow debounced operations to complete.
+     */
     protected void InjectTriggerFilterUpdate()
     {
-        // Access _internalTabViewModel to directly call its filter update logic
-        _tabViewModel.ApplyFiltersFromProfile(_viewModel.AvailableProfiles, _viewModel.ContextLines);
+        if (_tabViewModel == null)
+             throw new InvalidOperationException("_tabViewModel is not initialized. Cannot inject filter update.");
 
-        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks); // Allow debounced filter to run
+        _tabViewModel.ApplyFiltersFromProfile(_viewModel.AvailableProfiles, _viewModel.ContextLines);
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks);
     }
 
     #endregion // Helper Methods

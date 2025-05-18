@@ -17,8 +17,8 @@ namespace Logonaut.UI.Tests.ViewModels;
 {
     [TestInitialize] public override void TestInitialize()
     {
-        // Arrange
         base.TestInitialize();
+        base.SetupMainAndTabViewModel();
 
         var defaultProfileVM = _viewModel.AvailableProfiles.FirstOrDefault(p => p.Name == "Default");
         Assert.IsNotNull(defaultProfileVM, "Default profile VM not found after base initialization.");

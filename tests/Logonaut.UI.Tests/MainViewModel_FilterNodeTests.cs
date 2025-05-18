@@ -13,6 +13,7 @@ namespace Logonaut.UI.Tests.ViewModels;
     [TestInitialize] public override void TestInitialize()
     {
         base.TestInitialize();
+        base.SetupMainAndTabViewModel();
 
         // Ensure the active profile is "Default" and has an AndFilter root for these tests.
         var defaultProfileVM = _viewModel.AvailableProfiles.FirstOrDefault(p => p.Name == "Default");

@@ -13,10 +13,15 @@ namespace Logonaut.UI.Tests.ViewModels;
 /// Tests related to constructor logic, loading/saving basic settings.
 /// Verifies the INITIAL state and persistence mechanisms.
 /// </summary>
-[TestClass]
-public class MainViewModel_InitializationPersistenceTests : MainViewModelTestBase // Inherits mocks, context, VM setup
+[TestClass] public class MainViewModel_InitializationPersistenceTests : MainViewModelTestBase
 {
-// Verifies: [ReqPersistSettingAutoScrollv1]
+    [TestInitialize] public override void TestInitialize()
+    {
+        base.TestInitialize();
+        base.SetupMainAndTabViewModel();
+    }
+
+    // Verifies: [ReqPersistSettingAutoScrollv1]
     [TestMethod] public void Constructor_LoadsAutoScrollSetting_True()
     {
         // Arrange

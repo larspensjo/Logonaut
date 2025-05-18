@@ -11,6 +11,12 @@ namespace Logonaut.UI.Tests.ViewModels;
 // Tests requiring STA thread and actual WPF controls
 [TestClass] public class MainViewModel_WpfInteractionTests : MainViewModelTestBase // Inherits STA setup
 {
+    [TestInitialize] public override void TestInitialize()
+    {
+        base.TestInitialize();
+        base.SetupMainAndTabViewModel();
+    }
+
     // Helper to yield execution to the dispatcher
     private void DispatcherYield(DispatcherPriority priority = DispatcherPriority.Background)
     {

@@ -15,6 +15,12 @@ namespace Logonaut.UI.Tests.ViewModels;
 /// </summary>
 [TestClass] public class MainViewModel_StateUpdateTests : MainViewModelTestBase
 {
+    [TestInitialize] public override void TestInitialize()
+    {
+        base.TestInitialize();
+        base.SetupMainAndTabViewModel();
+    }
+
     private async Task SetupWithInitialLinesForTab(IEnumerable<string> lines, IFilter? initialFilter = null)
     {
         _mockFileLogSource.LinesForInitialRead.Clear();
