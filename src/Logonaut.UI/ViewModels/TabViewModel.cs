@@ -167,7 +167,7 @@ public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecu
         // and reset UI collections.
         if (SourceType == SourceType.File || SourceType == SourceType.Simulator)
         {
-            _processor.LogDoc.Clear();      // Clear LogDoc in processor
+            _processor.LogDocDeprecated.Clear();      // Clear LogDoc in processor
             ResetUICollectionsAndState();   // Clear related UI collections and states in TabViewModel
         }
         // For Pasted type, LogDoc is managed by LoadPastedContent, and ResetUICollectionsAndState
@@ -353,7 +353,7 @@ public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecu
         
         _processor.LoadPastedLogContent(text); 
         ResetUICollectionsAndState();          
-        TotalLogLines = _processor.LogDoc.Count; 
+        TotalLogLines = _processor.LogDocDeprecated.Count; 
         IsModified = true;
         // MainViewModel will call ActivateAsync after this to apply filters to the newly pasted content.
     }

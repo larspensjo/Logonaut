@@ -29,7 +29,8 @@ public class LogDataProcessor : IDisposable
     private readonly Subject<FilteredUpdateBase> _filteredUpdatesOutSubject = new Subject<FilteredUpdateBase>();
     private readonly Subject<long> _totalLinesOutSubject = new Subject<long>();
 
-    public LogDocument LogDoc { get; } = new LogDocument();
+    private readonly LogDocument _logDocument = new LogDocument();
+    public LogDocument LogDocDeprecated => _logDocument;
     public ILogSource? LogSource { get; private set; }
     public IReactiveFilteredLogStream? ReactiveFilteredLogStream { get; private set; }
 
@@ -83,7 +84,7 @@ public class LogDataProcessor : IDisposable
         }
 
         ReactiveFilteredLogStream?.Dispose(); // Ensure previous stream is disposed
-        ReactiveFilteredLogStream = new ReactiveFilteredLogStream(LogSource, LogDoc, _uiContext, AddLineToLogDocumentCallback, _backgroundScheduler);
+        ReactiveFilteredLogStream = new ReactiveFilteredLogStream(LogSource, _logDocument, _uiContext, AddLineToLogDocumentCallback, _backgroundScheduler);
         SubscribeToFilteredStreamEvents(); // Subscribe to the processor's outputs
         ReactiveFilteredLogStream.Reset(); // Reset stream state for new source/filter
 
@@ -115,7 +116,7 @@ public class LogDataProcessor : IDisposable
         {
             // For pasted content, LogDoc is assumed to be populated by TabViewModel before calling Activate.
             // The ReactiveFilteredLogStream will process the existing content of LogDoc.
-            initialLinesLoaded = LogDoc.Count;
+            initialLinesLoaded = _logDocument.Count;
             _uiContext.Post(count => _totalLinesOutSubject.OnNext((long)count!), initialLinesLoaded);
         }
 
@@ -150,7 +151,7 @@ public class LogDataProcessor : IDisposable
 
         if (clearLogDoc)
         {
-            LogDoc.Clear();
+            _logDocument.Clear();
             _uiContext.Post(_ => _totalLinesOutSubject.OnNext(0), null); // Reset total lines if doc cleared
         }
         Debug.WriteLine($"---> LogDataProcessor: DeactivationInternal complete.");
@@ -158,7 +159,7 @@ public class LogDataProcessor : IDisposable
 
     private void AddLineToLogDocumentCallback(string line)
     {
-        LogDoc.AppendLine(line);
+        _logDocument.AppendLine(line);
         // Note: TotalLinesProcessed is updated by the ReactiveFilteredLogStream itself internally
         // based on lines it receives from ILogSource.LogLines, not directly from this callback.
         // This callback is primarily for initial lines from PrepareAndGetInitialLinesAsync.
@@ -203,9 +204,9 @@ public class LogDataProcessor : IDisposable
     */
     public void LoadPastedLogContent(string text)
     {
-        LogDoc.Clear(); // Clear previous content before adding new
-        LogDoc.AddInitialLines(text);
-        _uiContext.Post(_ => _totalLinesOutSubject.OnNext(LogDoc.Count), null);
+        _logDocument.Clear(); // Clear previous content before adding new
+        _logDocument.AddInitialLines(text);
+        _uiContext.Post(_ => _totalLinesOutSubject.OnNext(_logDocument.Count), null);
     }
 
 
