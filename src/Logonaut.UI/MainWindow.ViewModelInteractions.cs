@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Media;
+using System.Diagnostics;
 using Logonaut.UI.ViewModels;
 
 namespace Logonaut.UI;
@@ -30,29 +31,32 @@ public partial class MainWindow : Window, IDisposable
             // Handle HighlightedOriginalLineNumber change from ViewModel
             if (e.PropertyName == nameof(MainViewModel.HighlightedOriginalLineNumber))
             {
-                var highlightBrush = _logOutputEditor.TextArea.TextView.Tag as Brush;
+                var highlightBrush = _logOutputEditor.TextArea.TextView.Tag as Brush; 
                 // Pass the current FilteredLogLines to the transformer.
                 // It's important this is the same collection instance the editor is displaying.
                 _selectedIndexTransformer.UpdateState(
-                    _viewModel.HighlightedOriginalLineNumber,
+                    _viewModel.HighlightedOriginalLineNumber, // Get the current value from MainViewModel (which delegates to TabViewModel)
                     highlightBrush,
-                    _viewModel.FilteredLogLines, // Pass the current FilteredLogLines
+                    _viewModel.FilteredLogLines, 
                     _logOutputEditor.TextArea.TextView
                 );
+                Debug.WriteLine($"ViewModel_PropertyChanged: HighlightOriginalLineNumber changed to {_viewModel.HighlightedOriginalLineNumber}. Transformer updated.");
             }
             // The HighlightedFilteredLineIndex property change handling remains for auto-scroll logic,
             // but the actual highlighting is now driven by HighlightedOriginalLineNumber.
             else if (e.PropertyName == nameof(MainViewModel.HighlightedFilteredLineIndex))
             {
+                // Auto-scroll logic (remains relevant for when selection is driven by, e.g., search results)
                 if (_viewModel.HighlightedFilteredLineIndex >= 0 && _viewModel.IsAutoScrollEnabled)
                 {
                     bool highlightedLineIsLastLine = (_viewModel.FilteredLogLines.Count > 0 &&
-                                                      _viewModel.HighlightedFilteredLineIndex == _viewModel.FilteredLogLines.Count - 1);
+                                                    _viewModel.HighlightedFilteredLineIndex == _viewModel.FilteredLogLines.Count - 1);
                     if (!highlightedLineIsLastLine)
                     {
                         _viewModel.IsAutoScrollEnabled = false;
                     }
                 }
+                Debug.WriteLine($"ViewModel_PropertyChanged: HighlightFilteredLineIndex changed to {_viewModel.HighlightedFilteredLineIndex}.");
             }
         }
 

@@ -178,45 +178,53 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
 
     private void InternalTabViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (sender != _internalTabViewModel) return; // Ensure it's our internal tab
+        if (sender != _internalTabViewModel) return;
 
-        if (e.PropertyName == nameof(TabViewModel.IsLoading))
+        // Forward relevant property changes from TabViewModel to MainViewModel's listeners
+        switch (e.PropertyName)
         {
-            // The tab's loading state changed. This affects CanPerformActionWhileNotLoading.
-            // Re-evaluate CanExecute for commands that use it.
-            _uiContext.Post(_ =>
-            {
-                (OpenLogFileCommand as IAsyncRelayCommand)?.NotifyCanExecuteChanged();
-                ToggleSimulatorCommand.NotifyCanExecuteChanged(); // This is IRelayCommand
-                (RestartSimulatorCommand as IRelayCommand)?.NotifyCanExecuteChanged();
-                (ClearLogCommand as IRelayCommand)?.NotifyCanExecuteChanged();
+            case nameof(TabViewModel.IsLoading):
+                // The tab's loading state changed. This affects CanPerformActionWhileNotLoading.
+                // Re-evaluate CanExecute for commands that use it.
+                _uiContext.Post(_ =>
+                {
+                    (OpenLogFileCommand as IAsyncRelayCommand)?.NotifyCanExecuteChanged();
+                    ToggleSimulatorCommand.NotifyCanExecuteChanged();
+                    (RestartSimulatorCommand as IRelayCommand)?.NotifyCanExecuteChanged();
+                    (ClearLogCommand as IRelayCommand)?.NotifyCanExecuteChanged();
                 // GenerateBurstCommand's CanExecute is different (CanGenerateBurst),
                 // but if Simulator becomes active/inactive, IsSimulatorRunning changes,
                 // which should trigger GenerateBurstCommand.NotifyCanExecuteChanged() via NotifySimulatorCommandsCanExecuteChanged().
                 // However, to be safe, or if CanGenerateBurst also checks general loading:
-                (GenerateBurstCommand as IAsyncRelayCommand)?.NotifyCanExecuteChanged();
-
-            }, null);
-            Debug.WriteLine($"---> MainViewModel: Tab IsLoading changed to {_internalTabViewModel.IsLoading}. Notified relevant CanExecuteChanged.");
+                    (GenerateBurstCommand as IAsyncRelayCommand)?.NotifyCanExecuteChanged();
+                }, null);
+                break;
+            case nameof(TabViewModel.TotalLogLines):
+                OnPropertyChanged(nameof(TotalLogLines));
+                break;
+            case nameof(TabViewModel.FilteredLogLinesCount):
+                 OnPropertyChanged(nameof(FilteredLogLinesCount));
+                break;
+            case nameof(TabViewModel.SearchText):
+                OnPropertyChanged(nameof(SearchText));
+                break;
+            case nameof(TabViewModel.HighlightedOriginalLineNumber):
+                OnPropertyChanged(nameof(HighlightedOriginalLineNumber));
+                break;
+            case nameof(TabViewModel.HighlightedFilteredLineIndex):
+                OnPropertyChanged(nameof(HighlightedFilteredLineIndex));
+                break;
+            case nameof(TabViewModel.TargetOriginalLineNumberInput):
+                OnPropertyChanged(nameof(TargetOriginalLineNumberInput));
+                break;
+            case nameof(TabViewModel.JumpStatusMessage):
+                OnPropertyChanged(nameof(JumpStatusMessage));
+                break;
+            case nameof(TabViewModel.IsJumpTargetInvalid):
+                OnPropertyChanged(nameof(IsJumpTargetInvalid));
+                break;
+            // Add other properties as needed
         }
-        else if (e.PropertyName == nameof(TabViewModel.TotalLogLines))
-        {
-            OnPropertyChanged(nameof(TotalLogLines)); // Forward notification for UI binding to MainViewModel.TotalLogLines
-        }
-        // Add other property forwarding if necessary
-        // else if (e.PropertyName == nameof(TabViewModel.FilteredLogLinesCount))
-        // {
-        //     OnPropertyChanged(nameof(FilteredLogLinesCount));
-        // }
-        // For FilteredLogLinesCount, since it's a simple getter in MainViewModel,
-        // it will re-evaluate when something else causes a MainViewModel.OnPropertyChanged.
-        // If you need it to update more proactively, TabViewModel would need to raise PropertyChanged for it too.
-        // TabViewModel does not currently have FilteredLogLinesCount, but it does for TotalLogLines.
-        // Let's make TabViewModel explicitly raise PropertyChanged for FilteredLogLinesCount.
-
-        // In TabViewModel.cs, after FilteredLogLines is modified:
-        // OnPropertyChanged(nameof(FilteredLogLinesCount));
-        // This is already done in ApplyFilteredUpdateToThisTab.
     }
     #region Delegated Properties and Commands for UI Binding (Phase 0.1)
 

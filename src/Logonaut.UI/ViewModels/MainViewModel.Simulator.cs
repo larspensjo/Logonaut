@@ -14,29 +14,20 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _isSimulatorConfigurationVisible = false;
     [RelayCommand] private void HideSimulatorConfig() => IsSimulatorConfigurationVisible = false;
 
-    // IsSimulatorRunning now reflects the state of the _internalTabViewModel's source
     public bool IsSimulatorRunning
     {
-         get
-         {            
-             // Check if the tab is configured as a Simulator type AND its LogSource is an ISimulatorLogSource
-             if (_internalTabViewModel.SourceType == SourceType.Simulator &&
-                 _internalTabViewModel.LogSource is ISimulatorLogSource sim)
-             {
-                 Debug.WriteLine($"---> MainViewModel.IsSimulatorRunning_get: Tab's SourceType is Simulator. LogSource is ISimulatorLogSource. IsRunning: {sim.IsRunning}");
-                 return sim.IsRunning;
-             }
-             // Log detailed reason if not considered running
-             if (_internalTabViewModel.SourceType != SourceType.Simulator) {
-                 Debug.WriteLine($"---> MainViewModel.IsSimulatorRunning_get: Tab's SourceType is NOT Simulator (Type: {_internalTabViewModel.SourceType}, LogSource: {_internalTabViewModel.LogSource?.GetType().Name ?? "null"}). Returning false.");
-             } else { // SourceType IS Simulator, but LogSource is not ISimulatorLogSource or is null
-                  Debug.WriteLine($"---> MainViewModel.IsSimulatorRunning_get: Tab's SourceType is Simulator, but LogSource is not ISimulatorLogSource (Type: {_internalTabViewModel.LogSource?.GetType().Name ?? "null"}). Returning false.");
-             }
-             return false;
-         }
+        get
+        {
+            if (_internalTabViewModel.SourceType == SourceType.Simulator &&
+                _internalTabViewModel.LogSource is ISimulatorLogSource sim)
+            {
+                // Removed verbose logging from original for brevity
+                return sim.IsRunning;
+            }
+            return false;
+        }
     }
 
-    // Global simulator settings remain in MainViewModel
     [ObservableProperty] private double _simulatorLPS = 10;
     [ObservableProperty] private double _simulatorErrorFrequency = 100.0;
     [ObservableProperty] private double _simulatorBurstSize = 1000;
@@ -44,7 +35,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     partial void OnSimulatorLPSChanged(double value)
     {
         if (_internalTabViewModel.LogSource is ISimulatorLogSource sim)
-            sim.LinesPerSecond = (int)Math.Round(value); // Use LinesPerSecond setter
+            sim.LinesPerSecond = (int)Math.Round(value);
         SaveCurrentSettingsDelayed();
         NotifySimulatorCommandsCanExecuteChanged();
     }
@@ -56,13 +47,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
         SaveCurrentSettingsDelayed();
         NotifySimulatorCommandsCanExecuteChanged();
     }
-    
+
     partial void OnSimulatorBurstSizeChanged(double value)
     {
         SaveCurrentSettingsDelayed();
         NotifySimulatorCommandsCanExecuteChanged();
     }
-    
+
     private void NotifySimulatorCommandsCanExecuteChanged()
     {
         // 1. Notify that IsSimulatorRunning might have changed.
@@ -88,7 +79,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         int burstCount = (int)Math.Round(SimulatorBurstSize);
         if (burstCount <= 0) return;
 
-        _uiContext.Post(_ => _internalTabViewModel.CurrentBusyStates.Add(TabViewModel.LoadingToken), null); // Use tab's busy token
+        _uiContext.Post(_ => _internalTabViewModel.CurrentBusyStates.Add(TabViewModel.LoadingToken), null);
         Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> GenerateBurst: Starting burst of {burstCount} lines.");
         try
         {
@@ -97,7 +88,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         catch (Exception ex) { HandleSimulatorError("Error generating burst", ex); }
         finally { _uiContext.Post(_ => _internalTabViewModel.CurrentBusyStates.Remove(TabViewModel.LoadingToken), null); }
     }
-    private bool CanGenerateBurst() => _internalTabViewModel.LogSource is ISimulatorLogSource && SimulatorBurstSize > 0;
+    private bool CanGenerateBurst() => IsSimulatorRunning;
 
     private async Task ActivateSimulatorInInternalTab()
     {
@@ -106,13 +97,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
         try
         {
-            _internalTabViewModel.Deactivate(); // Deactivate current source in tab
-            // Reconfigure _internalTabViewModel to be a Simulator tab
+            _internalTabViewModel.Deactivate();
             _internalTabViewModel.SourceType = SourceType.Simulator;
-            _internalTabViewModel.SourceIdentifier = "Simulator"; // Ensure non-empty identifier
-            _internalTabViewModel.Header = "Simulator";
+            _internalTabViewModel.SourceIdentifier = "Simulator";
+            _internalTabViewModel.Header = "Simulator"; // Set tab header
+            CurrentGlobalLogFilePathDisplay = _internalTabViewModel.Header; // Update global display
 
-            // Await the activation of the tab
+
             await _internalTabViewModel.ActivateAsync(
                 this.AvailableProfiles,
                 this.ContextLines,
@@ -121,15 +112,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 this.IsAutoScrollEnabled
             );
 
-            // Post-activation: apply global settings to the newly created simulator source
             if (_internalTabViewModel.LogSource is ISimulatorLogSource simSource)
             {
                 simSource.LinesPerSecond = (int)Math.Round(SimulatorLPS);
                 simSource.ErrorFrequency = (int)Math.Round(SimulatorErrorFrequency);
-                // StartMonitoring is called within TabViewModel's ActivateAsync for Simulator source type
             }
             _uiContext.Post(_ => NotifySimulatorCommandsCanExecuteChanged(), null);
-            CurrentGlobalLogFilePathDisplay = "[Simulation Active]";
             Debug.WriteLine($"---> ActivateSimulatorInInternalTab: Exit.");
         }
         catch (Exception ex)
@@ -140,7 +128,6 @@ public partial class MainViewModel : ObservableObject, IDisposable
     }
 
 
-    // Renamed from ExecuteStopSimulatorLogic
     private void StopSimulatorInInternalTab()
     {
         Debug.WriteLine($"---> StopSimulatorInInternalTab: Entry.");
@@ -179,54 +166,63 @@ public partial class MainViewModel : ObservableObject, IDisposable
         if (!CanRestartSimulator()) return;
         try
         {
-            // Deactivate and Reactivate the tab, which will reset its LogDoc and restart the simulator source.
             _internalTabViewModel.Deactivate();
-            // Ensure SourceType remains Simulator
-            _internalTabViewModel.SourceType = SourceType.Simulator;
-             _ = _internalTabViewModel.ActivateAsync(
-                this.AvailableProfiles, 
-                this.ContextLines,
-                this.HighlightTimestamps,
-                this.ShowLineNumbers,
-                this.IsAutoScrollEnabled
-            ).ContinueWith(t => {
-                 if (t.IsFaulted)
-                 {
-                     HandleSimulatorError("Error restarting simulator tab", t.Exception!);
-                     return;
-                 }
-                 if (_internalTabViewModel.LogSource is ISimulatorLogSource newSimSource)
-                 {
-                     newSimSource.LinesPerSecond = (int)Math.Round(SimulatorLPS);
-                     newSimSource.ErrorFrequency = (int)Math.Round(SimulatorErrorFrequency);
-                     // newSimSource.Restart(); // ActivateAsync -> StartMonitoring should handle the restart
-                 }
-                 _uiContext.Post(_ => NotifySimulatorCommandsCanExecuteChanged(), null);
-             });
+            _internalTabViewModel.SourceType = SourceType.Simulator; // Ensure source type remains simulator
+            _internalTabViewModel.Header = "Simulator"; // Reset header
+            CurrentGlobalLogFilePathDisplay = _internalTabViewModel.Header; // Update global display
+
+            _ = _internalTabViewModel.ActivateAsync(
+               this.AvailableProfiles,
+               this.ContextLines,
+               this.HighlightTimestamps,
+               this.ShowLineNumbers,
+               this.IsAutoScrollEnabled
+           ).ContinueWith(t =>
+           {
+               if (t.IsFaulted && t.Exception != null)
+               {
+                   HandleSimulatorError("Error restarting simulator tab", t.Exception.Flatten());
+                   return;
+               }
+               if (_internalTabViewModel.LogSource is ISimulatorLogSource newSimSource)
+               {
+                   newSimSource.LinesPerSecond = (int)Math.Round(SimulatorLPS);
+                   newSimSource.ErrorFrequency = (int)Math.Round(SimulatorErrorFrequency);
+               }
+               _uiContext.Post(_ => NotifySimulatorCommandsCanExecuteChanged(), null);
+           });
         }
         catch (Exception ex) { HandleSimulatorError("Error restarting simulator", ex); }
     }
 
     [RelayCommand(CanExecute = nameof(CanPerformActionWhileNotLoading))]
-    private void ClearLog() // This command clears the data of the _internalTabViewModel
+    private void ClearLog()
     {
         try
         {
-            ResetCurrentlyActiveTabData(); // This deactivates, clears, and reactivates the tab
+            // If simulator is running, stop it before clearing.
+            if (IsSimulatorRunning)
+            {
+                StopSimulatorInInternalTab();
+            }
+            ResetCurrentlyActiveTabData();
             Debug.WriteLine("---> Log Cleared for internal tab");
         }
         catch (Exception ex)
         {
-             Debug.WriteLine($"!!! Error clearing log: {ex.Message}");
-             MessageBox.Show($"Error clearing log: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+            Debug.WriteLine($"!!! Error clearing log: {ex.Message}");
+            MessageBox.Show($"Error clearing log: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
     private void HandleSimulatorError(string context, Exception ex)
     {
         Debug.WriteLine($"!!! {context}: {ex.Message}");
-        MessageBox.Show($"{context}: {ex.Message}", "Simulator Error", MessageBoxButton.OK, MessageBoxImage.Error);
-        if (IsSimulatorRunning) StopSimulatorInInternalTab(); // Attempt to stop
+        _uiContext.Post(_ =>
+        {
+            MessageBox.Show($"{context}: {ex.Message}", "Simulator Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }, null);
+        if (IsSimulatorRunning) StopSimulatorInInternalTab();
         NotifySimulatorCommandsCanExecuteChanged();
     }
 
@@ -235,8 +231,6 @@ public partial class MainViewModel : ObservableObject, IDisposable
         SimulatorLPS = settings.SimulatorLPS;
         SimulatorErrorFrequency = settings.SimulatorErrorFrequency;
         SimulatorBurstSize = settings.SimulatorBurstSize;
-        // Applying these to an active simulator tab happens in OnSimulatorLPSChanged etc.
-        // or when a simulator tab is activated.
     }
 
     private void SaveSimulatorSettings(LogonautSettings settings)
