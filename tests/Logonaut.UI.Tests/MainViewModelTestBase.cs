@@ -141,11 +141,11 @@ namespace Logonaut.UI.Tests.ViewModels;
     {
         // The LogSource on TabViewModel is the actual ILogSource instance.
         // We expect this to be one of our mocks.
-        if (_tabViewModel.LogSource == _mockSimulatorSource)
+        if (_tabViewModel.LogSourceExposeDeprecated == _mockSimulatorSource)
         {
             return _mockSimulatorSource;
         }
-        if (_tabViewModel.LogSource == _mockFileLogSource)
+        if (_tabViewModel.LogSourceExposeDeprecated == _mockFileLogSource)
         {
             return _mockFileLogSource;
         }

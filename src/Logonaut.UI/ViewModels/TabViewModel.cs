@@ -3,7 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using Logonaut.Common;
 using Logonaut.Core;
 using Logonaut.Filters;
-using Logonaut.UI.Commands; // For ICommandExecutor
+using Logonaut.UI.Commands; 
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -14,7 +14,7 @@ using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows; // For MessageBox
+using System.Windows; 
 
 namespace Logonaut.UI.ViewModels;
 
@@ -28,34 +28,25 @@ public enum SourceType
 public record SearchResult(int Offset, int Length);
 
 /*
- * ViewModel for a single tab, representing a log source and its view.
- *
- * Purpose:
- * Manages the state and logic for an individual log session, including its
- * log document, source, filter processor, and UI-related properties like
- * filtered lines, search results, and display headers.
- *
- * Role:
- * Encapsulates all data and operations specific to one log tab, allowing
- * MainViewModel to manage a collection of these for a tabbed interface.
- * Handles activation/deactivation, loading data, applying filters, and searching
- * within its own context.
- */
+* ViewModel for a single tab, representing a log source and its view.
+* It orchestrates the LogDataProcessor for data handling and manages UI-specific state
+* like filtered lines, search results, and display headers.
+*
+* Manages activation/deactivation and applies filters based on an associated profile.
+*/
 public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecutorProvider
 {
-    // --- Fields and Properties remain largely the same ---
-    private readonly ILogSourceProvider _sourceProvider;
-    private readonly ICommandExecutor _globalCommandExecutor;
+    // --- Services & Context (Injected) ---
+    private readonly ICommandExecutor _globalCommandExecutor; 
     private readonly SynchronizationContext _uiContext;
-    private readonly IScheduler? _backgroundScheduler;
+    private readonly IScheduler? _backgroundScheduler; // Passed to LogDataProcessor
 
-    public LogDocument LogDoc { get; } = new();
-    public ILogSource? LogSource { get; private set; }
-    public IReactiveFilteredLogStream? ReactiveFilteredLogStream { get; private set; }
-    private readonly CompositeDisposable _streamSubscriptions = new();
+    // --- Core Log State & Processing ---
+    private readonly LogDataProcessor _processor; 
+    private readonly CompositeDisposable _processorSubscriptions = new CompositeDisposable();
     private readonly HashSet<int> _existingOriginalLineNumbers = new HashSet<int>();
 
-
+    public ILogSource? LogSourceExposeDeprecated => _processor.LogSource;
     // --- UI Bound Properties ---
     [ObservableProperty] private string _header; // User-editable name
     [ObservableProperty] private string _displayHeader; // Combines Header and activity status
@@ -63,24 +54,18 @@ public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecu
     [ObservableProperty] private string _associatedFilterProfileName;
     [ObservableProperty] private DateTime? _lastActivityTimestamp;
     [ObservableProperty] private ObservableCollection<FilteredLogLine> _filteredLogLines = new();
-    [ObservableProperty] private long _totalLogLines;
-    [ObservableProperty] private string? _sourceIdentifier; // File path or pasted content temp path
+    [ObservableProperty] private long _totalLogLines; // Updated by LogDataProcessor's event
+    [ObservableProperty] private string? _sourceIdentifier; // File path or pasted content temp path 
     [ObservableProperty] private bool _isAutoScrollEnabled = true; // Default to true, will be updated by MainViewModel
 
-    public SourceType SourceType
-    {
-        get;
-        set; // TODO: [Phase 1 Cleanup] Re-evaluate SourceType mutability once multiple tabs are distinct instances.
-    }
-    public string? PastedContentStoragePath { get; set; }
-    [ObservableProperty] private bool _isModified;
+    public SourceType SourceType { get; set; } 
+    public string? PastedContentStoragePath { get; set; } 
+    [ObservableProperty] private bool _isModified; 
 
-    // Highlighting and Selection
     [ObservableProperty] private ObservableCollection<IFilter> _filterHighlightModels = new();
     [ObservableProperty] private int _highlightedFilteredLineIndex = -1;
     [ObservableProperty] private int _highlightedOriginalLineNumber = -1;
 
-    // Jump To Line
     [NotifyCanExecuteChangedFor(nameof(JumpToLineCommand))]
     [ObservableProperty] private string _targetOriginalLineNumberInput = string.Empty;
 
@@ -120,10 +105,10 @@ public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecu
         string initialAssociatedProfileName,
         SourceType initialSourceType,
         string? initialSourceIdentifier,
-        ILogSourceProvider sourceProvider,
+        ILogSourceProvider sourceProvider, 
         ICommandExecutor globalCommandExecutor,
         SynchronizationContext uiContext,
-        IScheduler? backgroundScheduler = null)
+        IScheduler? backgroundScheduler = null) 
     {
         _header = initialHeader;
         _displayHeader = initialHeader;
@@ -131,10 +116,12 @@ public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecu
         SourceType = initialSourceType;
         _sourceIdentifier = initialSourceIdentifier;
 
-        _sourceProvider = sourceProvider;
         _globalCommandExecutor = globalCommandExecutor;
         _uiContext = uiContext;
-        _backgroundScheduler = backgroundScheduler;
+        _backgroundScheduler = backgroundScheduler; // Stored to pass to processor if needed, though processor takes it directly
+
+        _processor = new LogDataProcessor(sourceProvider, uiContext, backgroundScheduler);
+        SubscribeToProcessorEvents();
 
         CloseTabCommand = new RelayCommand(() => RequestCloseTab?.Invoke(this, EventArgs.Empty));
         PreviousSearchCommand = new RelayCommand(ExecutePreviousSearch, CanExecuteSearch);
@@ -154,94 +141,64 @@ public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecu
         }
     }
 
+    /*
+    * Activates the tab's log processing. This involves setting up the log source and
+    * the reactive filtering stream via the LogDataProcessor. It ensures that the tab
+    * begins receiving and filtering log lines according to its configuration.
+    * 
+    * This method is typically called when a tab becomes the active tab in the UI,
+    * or when its underlying source (e.g., file path, simulator state) is defined or changes.
+    */
     public async Task ActivateAsync(IEnumerable<FilterProfileViewModel> availableProfiles, int globalContextLines, bool globalHighlightTimestamps, bool globalShowLineNumbers, bool globalAutoScrollEnabled)
     {
-        if (IsActive)
+        // Check if already active with the same source configuration to avoid redundant work.
+        // This is a simple check; more sophisticated checks might involve comparing actual source instances if they were exposed.
+        if (IsActive && _processor.CurrentSourceType == SourceType && _processor.CurrentSourceIdentifier == SourceIdentifier)
         {
-            // If already active, perhaps just re-apply filters if profile/context changed.
-            // For now, a full reactivation might be simpler if parameters like profile have changed.
-            // However, the plan implies Activate is for when a tab *becomes* active.
-            // If it's already active and settings change, ApplyFiltersFromProfile is called.
-            // This ActivateAsync is primarily for initial activation or re-activation after Deactivate.
-            Debug.WriteLine($"---> TabViewModel '{Header}': Already active. Skipping full ActivateAsync. Re-applying filters.");
-            ApplyFiltersFromProfile(availableProfiles, globalContextLines);
+            Debug.WriteLine($"---> TabViewModel '{Header}': Already active with same source. Re-applying filters if profile/context changed.");
+            ApplyFiltersFromProfile(availableProfiles, globalContextLines); // Ensure filters are current based on potentially changed profile
             return;
         }
-
 
         Debug.WriteLine($"---> TabViewModel '{Header}': Activating. SourceType: {SourceType}, Identifier: '{SourceIdentifier}'");
         _uiContext.Post(_ => CurrentBusyStates.Add(LoadingToken), null);
-        IsActive = true;
-        LastActivityTimestamp = null;
+
+        // If it's a File or Simulator source being (re)activated, clear previous LogDoc content from processor
+        // and reset UI collections.
+        if (SourceType == SourceType.File || SourceType == SourceType.Simulator)
+        {
+            _processor.LogDoc.Clear();      // Clear LogDoc in processor
+            ResetUICollectionsAndState();   // Clear related UI collections and states in TabViewModel
+        }
+        // For Pasted type, LogDoc is managed by LoadPastedContent, and ResetUICollectionsAndState
+        // would have been called there if it was a new paste.
+
+        IsActive = true; 
+        LastActivityTimestamp = null; 
         UpdateDisplayHeader();
+
+        // Determine the filter and context to apply initially
+        var activeProfileVM = availableProfiles.FirstOrDefault(p => p.Name == AssociatedFilterProfileName);
+        IFilter initialFilter = activeProfileVM?.Model?.RootFilter ?? new TrueFilter();
+        // globalContextLines is passed directly as initialContextLines
 
         try
         {
-            LogSource?.Dispose();
-            switch (SourceType)
-            {
-                case SourceType.File: LogSource = _sourceProvider.CreateFileLogSource(); break;
-                case SourceType.Simulator: LogSource = _sourceProvider.CreateSimulatorLogSource(); break;
-                case SourceType.Pasted: LogSource = new NullLogSource(); break;
-                default: throw new InvalidOperationException($"Unsupported SourceType: {SourceType}");
-            }
+            // Delegate to the processor to handle source creation, stream setup, and initial load/filtering
+            await _processor.ActivateAsync(SourceType, SourceIdentifier, initialFilter, globalContextLines);
+            // ApplyFiltersFromProfile is now implicitly handled by the initialFilter/ContextLines in processor's ActivateAsync
         }
         catch (Exception ex)
         {
-            HandleActivationError($"Error initializing log source for tab '{Header}': {ex.Message}");
-            return;
+            HandleActivationError($"Error activating data processor for tab '{Header}': {ex.Message}");
+            return; 
         }
+        
+        IsAutoScrollEnabled = globalAutoScrollEnabled; // Apply global auto-scroll setting
 
-        ReactiveFilteredLogStream?.Dispose();
-        _streamSubscriptions.Clear(); // Clear previous subscriptions
-        ReactiveFilteredLogStream = new ReactiveFilteredLogStream(LogSource, LogDoc, _uiContext, AddLineToLogDocumentCallback, _backgroundScheduler);
-        SubscribeToFilteredStream();
-        ReactiveFilteredLogStream.Reset();
-
-        if (SourceType == SourceType.File && !string.IsNullOrEmpty(SourceIdentifier))
-        {
-            ResetLogDocumentAndCollections();
-            TotalLogLines = 0; // Reset before PrepareAndGetInitialLinesAsync updates it
-            try
-            {
-                long initialLines = await LogSource.PrepareAndGetInitialLinesAsync(SourceIdentifier, AddLineToLogDocumentCallback).ConfigureAwait(true); //ConfigureAwait(true) for UI context affinity if needed by callback, though callback is simple.
-                _uiContext.Post(_ => TotalLogLines = initialLines, null);
-                LogSource.StartMonitoring();
-            }
-            catch (Exception ex)
-            {
-                HandleActivationError($"Error preparing file source for tab '{Header}': {ex.Message}");
-                return;
-            }
-        }
-        else if (SourceType == SourceType.Simulator && !string.IsNullOrEmpty(SourceIdentifier))
-        {
-            ResetLogDocumentAndCollections();
-            TotalLogLines = 0; // Reset before PrepareAndGetInitialLinesAsync updates it
-            // Simulator's PrepareAndGetInitialLinesAsync typically returns 0, but TotalLogLines will update via stream.
-            await LogSource.PrepareAndGetInitialLinesAsync(SourceIdentifier, AddLineToLogDocumentCallback).ConfigureAwait(false);
-            LogSource.StartMonitoring(); // This will start the ISimulatorLogSource
-        }
-        else if (SourceType == SourceType.Pasted)
-        {
-            // LogDoc is assumed to be populated by LoadPastedContent prior to ActivateAsync.
-            // Or, it might be an empty pasted tab being activated for the first time.
-            // ResetLogDocumentAndCollections() is NOT called here for Pasted type
-            // as LoadPastedContent already handles it. If it's an empty pasted tab, LogDoc is already empty.
-            TotalLogLines = LogDoc.Count;
-        }
-
-        ApplyFiltersFromProfile(availableProfiles, globalContextLines);
-
-        IsAutoScrollEnabled = globalAutoScrollEnabled; // Apply global setting
-
-        // Remove LoadingToken only after all setup, including initial filtering, is done or queued.
-        // The ReplaceFilteredUpdate with IsInitialLoadProcessingComplete will handle removing LoadingToken.
-        // However, if ActivateAsync itself completes quickly without a big initial load,
-        // we might need to remove the token here if the stream doesn't immediately signal completion of initial load.
-        // Let's assume ReplaceFilteredUpdate handles it. If not, add:
-        // _uiContext.Post(_ => CurrentBusyStates.Remove(LoadingToken), null);
-        Debug.WriteLine($"---> TabViewModel '{Header}': Activation initiated. Stream will handle filter processing.");
+        // Note: LoadingToken is expected to be removed by the stream update from the processor
+        // (ReplaceFilteredUpdate with IsInitialLoadProcessingComplete = true) or by HandleActivationError.
+        Debug.WriteLine($"---> TabViewModel '{Header}': Activation initiated. Processor will handle data loading and filtering.");
     }
 
     private void HandleActivationError(string errorMessage)
@@ -249,45 +206,39 @@ public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecu
         Debug.WriteLine($"!!! TabViewModel '{Header}': Activation Error - {errorMessage}");
         _uiContext.Post(_ =>
         {
-            CurrentBusyStates.Remove(LoadingToken); // Ensure token is removed on error
-            CurrentBusyStates.Remove(FilteringToken); // And filtering token
+            CurrentBusyStates.Remove(LoadingToken);
+            CurrentBusyStates.Remove(FilteringToken);
             MessageBox.Show(errorMessage, "Tab Activation Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }, null);
-        IsActive = false; // Ensure IsActive is false on error
+        IsActive = false; 
         UpdateDisplayHeader();
-        // Consider further cleanup, e.g., Deactivate() without re-entry checks
-        LogSource?.StopMonitoring();
-        LogSource?.Dispose();
-        LogSource = null;
-        ReactiveFilteredLogStream?.Dispose();
-        ReactiveFilteredLogStream = null;
+        // Consider further cleanup, like ensuring processor is also in a clean state or deactivated
+        _processor.Deactivate(clearLogDocument: true); // Deactivate processor and clear its doc on error
     }
 
-    // Deactivate method remains largely the same
-    public void Deactivate()
+    /*
+    * Deactivates the tab's log processing. This stops the log source from producing new lines
+    * and releases resources associated with the filtering stream.
+    * 
+    * Typically called when a tab is no longer the active tab or is being closed.
+    */
+    public void DeactivateLogProcessing()
     {
-        if (!IsActive) return;
+        // Check if already effectively deactivated to prevent redundant calls or errors
+        if (!IsActive && _processor.LogSource == null && _processor.ReactiveFilteredLogStream == null)
+        {
+                Debug.WriteLine($"---> TabViewModel '{Header}': Already inactive or processor not active. Skipping full Deactivate.");
+                return;
+        }
         Debug.WriteLine($"---> TabViewModel '{Header}': Deactivating.");
-        IsActive = false; // Set IsActive before stopping, so IsLoading reflects correctly
-
-        // Stop log source first to prevent further updates
-        LogSource?.StopMonitoring();
-
-        // Dispose stream and its subscriptions
-        ReactiveFilteredLogStream?.Dispose();
-        ReactiveFilteredLogStream = null;
-        _streamSubscriptions.Clear();
-
-        // Dispose log source
-        LogSource?.Dispose();
-        LogSource = null;
+        IsActive = false; // Set immediately to reflect state
+        
+        _processor.Deactivate(clearLogDocument: false); // Delegate to processor, keep LogDoc by default
 
         LastActivityTimestamp = DateTime.Now;
         UpdateDisplayHeader();
-
-        // Clear busy states related to this tab when deactivating
-        _uiContext.Post(_ =>
-        {
+        
+        _uiContext.Post(_ => {
             CurrentBusyStates.Remove(LoadingToken);
             CurrentBusyStates.Remove(FilteringToken);
         }, null);
@@ -295,31 +246,33 @@ public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecu
         Debug.WriteLine($"---> TabViewModel '{Header}': Deactivation complete.");
     }
 
-
-    private void AddLineToLogDocumentCallback(string line) => LogDoc.AppendLine(line);
-
-    private void SubscribeToFilteredStream()
+    private void SubscribeToProcessorEvents()
     {
-        _streamSubscriptions.Clear();
-        if (ReactiveFilteredLogStream == null) return;
+        _processorSubscriptions.Clear(); 
 
-        _streamSubscriptions.Add(ReactiveFilteredLogStream.FilteredUpdates
-            .ObserveOn(_uiContext)
-            .Subscribe(update => ApplyFilteredUpdateToThisTab(update),
-                       ex => HandleProcessorError("Log Processing Error in Tab", ex)));
+        _processorSubscriptions.Add(_processor.FilteredLogUpdates
+            .ObserveOn(_uiContext) 
+            .Subscribe(
+                update => ApplyFilteredUpdateToThisTab(update),
+                ex => HandleProcessorError("Log Processing Error in Tab", ex)
+            ));
 
-        _streamSubscriptions.Add(ReactiveFilteredLogStream.TotalLinesProcessed
-            .Sample(TimeSpan.FromMilliseconds(200), _backgroundScheduler ?? Scheduler.Default)
-            .ObserveOn(_uiContext)
-            .Subscribe(count => TotalLogLines = count,
-                       ex => HandleProcessorError("Total Lines Error in Tab", ex)));
+        _processorSubscriptions.Add(_processor.TotalLinesProcessed
+            .Sample(TimeSpan.FromMilliseconds(200), _backgroundScheduler ?? Scheduler.Default) 
+            .ObserveOn(_uiContext) 
+            .Subscribe(
+                count => TotalLogLines = count,
+                ex => HandleProcessorError("Total Lines Error in Tab", ex)
+            ));
     }
 
     private void ApplyFilteredUpdateToThisTab(FilteredUpdateBase update)
     {
-        bool wasInitialLoad = CurrentBusyStates.Contains(LoadingToken);
+        bool wasLoadingTokenPresent = CurrentBusyStates.Contains(LoadingToken);
         _uiContext.Post(_ => { if (!CurrentBusyStates.Contains(FilteringToken)) CurrentBusyStates.Add(FilteringToken); }, null);
+        
         bool newLinesWereAppended = false;
+        int previousHighlightedOriginalLine = HighlightedOriginalLineNumber; 
 
         if (update is AppendFilteredUpdate appendUpdate)
         {
@@ -329,33 +282,32 @@ public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecu
                 if (_existingOriginalLineNumbers.Add(lineToAdd.OriginalLineNumber))
                 {
                     FilteredLogLines.Add(lineToAdd);
-                    linesActuallyAdded.Add(lineToAdd);
-                    newLinesWereAppended = true;
+                    linesActuallyAdded.Add(lineToAdd); 
                 }
             }
-            if (newLinesWereAppended)
+            if (linesActuallyAdded.Any())
             {
-                ScheduleLogTextAppend(linesActuallyAdded);
-                // if (IsAutoScrollEnabled) RequestScrollToEnd?.Invoke(this, EventArgs.Empty); // TODO: AutoScroll per tab
+                newLinesWereAppended = true;
+                ScheduleLogTextAppend(linesActuallyAdded); 
             }
         }
         else if (update is ReplaceFilteredUpdate replaceUpdate)
         {
-            int originalLineToRestore = HighlightedOriginalLineNumber;
             _existingOriginalLineNumbers.Clear();
-            FilteredLogLines.Clear();
+            FilteredLogLines.Clear(); 
             foreach (var line in replaceUpdate.Lines)
             {
                 FilteredLogLines.Add(line);
                 _existingOriginalLineNumbers.Add(line.OriginalLineNumber);
             }
-            ScheduleLogTextUpdate(FilteredLogLines);
+            ScheduleLogTextUpdate(FilteredLogLines); 
 
-            if (originalLineToRestore > 0)
+            if (previousHighlightedOriginalLine > 0)
             {
                 int newIndex = FilteredLogLines
                     .Select((line, index) => new { line.OriginalLineNumber, Index = index })
-                    .FirstOrDefault(item => item.OriginalLineNumber == originalLineToRestore)?.Index ?? -1;
+                    .FirstOrDefault(item => item.OriginalLineNumber == previousHighlightedOriginalLine)?.Index ?? -1;
+                
                 _uiContext.Post(idx => { HighlightedFilteredLineIndex = (int)idx!; }, newIndex);
                 if (newIndex != -1) RequestScrollToLineIndex?.Invoke(this, newIndex);
             }
@@ -364,23 +316,20 @@ public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecu
                 _uiContext.Post(_ => { HighlightedFilteredLineIndex = -1; }, null);
             }
 
-            if (replaceUpdate.IsInitialLoadProcessingComplete)
+            if (replaceUpdate.IsInitialLoadProcessingComplete && wasLoadingTokenPresent)
             {
-                Debug.WriteLineIf(wasInitialLoad, $"{DateTime.Now:HH:mm:ss.fff} TabVM ApplyFilteredUpdate: Initial Load Processing Complete for tab '{Header}'.");
-                _uiContext.Post(_ => { if (wasInitialLoad) CurrentBusyStates.Remove(LoadingToken); }, null);
+                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} TabVM ApplyFilteredUpdate: Initial Load Processing Complete for tab '{Header}'.");
+                _uiContext.Post(_ => CurrentBusyStates.Remove(LoadingToken), null);
             }
         }
+        
+        OnPropertyChanged(nameof(FilteredLogLinesCount)); 
 
         if (newLinesWereAppended && IsAutoScrollEnabled)
         {
             RequestScrollToEnd?.Invoke(this, EventArgs.Empty);
-            Debug.WriteLine($"---> TabViewModel '{Header}': Raised RequestScrollToEnd (AutoScroll Enabled).");
         }
-        else if (newLinesWereAppended) // Still log if lines were appended but scroll not requested
-        {
-            Debug.WriteLine($"---> TabViewModel '{Header}': New lines appended, RequestScrollToEnd NOT raised (AutoScroll Disabled: {IsAutoScrollEnabled}).");
-        }
-        _uiContext.Post(_ => CurrentBusyStates.Remove(FilteringToken), null); // Now remove token
+        _uiContext.Post(_ => CurrentBusyStates.Remove(FilteringToken), null); 
     }
 
     public int FilteredLogLinesCount => FilteredLogLines.Count;
@@ -390,8 +339,10 @@ public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecu
         Debug.WriteLine($"!!! TabViewModel '{Header}' - {contextMessage}: {ex}");
         _uiContext.Post(_ =>
         {
-            CurrentBusyStates.Clear(); // Clear all busy states for this tab on error
+            CurrentBusyStates.Remove(LoadingToken); 
+            CurrentBusyStates.Remove(FilteringToken);
             MessageBox.Show($"Error in tab '{Header}': {ex.Message}", "Tab Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            DeactivateLogProcessing(); 
         }, null);
     }
 
@@ -399,19 +350,20 @@ public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecu
     {
         if (SourceType != SourceType.Pasted)
             throw new InvalidOperationException("LoadPastedContent can only be called on PastedSourceType tabs.");
-        ResetLogDocumentAndCollections();
-        LogDoc.AddInitialLines(text);
-        TotalLogLines = LogDoc.Count;
+        
+        _processor.LoadPastedLogContent(text); 
+        ResetUICollectionsAndState();          
+        TotalLogLines = _processor.LogDoc.Count; 
         IsModified = true;
+        // MainViewModel will call ActivateAsync after this to apply filters to the newly pasted content.
     }
     
-    private void ResetLogDocumentAndCollections()
+    private void ResetUICollectionsAndState()
     {
-        LogDoc.Clear();
         _existingOriginalLineNumbers.Clear();
         FilteredLogLines.Clear();
-        ScheduleLogTextUpdate(FilteredLogLines); // Clear editor content
-        TotalLogLines = 0;
+        ScheduleLogTextUpdate(FilteredLogLines); 
+        // TotalLogLines is now managed by the processor or set after processor actions.
         ResetSearchState();
         HighlightedFilteredLineIndex = -1;
         HighlightedOriginalLineNumber = -1;
@@ -423,17 +375,20 @@ public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecu
     public void SetLogEditorInstance(ICSharpCode.AvalonEdit.TextEditor editor)
     {
         _logEditorInstance = editor;
-        if (IsActive && FilteredLogLines.Any()) ScheduleLogTextUpdate(FilteredLogLines);
+        if (IsActive && FilteredLogLines.Any()) 
+        {
+            ScheduleLogTextUpdate(FilteredLogLines);
+        }
     }
 
     private void ScheduleLogTextAppend(IReadOnlyList<FilteredLogLine> linesToAppend)
     {
-        var linesSnapshot = linesToAppend.ToList();
+        var linesSnapshot = linesToAppend.ToList(); // Ensure thread safety for the collection
         _uiContext.Post(state =>
         {
             var lines = (List<FilteredLogLine>)state!;
             if (_logEditorInstance?.Document != null) AppendLogTextInternal(lines);
-            UpdateSearchMatches();
+            UpdateSearchMatches(); // Search matches need to be updated after text changes
         }, linesSnapshot);
     }
 
@@ -444,7 +399,7 @@ public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecu
         {
             var sb = new System.Text.StringBuilder();
             bool needsLeadingNewline = _logEditorInstance.Document.TextLength > 0 &&
-                                       _logEditorInstance.Document.GetCharAt(_logEditorInstance.Document.TextLength - 1) != '\n';
+                                        _logEditorInstance.Document.GetCharAt(_logEditorInstance.Document.TextLength - 1) != '\n';
             for (int i = 0; i < linesToAppend.Count; i++)
             {
                 if (needsLeadingNewline || i > 0) sb.Append(Environment.NewLine);
@@ -459,12 +414,12 @@ public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecu
 
     private void ScheduleLogTextUpdate(IReadOnlyList<FilteredLogLine> relevantLines)
     {
-        var linesSnapshot = relevantLines.ToList();
+        var linesSnapshot = relevantLines.ToList(); // Ensure thread safety
         _uiContext.Post(state =>
         {
             var lines = (List<FilteredLogLine>)state!;
             if (_logEditorInstance?.Document != null) ReplaceLogTextInternal(lines);
-            UpdateSearchMatches();
+            UpdateSearchMatches(); // Search matches need to be updated after text changes
         }, linesSnapshot);
     }
 
@@ -492,30 +447,40 @@ public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecu
         else DisplayHeader = $"{Header} (Paused @ {LastActivityTimestamp:HH:mm:ss})";
     }
 
-    // Called when this tab's AssociatedFilterProfileName changes or when global context lines change
     public void ApplyFiltersFromProfile(IEnumerable<FilterProfileViewModel> availableProfiles, int globalContextLines)
     {
-        if (!IsActive || ReactiveFilteredLogStream == null) return;
+        if (!IsActive) 
+        {
+            Debug.WriteLine($"---> TabViewModel '{Header}': ApplyFiltersFromProfile called but tab is not active. Skipping.");
+            return;
+        }
+        if (_processor == null) // Should not happen if constructor ran
+        {
+            Debug.WriteLine($"---> TabViewModel '{Header}': ApplyFiltersFromProfile called but processor is null. Skipping.");
+            return;
+        }
 
         var profileVM = availableProfiles.FirstOrDefault(p => p.Name == AssociatedFilterProfileName);
         IFilter? filterToApply = profileVM?.Model?.RootFilter ?? new TrueFilter();
 
         Debug.WriteLine($"---> TabViewModel '{Header}': Applying filters. Profile: '{AssociatedFilterProfileName}', Filter: '{filterToApply.GetType().Name}', Context: {globalContextLines}");
         _uiContext.Post(_ => { if (!CurrentBusyStates.Contains(FilteringToken)) CurrentBusyStates.Add(FilteringToken); }, null);
-        ReactiveFilteredLogStream.UpdateFilterSettings(filterToApply, globalContextLines);
-        UpdateFilterHighlightModels(filterToApply); // For AvalonEdit highlighting
+        
+        _processor.ApplyFilterSettings(filterToApply, globalContextLines); 
+        UpdateFilterHighlightModels(filterToApply); 
     }
 
     private void UpdateFilterHighlightModels(IFilter? rootFilter)
     {
         var newFilterModels = new ObservableCollection<IFilter>();
         if (rootFilter != null) TraverseFilterTreeForHighlightingRecursive(rootFilter, newFilterModels);
-        FilterHighlightModels = newFilterModels;
+        FilterHighlightModels = newFilterModels; // This will notify AvalonEditHelper via binding
     }
 
     private void TraverseFilterTreeForHighlightingRecursive(IFilter filter, ObservableCollection<IFilter> models)
     {
         if (!filter.Enabled) return;
+        // Only add filters that have a value and are of a type that we highlight based on value
         if ((filter is SubstringFilter || filter is RegexFilter) && !string.IsNullOrEmpty(filter.Value))
         {
             if (!models.Contains(filter)) models.Add(filter);
@@ -534,7 +499,7 @@ public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecu
     private void ExecutePreviousSearch()
     {
         if (_searchMatches.Count == 0) return;
-        if (_currentSearchIndex == -1) _currentSearchIndex = _searchMatches.Count - 1;
+        if (_currentSearchIndex == -1) _currentSearchIndex = _searchMatches.Count - 1; // Wrap to end if starting
         else _currentSearchIndex = (_currentSearchIndex - 1 + _searchMatches.Count) % _searchMatches.Count;
         SelectAndScrollToCurrentMatch();
     }
@@ -554,14 +519,14 @@ public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecu
             CurrentMatchOffset = match.Offset;
             CurrentMatchLength = match.Length;
             int lineIndex = FindFilteredLineIndexContainingOffset(CurrentMatchOffset);
-            HighlightedFilteredLineIndex = lineIndex;
+            HighlightedFilteredLineIndex = lineIndex; // This will trigger OnHighlightedFilteredLineIndexChanged
             if(lineIndex != -1) RequestScrollToLineIndex?.Invoke(this, lineIndex);
         }
         else
         {
             CurrentMatchOffset = -1; CurrentMatchLength = 0; HighlightedFilteredLineIndex = -1;
         }
-        OnPropertyChanged(nameof(SearchStatusText));
+        OnPropertyChanged(nameof(SearchStatusText)); // Update status text
     }
 
     partial void OnSearchTextChanged(string value) => UpdateSearchMatches();
@@ -569,35 +534,40 @@ public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecu
 
     private string GetCurrentDocumentTextForSearch()
     {
+        // Prefer editor's live text if available, otherwise reconstruct from FilteredLogLines
         if (_logEditorInstance?.Document != null) return _logEditorInstance.Document.Text;
+        
+        // Fallback: reconstruct from FilteredLogLines. This ensures search works even if editor isn't fully ready.
         return FilteredLogLines.Any() ? string.Join(Environment.NewLine, FilteredLogLines.Select(fll => fll.Text)) : string.Empty;
     }
 
     private void UpdateSearchMatches()
     {
-        string currentSearchTerm = SearchText;
+        string currentSearchTerm = SearchText; 
         string textToSearch = GetCurrentDocumentTextForSearch();
-        ResetSearchState(); // Clears _searchMatches, SearchMarkers, _currentSearchIndex
+        ResetSearchState(); 
 
         if (string.IsNullOrEmpty(currentSearchTerm) || string.IsNullOrEmpty(textToSearch))
         {
-            OnPropertyChanged(nameof(SearchStatusText));
+            OnPropertyChanged(nameof(SearchStatusText)); // Ensure status is cleared or updated
             return;
         }
 
         int offset = 0;
         var stringComparison = IsCaseSensitiveSearch ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
-        var tempMarkers = new List<SearchResult>();
+        var tempMarkers = new List<SearchResult>(); // Build locally then update observable
         while (offset < textToSearch.Length)
         {
             int foundIndex = textToSearch.IndexOf(currentSearchTerm, offset, stringComparison);
             if (foundIndex == -1) break;
             var newMatch = new SearchResult(foundIndex, currentSearchTerm.Length);
             _searchMatches.Add(newMatch);
-            tempMarkers.Add(newMatch);
+            tempMarkers.Add(newMatch); // For batch update to SearchMarkers
             offset = foundIndex + currentSearchTerm.Length;
         }
-        foreach (var marker in tempMarkers) SearchMarkers.Add(marker); // Update observable collection once
+        
+        // Batch update SearchMarkers for performance
+        foreach (var marker in tempMarkers) SearchMarkers.Add(marker);
         
         if (_searchMatches.Any()) _currentSearchIndex = 0; // Select first match if any
         SelectAndScrollToCurrentMatch(); // This also updates SearchStatusText via OnPropertyChanged
@@ -606,9 +576,14 @@ public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecu
     private void ResetSearchState()
     {
         _searchMatches.Clear();
-        SearchMarkers.Clear(); // This is an ObservableCollection, Clear() will notify
+        SearchMarkers.Clear(); 
         _currentSearchIndex = -1;
-        // CurrentMatchOffset and CurrentMatchLength will be reset by SelectAndScrollToCurrentMatch
+        // CurrentMatchOffset and CurrentMatchLength are reset by SelectAndScrollToCurrentMatch
+        // when no match is selected after reset.
+        CurrentMatchOffset = -1;
+        CurrentMatchLength = 0;
+        // HighlightedFilteredLineIndex = -1; // Optionally clear selection too
+        OnPropertyChanged(nameof(SearchStatusText)); // Ensure status text updates
     }
 
     private int FindFilteredLineIndexContainingOffset(int charOffset)
@@ -617,23 +592,34 @@ public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecu
         for (int i = 0; i < FilteredLogLines.Count; i++)
         {
             var line = FilteredLogLines[i];
-            int lineEndOffset = currentCumulativeOffset + line.Text.Length;
-            // Check if charOffset is within the current line (inclusive of start, exclusive of end of line content for zero-length matches)
-            // or if it's the start of a zero-length match at the very end of the line.
+            // End offset is start + length. The character at 'lineEndOffset' is the newline or EOF.
+            int lineEndOffset = currentCumulativeOffset + line.Text.Length; 
+            
+            // If charOffset is exactly at currentCumulativeOffset, it's on this line.
+            // If charOffset is between currentCumulativeOffset and lineEndOffset-1, it's on this line.
+            // If charOffset is lineEndOffset, it's considered at the end of this line (before newline).
             if (charOffset >= currentCumulativeOffset && charOffset <= lineEndOffset)
             {
-                return i;
+                // Special case for zero-length match at the very end of the document, on the last line
+                if (charOffset == lineEndOffset && charOffset == _logEditorInstance?.Document?.TextLength && i == FilteredLogLines.Count -1) {
+                        return i;
+                }
+                // If match is at lineEndOffset but it's not the end of the document, it means it's effectively at the start of the *next* line's content if newlines are counted.
+                // However, IndexOf gives the start of the match. So if a match starts at lineEndOffset, it means it's starting on the *next* visual line.
+                // This logic needs to be careful. Let's assume the offset is within the *text content* of the line.
+                if (charOffset < lineEndOffset || (charOffset == lineEndOffset && line.Text.Length == 0) ) // if it's within the line, or it's an empty line and match is at its start
+                        return i;
             }
-            currentCumulativeOffset = lineEndOffset + Environment.NewLine.Length;
+            currentCumulativeOffset = lineEndOffset + Environment.NewLine.Length; // Account for newline
         }
-        return -1;
+        return -1; // Offset not found within any line
     }
 
     private string GenerateSearchStatusText()
     {
         if (string.IsNullOrEmpty(SearchText) || !FilteredLogLines.Any()) return "";
         if (_searchMatches.Count == 0) return "Phrase not found";
-        if (_currentSearchIndex == -1 && _searchMatches.Any()) return $"{_searchMatches.Count} matches found"; // Before first selection
+        if (_currentSearchIndex == -1 && _searchMatches.Any()) return $"{_searchMatches.Count} matches found"; 
         return $"Match {_currentSearchIndex + 1} of {_searchMatches.Count}";
     }
 
@@ -649,10 +635,10 @@ public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecu
             return;
         }
         var foundLine = FilteredLogLines.Select((line, index) => new { line.OriginalLineNumber, Index = index })
-                                       .FirstOrDefault(item => item.OriginalLineNumber == targetLineNumber);
+                                        .FirstOrDefault(item => item.OriginalLineNumber == targetLineNumber);
         if (foundLine != null)
         {
-            HighlightedFilteredLineIndex = foundLine.Index;
+            HighlightedFilteredLineIndex = foundLine.Index; // This will trigger selection and scroll
             RequestScrollToLineIndex?.Invoke(this, foundLine.Index);
         }
         else
@@ -666,8 +652,8 @@ public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecu
     private async Task TriggerInvalidInputFeedback()
     {
         IsJumpTargetInvalid = true;
-        await Task.Delay(2500); // This real delay is fine for the app. Tests will await the command.
-        if (IsJumpTargetInvalid) // Check if still relevant to clear
+        await Task.Delay(2500); 
+        if (IsJumpTargetInvalid) 
         {
             IsJumpTargetInvalid = false;
             JumpStatusMessage = string.Empty;
@@ -683,28 +669,20 @@ public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecu
         }
         else
         {
-            HighlightedOriginalLineNumber = -1;
+            HighlightedOriginalLineNumber = -1; // Ensure original is also reset if index is invalid
             Debug.WriteLine($"TabVM: HighlightedFilteredLineIndex changed to {newValue} (invalid), Original set to -1");
         }
     }
 
     partial void OnHighlightedOriginalLineNumberChanged(int oldValue, int newValue)
     {
-        // This updates TargetOriginalLineNumberInput, which is for the "Go To" box.
-        // It does NOT try to find the filtered index here, as that could lead to loops
-        // if the original line number isn't currently in the filtered view.
-        // The primary update path is:
-        // UI Click/Caret -> MainWindow sets MainViewModel.HighlightedOriginalLineNumber ->
-        // TabViewModel.HighlightedOriginalLineNumber gets set -> TabViewModel.OnHighlightedOriginalLineNumberChanged updates its TargetOriginalLineNumberInput.
-        // The SelectedIndexHighlightTransformer uses MainViewModel.HighlightedOriginalLineNumber to draw.
         if (!_isEditingTargetOriginalLineNumber) 
         {
-            TargetOriginalLineNumberInput = (newValue > 0) ? newValue.ToString() : string.Empty;
+                TargetOriginalLineNumberInput = (newValue > 0) ? newValue.ToString() : string.Empty;
         }
         Debug.WriteLine($"TabVM: HighlightedOriginalLineNumber changed to {newValue}. Input box updated: {TargetOriginalLineNumberInput}");
     }
 
-    // Helper to prevent feedback loop with TargetOriginalLineNumberInput
     private bool _isEditingTargetOriginalLineNumber = false;
     partial void OnTargetOriginalLineNumberInputChanging(string? oldValue, string newValue) => _isEditingTargetOriginalLineNumber = true;
     partial void OnTargetOriginalLineNumberInputChanged(string value) => _isEditingTargetOriginalLineNumber = false;
@@ -718,9 +696,10 @@ public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecu
         if (disposing)
         {
             Debug.WriteLine($"---> TabViewModel '{Header}': Disposing.");
-            Deactivate();
-            _streamSubscriptions.Dispose();
-            CurrentBusyStates.Clear(); // Clear busy states on dispose
+            DeactivateLogProcessing(); // Ensure processor is deactivated and resources released
+            _processor?.Dispose(); // Dispose the processor
+            _processorSubscriptions.Dispose();
+            CurrentBusyStates.Clear(); 
         }
         _disposed = true;
     }
