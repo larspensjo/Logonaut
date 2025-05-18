@@ -36,14 +36,17 @@ public class MockLogSource : ISimulatorLogSource
         if (IsDisposed) throw new ObjectDisposedException(nameof(MockLogSource));
         if (string.IsNullOrEmpty(sourceIdentifier)) throw new ArgumentNullException(nameof(sourceIdentifier));
 
+        PreparedSourceIdentifier = sourceIdentifier;
+        _isPrepared = false; // Initial state before "successful" part of prepare
+
         // Simulate failure if needed for testing
         if (sourceIdentifier == "FAIL_PREPARE")
         {
-                throw new IOException("Mock Prepare Failed");
+            Debug.WriteLine($"---> MockLogSource: Simulating prepare failure for '{sourceIdentifier}'.");
+            throw new IOException("Mock Prepare Failed");
         }
 
-        PreparedSourceIdentifier = sourceIdentifier;
-        _isPrepared = false;
+        // If not failing, proceed with mock preparation
         Stop(); // Call the mock's Stop method
 
         long count = 0;

@@ -119,6 +119,10 @@ public class ReactiveFilteredLogStream : IReactiveFilteredLogStream
                 var fullResult = FilterEngine.ApplyFilters(_logDocument, settingsTuple.filter, settingsTuple.contextLines);
                 Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Full filter yielded {fullResult.Count} lines.");
 
+                bool currentInitialLoadInProgressFlagBeforeCheck; // ADDED
+                lock (_stateLock) { currentInitialLoadInProgressFlagBeforeCheck = _isInitialLoadInProgress; } // ADDED
+                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> FullRefilterPipeline: About to check _isInitialLoadInProgress. Its current value is: {currentInitialLoadInProgressFlagBeforeCheck}"); // MODIFIED
+
                 bool initialLoadCompletedNow = false;
                 lock (_stateLock)
                 {
@@ -126,7 +130,7 @@ public class ReactiveFilteredLogStream : IReactiveFilteredLogStream
                     {
                         _isInitialLoadInProgress = false;
                         initialLoadCompletedNow = true; // Mark that initial load is done *now*
-                        Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Initial Load Filter Processing Complete (Flag Reset). _isInitialLoadInProgress=false");
+                         Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Initial Load Processing Complete (Flag Reset). _isInitialLoadInProgress=false. initialLoadCompletedNow SET TO TRUE.");
 
                         // Update total lines count *after* the initial filter calculation completes
                         long docCount = _logDocument.Count;
@@ -135,8 +139,13 @@ public class ReactiveFilteredLogStream : IReactiveFilteredLogStream
                         _uiContext.Post(_ => _totalLinesSubject.OnNext(docCount), null);
                         Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: Updated TotalLinesSubject and _currentLineIndex after initial filter: {docCount}");
                     }
+                    else // ADDED ELSE BLOCK FOR DEBUGGING
+                    {
+                        Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogFilterProcessor: _isInitialLoadInProgress was ALREADY FALSE. initialLoadCompletedNow remains FALSE.");
+                    }
                 }
 
+                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> FullRefilterPipeline.Select RETURNING ReplaceFilteredUpdate with IsInitialLoadProcessingComplete = {initialLoadCompletedNow}");
                 // Return the result for the pipeline, setting the flag only if initial load completed in this pass
                 return new ReplaceFilteredUpdate(fullResult, IsInitialLoadProcessingComplete: initialLoadCompletedNow); // <<< SET FLAG HERE
             });
