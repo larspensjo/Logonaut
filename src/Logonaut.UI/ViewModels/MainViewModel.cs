@@ -94,7 +94,12 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         _internalTabViewModel.RequestScrollToEnd += (s, e) => RequestGlobalScrollToEnd?.Invoke(s, e);
         _internalTabViewModel.RequestScrollToLineIndex += (s, e) => RequestGlobalScrollToLineIndex?.Invoke(s, e);
         _internalTabViewModel.PropertyChanged += InternalTabViewModel_PropertyChanged;
-        _disposables.Add(Disposable.Create(() => _internalTabViewModel.PropertyChanged -= InternalTabViewModel_PropertyChanged));
+        _internalTabViewModel.FilteredLinesUpdated += InternalTabViewModel_FilteredLinesUpdated;
+        _disposables.Add(Disposable.Create(() => 
+            {
+                _internalTabViewModel.PropertyChanged -= InternalTabViewModel_PropertyChanged;
+                _internalTabViewModel.FilteredLinesUpdated -= InternalTabViewModel_FilteredLinesUpdated;
+            }));
 
         // STEP 2: Now load settings, which will set ActiveFilterProfile and trigger its OnChanged ---
         // OnActiveFilterProfileChanged will then correctly update _internalTabViewModel.AssociatedFilterProfileName
@@ -176,6 +181,15 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         OnPropertyChanged(nameof(IsGloballyLoading));
     }
 
+    private void InternalTabViewModel_FilteredLinesUpdated(object? sender, EventArgs e) // <<< NEW HANDLER
+    {
+        if (sender == _internalTabViewModel)
+        {
+            Debug.WriteLine($"---> MainViewModel: Received FilteredLinesUpdated from Tab. Calling UpdateActiveFilterMatchingStatus.");
+            _uiContext.Post(_ => UpdateActiveFilterMatchingStatus(), null); // Ensure UI thread for safety
+        }
+    }
+
     private void InternalTabViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (sender != _internalTabViewModel) return;
@@ -222,6 +236,9 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
                 break;
             case nameof(TabViewModel.IsJumpTargetInvalid):
                 OnPropertyChanged(nameof(IsJumpTargetInvalid));
+                break;
+            case nameof(TabViewModel.FilterHighlightModels):
+                OnPropertyChanged(nameof(FilterHighlightModels));
                 break;
             // Add other properties as needed
         }
@@ -358,8 +375,6 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
 
     private void TriggerFilterUpdate()
     {
-        Debug.WriteLine($"---> MainViewModel: TriggerFilterUpdate START");
-        
         IFilter? filterToApply = ActiveFilterProfile?.Model?.RootFilter ?? new TrueFilter();
         
         // Update FilterHighlightModels on the internal tab
@@ -370,11 +385,13 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         }
         _internalTabViewModel.FilterHighlightModels = newFilterModels; // Pass to tab
 
-        // Tell the internal tab to update its filters
+        // Tell the internal tab to update its filters (and thus its FilteredLogLines)
         _internalTabViewModel.ApplyFiltersFromProfile(this.AvailableProfiles, this.ContextLines);
         
-        UpdateActiveFilterMatchingStatus(); // This uses _internalTabViewModel.FilteredLogLines
-        Debug.WriteLine($"---> MainViewModel: TriggerFilterUpdate END");
+        // UpdateActiveFilterMatchingStatus uses _internalTabViewModel.FilteredLogLines.
+        // This call might be slightly premature if ApplyFiltersFromProfile results in async updates to FilteredLogLines.
+        // However, ReactiveFilteredLogStream typically produces a ReplaceFilteredUpdate fairly quickly after settings change.
+        UpdateActiveFilterMatchingStatus();
     }
     
     // GetCurrentDocumentText for MainViewModel (e.g., for filter matching status)

@@ -95,6 +95,7 @@ public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecu
     public event EventHandler? RequestCloseTab;
     public event EventHandler? RequestScrollToEnd;
     public event EventHandler<int>? RequestScrollToLineIndex;
+    public event EventHandler? FilteredLinesUpdated;
 
     public static readonly object LoadingToken = new(); // Specific to tab loading
     public static readonly object FilteringToken = new(); // Specific to tab filtering
@@ -266,12 +267,21 @@ public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecu
             ));
     }
 
+    /*
+    * Processes updates to the filtered log lines received from the LogDataProcessor.
+    * It updates the UI-bound collection (FilteredLogLines), manages the underlying
+    * AvalonEdit document content, and handles selection restoration and auto-scrolling.
+    * 
+    * This method distinguishes between appending new lines and replacing the entire
+    * filtered view, performing the necessary operations for each case.
+    */
     private void ApplyFilteredUpdateToThisTab(FilteredUpdateBase update)
     {
         bool wasLoadingTokenPresent = CurrentBusyStates.Contains(LoadingToken);
         _uiContext.Post(_ => { if (!CurrentBusyStates.Contains(FilteringToken)) CurrentBusyStates.Add(FilteringToken); }, null);
         
         bool newLinesWereAppended = false;
+        bool structuralChangeOccurred = false;
         int previousHighlightedOriginalLine = HighlightedOriginalLineNumber; 
 
         if (update is AppendFilteredUpdate appendUpdate)
@@ -284,10 +294,15 @@ public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecu
                     FilteredLogLines.Add(lineToAdd);
                     linesActuallyAdded.Add(lineToAdd); 
                 }
+                // Else: If line with same OriginalLineNumber already exists, we might need to update it
+                // if its IsContextLine status changed. For simplicity in append, this is often ignored,
+                // assuming appends are for new lines not previously seen or whose context status won't flip.
+                // A more robust merge would be needed if appends could change existing lines' context status.
             }
             if (linesActuallyAdded.Any())
             {
                 newLinesWereAppended = true;
+                structuralChangeOccurred = true; 
                 ScheduleLogTextAppend(linesActuallyAdded); 
             }
         }
@@ -300,14 +315,18 @@ public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecu
                 FilteredLogLines.Add(line);
                 _existingOriginalLineNumbers.Add(line.OriginalLineNumber);
             }
+            structuralChangeOccurred = true; 
             ScheduleLogTextUpdate(FilteredLogLines); 
 
+            // Restore selection if possible
             if (previousHighlightedOriginalLine > 0)
             {
                 int newIndex = FilteredLogLines
                     .Select((line, index) => new { line.OriginalLineNumber, Index = index })
                     .FirstOrDefault(item => item.OriginalLineNumber == previousHighlightedOriginalLine)?.Index ?? -1;
                 
+                // Setting HighlightedFilteredLineIndex will trigger OnHighlightedFilteredLineIndexChanged,
+                // which in turn sets HighlightedOriginalLineNumber.
                 _uiContext.Post(idx => { HighlightedFilteredLineIndex = (int)idx!; }, newIndex);
                 if (newIndex != -1) RequestScrollToLineIndex?.Invoke(this, newIndex);
             }
@@ -323,12 +342,18 @@ public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecu
             }
         }
         
-        OnPropertyChanged(nameof(FilteredLogLinesCount)); 
+        OnPropertyChanged(nameof(FilteredLogLinesCount)); // Notify FilteredLogLinesCount changed
+
+        if (structuralChangeOccurred)
+        {
+            FilteredLinesUpdated?.Invoke(this, EventArgs.Empty); // Raise the event
+        }
 
         if (newLinesWereAppended && IsAutoScrollEnabled)
         {
             RequestScrollToEnd?.Invoke(this, EventArgs.Empty);
         }
+        // Remove FilteringToken after all processing for this update is done
         _uiContext.Post(_ => CurrentBusyStates.Remove(FilteringToken), null); 
     }
 
