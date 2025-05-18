@@ -103,7 +103,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         Assert.IsFalse(CreateViewModel(new TrueFilter()).IsEditable);
     }
 
-    // === Child Management Tests (Modified for Command Pattern) ===
+    // Child Management Tests
 
     [TestMethod] public void Constructor_ShouldInitializeChildren_ForCompositeFilter()
     {
@@ -171,7 +171,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         Assert.IsFalse(compositeFilter.SubFilters.Contains(childFilter), "Child filter model should be removed from parent model's SubFilters.");
     }
 
-    // === Enabled Property Tests (Modified) ===
+    // Enabled Property Tests
 
     [TestMethod] public void Enabled_Setter_ShouldExecuteToggleAction()
     {
@@ -216,7 +216,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         Assert.IsTrue(viewModel.Enabled, "ViewModel.Enabled should reflect model state true.");
     }
 
-    // === FilterText Property Tests (Modified) ===
+    // FilterText Property Tests
 
     [TestMethod] public void FilterText_GetSet_ShouldWork_ForEditableFilters_DuringEdit()
     {
@@ -268,7 +268,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         CollectionAssert.Contains(receivedNotifications, "DisplayText", "DisplayText notification missing.");
     }
 
-    // === Editing Commands and State (Modified) ===
+    // Editing Commands and State
 
     [TestMethod] public void BeginEditCommand_ShouldSetEditingState_ForEditableFilter()
     {

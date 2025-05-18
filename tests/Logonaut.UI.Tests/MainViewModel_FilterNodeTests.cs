@@ -1,27 +1,37 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Linq;
 using Logonaut.Filters;
-using Logonaut.UI.ViewModels; 
+using Logonaut.UI.ViewModels;
 using Logonaut.Core; 
-using Logonaut.Common; 
+using Logonaut.Common;
 
 namespace Logonaut.UI.Tests.ViewModels;
 
+/*
+ * Unit tests for MainViewModel focusing on filter node management.
+ * This includes adding, removing, and editing filter nodes within the active
+ * filter profile, and verifying the Undo/Redo functionality for these actions.
+ * Tests ensure that changes are correctly reflected in the ViewModel's state,
+ * filter tree, observable collections, and persisted settings.
+ */
 [TestClass] public class MainViewModel_FilterNodeTests : MainViewModelTestBase
 {
 
     [TestInitialize] public override void TestInitialize()
     {
         base.TestInitialize();
-        base.SetupMainAndTabViewModel();
+        base.SetupMainAndTabViewModel(); // Sets up _viewModel and _tabViewModel
 
         // Ensure the active profile is "Default" and has an AndFilter root for these tests.
         var defaultProfileVM = _viewModel.AvailableProfiles.FirstOrDefault(p => p.Name == "Default");
         Assert.IsNotNull(defaultProfileVM, "Default profile VM not found after base initialization.");
 
+        // Set RootFilter to AndFilter if it's not already or if it's null
         if (defaultProfileVM.Model.RootFilter is not AndFilter)
         {
-            defaultProfileVM.SetModelRootFilter(new AndFilter());        }
+            defaultProfileVM.SetModelRootFilter(new AndFilter()); // This also refreshes RootFilterViewModel
+        }
+        // Ensure it's the active profile
         if (_viewModel.ActiveFilterProfile != defaultProfileVM)
         {
             _viewModel.ActiveFilterProfile = defaultProfileVM;
@@ -52,8 +62,10 @@ namespace Logonaut.UI.Tests.ViewModels;
         Assert.AreSame(rootVM, _viewModel.ActiveTreeRootNodes[0], "ActiveTreeRootNodes content mismatch.");
         Assert.AreSame(rootVM, _viewModel.SelectedFilterNode, "New root should be selected.");
 
-        // Assert Observable Effects (FilteredLogLines is on TabViewModel, accessed via MainViewModel delegate)
-        Assert.AreEqual(0, _viewModel.FilteredLogLines.Count, "FilteredLogLines should be empty after update on empty doc.");
+        // Assert Observable Effects (FilteredLogLines is now managed by TabViewModel)
+        // After a filter change, TriggerFilterUpdate is called, which leads to LogDataProcessor emitting updates.
+        // For an empty document and any filter, the result is 0 filtered lines.
+        Assert.AreEqual(0, _viewModel.FilteredLogLines.Count, "FilteredLogLines (delegated) should be empty after update on empty doc.");
         Assert.AreEqual(0, _tabViewModel.FilteredLogLinesCount, "TabViewModel.FilteredLogLinesCount should be 0.");
 
 
@@ -85,9 +97,8 @@ namespace Logonaut.UI.Tests.ViewModels;
         Assert.AreSame(child, _viewModel.SelectedFilterNode, "New child should be selected.");
 
         // Assert Observable Effects
-        Assert.AreEqual(0, _viewModel.FilteredLogLines.Count, "FilteredLogLines should be empty after update on empty doc.");
+        Assert.AreEqual(0, _viewModel.FilteredLogLines.Count, "FilteredLogLines (delegated) should be empty after update on empty doc.");
         Assert.AreEqual(0, _tabViewModel.FilteredLogLinesCount, "TabViewModel.FilteredLogLinesCount should be 0.");
-
 
         // Assert Persistence 
         Assert.IsTrue(_mockSettings.SaveCalledCount > 0, "Settings were not saved.");
@@ -122,7 +133,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         Assert.IsNull(_viewModel.SelectedFilterNode, "Selected node should be null.");
 
         // Assert Observable Effects
-        Assert.AreEqual(0, _viewModel.FilteredLogLines.Count, "FilteredLogLines should be empty after update on empty doc.");
+        Assert.AreEqual(0, _viewModel.FilteredLogLines.Count, "FilteredLogLines (delegated) should be empty after update on empty doc.");
         Assert.AreEqual(0, _tabViewModel.FilteredLogLinesCount, "TabViewModel.FilteredLogLinesCount should be 0.");
 
         // Assert Persistence
@@ -137,7 +148,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         // Arrange
         var root = _viewModel.ActiveFilterProfile?.RootFilterViewModel; Assert.IsNotNull(root);
         _viewModel.SelectedFilterNode = root;
-        _viewModel.AddFilterCommand.Execute("SubstringType");
+        _viewModel.AddFilterCommand.Execute("SubstringType"); // Adds a child
         var child = root.Children[0];
         _viewModel.SelectedFilterNode = child;
         _mockSettings.Reset();
@@ -150,7 +161,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         Assert.AreSame(root, _viewModel.SelectedFilterNode, "Parent node should be selected.");
 
         // Assert Observable Effects
-        Assert.AreEqual(0, _viewModel.FilteredLogLines.Count, "FilteredLogLines should be empty after update on empty doc.");
+        Assert.AreEqual(0, _viewModel.FilteredLogLines.Count, "FilteredLogLines (delegated) should be empty after update on empty doc.");
         Assert.AreEqual(0, _tabViewModel.FilteredLogLinesCount, "TabViewModel.FilteredLogLinesCount should be 0.");
 
         // Assert Persistence
@@ -164,10 +175,12 @@ namespace Logonaut.UI.Tests.ViewModels;
     [TestMethod] public void FilterViewModel_EndEdit_ExecutesChangeAction_UpdatesAndSaves()
     {
         // Arrange
-        var emptyProfileModel = new FilterProfile("EditProfile", null);
-        var emptyProfileVM = new FilterProfileViewModel(emptyProfileModel, _viewModel);
-        _viewModel.AvailableProfiles.Clear(); _viewModel.AvailableProfiles.Add(emptyProfileVM);
-        _viewModel.ActiveFilterProfile = emptyProfileVM;
+        var editProfileModel = new FilterProfile("EditProfile", null); // Use a distinct profile name
+        var editProfileVM = new FilterProfileViewModel(editProfileModel, _viewModel);
+        _viewModel.AvailableProfiles.Clear();
+        _viewModel.AvailableProfiles.Add(editProfileVM);
+        _viewModel.ActiveFilterProfile = editProfileVM;
+
         _viewModel.AddFilterCommand.Execute("SubstringType");
         var node = _viewModel.ActiveFilterProfile?.RootFilterViewModel; Assert.IsNotNull(node);
         _viewModel.SelectedFilterNode = node;
@@ -184,7 +197,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         Assert.AreEqual(updatedValue, node.Filter.Value, "Model value mismatch after edit.");
 
         // Assert Observable Effects
-        Assert.AreEqual(0, _viewModel.FilteredLogLines.Count, "FilteredLogLines should be empty after update on empty doc.");
+        Assert.AreEqual(0, _viewModel.FilteredLogLines.Count, "FilteredLogLines (delegated) should be empty after update on empty doc.");
         Assert.AreEqual(0, _tabViewModel.FilteredLogLinesCount, "TabViewModel.FilteredLogLinesCount should be 0.");
 
         // Assert Persistence 
@@ -198,10 +211,12 @@ namespace Logonaut.UI.Tests.ViewModels;
     [TestMethod] public void FilterViewModel_EnabledChanged_ExecutesToggleAction_UpdatesAndSaves()
     {
         // Arrange
-        var toggleProfileModel = new FilterProfile("ToggleProfile", null);
+        var toggleProfileModel = new FilterProfile("ToggleProfile", null); // Use a distinct profile name
         var toggleProfileVM = new FilterProfileViewModel(toggleProfileModel, _viewModel);
-        _viewModel.AvailableProfiles.Clear(); _viewModel.AvailableProfiles.Add(toggleProfileVM);
+        _viewModel.AvailableProfiles.Clear();
+        _viewModel.AvailableProfiles.Add(toggleProfileVM);
         _viewModel.ActiveFilterProfile = toggleProfileVM;
+
         _viewModel.AddFilterCommand.Execute("SubstringType");
         var node = _viewModel.ActiveFilterProfile?.RootFilterViewModel; Assert.IsNotNull(node);
         _viewModel.SelectedFilterNode = node;
@@ -209,13 +224,13 @@ namespace Logonaut.UI.Tests.ViewModels;
         _mockSettings.Reset();
 
         // Act
-        node.Enabled = false;
+        node.Enabled = false; // This triggers the command executor
 
         // Assert Model State
         Assert.IsFalse(node.Filter.Enabled, "Model enabled state mismatch.");
 
         // Assert Observable Effects
-        Assert.AreEqual(0, _viewModel.FilteredLogLines.Count, "FilteredLogLines should be empty after update on empty doc.");
+        Assert.AreEqual(0, _viewModel.FilteredLogLines.Count, "FilteredLogLines (delegated) should be empty after update on empty doc.");
         Assert.AreEqual(0, _tabViewModel.FilteredLogLinesCount, "TabViewModel.FilteredLogLinesCount should be 0.");
 
         // Assert Persistence 
@@ -248,7 +263,6 @@ namespace Logonaut.UI.Tests.ViewModels;
         var rootVm = _viewModel.ActiveFilterProfile!.RootFilterViewModel!;
         var initialChildCount = rootVm.Children.Count;
         _viewModel.AddFilterCommand.Execute("SubstringType");
-        var childCountAfterAdd = rootVm.Children.Count;
         Assert.IsTrue(_viewModel.UndoCommand.CanExecute(null));
         Assert.IsFalse(_viewModel.RedoCommand.CanExecute(null));
 
