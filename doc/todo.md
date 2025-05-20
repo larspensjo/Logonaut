@@ -2,17 +2,18 @@
 
 This document has a list of ideas.
 
+* Support font cusomization [Plan.ImplementFontCustomization.md](Implement fonst customization).
 * Theming for Adorners: EmptyDropTargetAdorner creates brushes in code-behind. Consider moving these to theme resource dictionaries for better maintainability, similar to other controls.
 * Ctrl+F3 Search from Current Position: LogOutputEditor_PreviewKeyDown for Ctrl+F3 should search from the current selection/caret position rather than always starting from the beginning.
 * Error Handling for ScrollToSelectedLine: The current ScrollToSelectedLine has try-catch blocks but mainly logs to Debug. More user-visible feedback or robust recovery could be considered if scrolling errors become common.
 * Bulk Color Assignment: For composite filters, changing the color should affect all children.
 * Color-Based Quick Filters/Toggles: Above the log view or in the filter panel, show a row of small colored swatches representing all currently used highlight colors in the active filter profile.
-* Refactor AnimatedSpinner into a flexible BusyIndicator (see [BusyIndicatorPlan.md](BusyIndicatorPlan.md)).
+* Refactor AnimatedSpinner into a flexible BusyIndicator (see [Plan.BusyIndicator.md](Busy Indicator Plan)).
 * Use MainViewModel.JumpStatusMessage for error messsages instead of MessageBox.
 * Support multiple log windows, as tabs. Every log window shall have its own selected filter profile.
     * Investigate concerns whether undo/redo is properly supported by the TABS system.
     * When changing filters in a profile, it will not have any effect on other TABs until you switch TAB.
-    * See separate plan at [TabbedInterfacePlan.md](Tabbed interface plan)
+    * See separate plan at [Plan.TabbedInterface.md](Tabbed interface plan)
     * Some UI bindings may need to be updated for the TabbedControl?
     * MainViewModel.FilterTreeInteraction.cs: Review commands like AddFilter, RemoveFilterNode. They modify ActiveFilterProfile.RootFilterViewModel. After Execute(action) in these commands, you'll need to ensure the ActiveTabViewModel (if it's using this ActiveFilterProfile) re-evaluates its display. The current TriggerFilterUpdate() in MainViewModel.Execute() should be adapted to call ActiveTabViewModel?.ApplyCurrentFilters(...).
     * Global UI Settings (ContextLines, HighlightTimestamps): When these global settings in MainViewModel change, the ActiveTabViewModel needs to be informed so it can update its display/processing. OnContextLinesChanged already calls ActiveTabViewModel?.ApplyCurrentFilters. A similar notification mechanism will be needed if, for instance, HighlightTimestamps is a per-tab setting visually configured through the active tab's UI. For now, if it's a global setting, the TabViewModel's AvalonEdit setup would read this global value on activation.
