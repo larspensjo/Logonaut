@@ -1,12 +1,12 @@
 // ===== File: C:\Users\larsp\src\Logonaut\src\Logonaut.Core\FileSystemSettingsService.cs =====
-
 using Logonaut.Common;
-using Logonaut.Filters; // For TrueFilter default
+using Logonaut.Filters;
 using Newtonsoft.Json;
 using System.IO;
 using System;
 using System.Linq;
-using System.Collections.Generic; // For List
+using System.Collections.Generic;
+using System.Windows; // Required for WindowState
 
 namespace Logonaut.Core;
 
@@ -105,21 +105,22 @@ public class FileSystemSettingsService : ISettingsService
             IsCaseSensitiveSearch = false,
             AutoScrollToTail = true,
             LastOpenedFolderPath = null,
-            // --- Default Simulator Settings ---
             SimulatorLPS = 10.0,
             SimulatorErrorFrequency = 100.0,
             SimulatorBurstSize = 1000.0,
-            // --- Default Font Settings ---
             EditorFontFamilyName = "Consolas",
-            EditorFontSize = 12.0
+            EditorFontSize = 12.0,
+
+            // --- Default Window Geometry Settings ---
+            WindowTop = 100,        // Sensible default top
+            WindowLeft = 100,       // Sensible default left
+            WindowHeight = 700,     // Sensible default height
+            WindowWidth = 1000,     // Sensible default width
+            FilterPanelWidth = 250  // Sensible default filter panel width
         };
         return settings;
     }
 
-    /*
-     * Validates the loaded settings to ensure they are consistent and usable.
-     * If critical settings are missing or invalid, they are reset to defaults.
-     */
     private void EnsureValidSettings(LogonautSettings settings)
     {
         if (settings.FilterProfiles == null || !settings.FilterProfiles.Any())
@@ -153,5 +154,19 @@ public class FileSystemSettingsService : ISettingsService
         {
             settings.EditorFontSize = 12.0; // Default if out of range
         }
+
+        // --- Window Geometry Validation ---
+        // Ensure window dimensions are positive and within reasonable screen bounds (optional, but good practice)
+        // For Top/Left, we could check against SystemParameters.VirtualScreenWidth/Height,
+        // but simpler is to ensure they are not excessively negative.
+        if (settings.WindowHeight <= 0) settings.WindowHeight = 700;
+        if (settings.WindowWidth <= 0) settings.WindowWidth = 1000;
+        if (settings.WindowTop < -10000) settings.WindowTop = 100; // Avoid far off-screen positions
+        if (settings.WindowLeft < -10000) settings.WindowLeft = 100;
+
+        // --- Grid Splitter Validation ---
+        if (settings.FilterPanelWidth <= 0) settings.FilterPanelWidth = 250;
+        // Could add a max width check if necessary, e.g., not wider than half the default window width.
+        if (settings.FilterPanelWidth > settings.WindowWidth * 0.8) settings.FilterPanelWidth = 250;
     }
 }

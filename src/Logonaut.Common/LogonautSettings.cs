@@ -1,6 +1,7 @@
 using Logonaut.Filters;
 using Newtonsoft.Json;
 using System.Collections.Generic;
+using System.Windows; // Required for WindowState
 
 namespace Logonaut.Common;
 
@@ -42,6 +43,16 @@ public class LogonautSettings
     // Font Settings
     public string EditorFontFamilyName { get; set; } = "Consolas"; // Default font
     public double EditorFontSize { get; set; } = 12.0;          // Default font size
+
+    // Window Geometry Settings
+    public double WindowTop { get; set; } = 100; // Default position
+    public double WindowLeft { get; set; } = 100; // Default position
+    public double WindowHeight { get; set; } = 700; // Default size
+    public double WindowWidth { get; set; } = 1000; // Default size
+
+    // GridSplitter Settings (Column 0 width for Filter Panel)
+    // Using GridLength.Value directly. GridLength itself is not easily serializable.
+    public double FilterPanelWidth { get; set; } = 250; // Default width for the filter panel
 
     public LogonautSettings() { }
 }
