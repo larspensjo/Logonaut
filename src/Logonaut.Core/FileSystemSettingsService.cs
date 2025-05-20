@@ -1,3 +1,5 @@
+// ===== File: C:\Users\larsp\src\Logonaut\src\Logonaut.Core\FileSystemSettingsService.cs =====
+
 using Logonaut.Common;
 using Logonaut.Filters; // For TrueFilter default
 using Newtonsoft.Json;
@@ -8,6 +10,11 @@ using System.Collections.Generic; // For List
 
 namespace Logonaut.Core;
 
+/*
+ * Provides services for loading and saving application settings to the file system.
+ * This service handles the persistence of LogonautSettings, including default
+ * creation and validation of loaded settings.
+ */
 public class FileSystemSettingsService : ISettingsService
 {
     private const string AppFolderName = "Logonaut";
@@ -52,7 +59,7 @@ public class FileSystemSettingsService : ISettingsService
         }
         else
         {
-            // Validate loaded settings (ensure at least one profile, valid LastActiveProfileName)
+            // Validate loaded settings (ensure at least one profile, valid LastActiveProfileName, etc.)
             EnsureValidSettings(loadedSettings);
         }
 
@@ -79,6 +86,10 @@ public class FileSystemSettingsService : ISettingsService
         }
     }
 
+    /*
+     * Creates a LogonautSettings object with default values for all settings.
+     * This is used when no settings file is found or if loading fails.
+     */
     private LogonautSettings CreateDefaultSettings()
     {
         var settings = new LogonautSettings
@@ -97,11 +108,18 @@ public class FileSystemSettingsService : ISettingsService
             // --- Default Simulator Settings ---
             SimulatorLPS = 10.0,
             SimulatorErrorFrequency = 100.0,
-            SimulatorBurstSize = 1000.0
+            SimulatorBurstSize = 1000.0,
+            // --- Default Font Settings ---
+            EditorFontFamilyName = "Consolas",
+            EditorFontSize = 12.0
         };
         return settings;
     }
 
+    /*
+     * Validates the loaded settings to ensure they are consistent and usable.
+     * If critical settings are missing or invalid, they are reset to defaults.
+     */
     private void EnsureValidSettings(LogonautSettings settings)
     {
         if (settings.FilterProfiles == null || !settings.FilterProfiles.Any())
@@ -118,8 +136,22 @@ public class FileSystemSettingsService : ISettingsService
             // Ensure LastActiveProfileName is valid, default to first if not
             settings.LastActiveProfileName = settings.FilterProfiles.First().Name;
         }
+
+        // Simulator settings validation
         if (settings.SimulatorLPS < 0) settings.SimulatorLPS = 10.0;
         if (settings.SimulatorErrorFrequency < 1) settings.SimulatorErrorFrequency = 100.0; // Min freq is 1
         if (settings.SimulatorBurstSize < 1) settings.SimulatorBurstSize = 1000.0; // Min burst is 1
+
+        // Font settings validation
+        var availableFonts = new List<string> { "Consolas", "Courier New", "Cascadia Mono", "Lucida Console" };
+        if (string.IsNullOrEmpty(settings.EditorFontFamilyName) || !availableFonts.Contains(settings.EditorFontFamilyName))
+        {
+            settings.EditorFontFamilyName = "Consolas"; // Default if invalid or not in our curated list
+        }
+        // Ensure font size is within a reasonable range
+        if (settings.EditorFontSize < 6.0 || settings.EditorFontSize > 72.0)
+        {
+            settings.EditorFontSize = 12.0; // Default if out of range
+        }
     }
 }

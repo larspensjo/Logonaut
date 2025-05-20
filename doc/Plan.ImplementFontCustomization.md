@@ -1,26 +1,3 @@
-# step-by-step plan to implement font and font size customization for the log window in your Logonaut application.
-
-**Proposed Fixed-Width Fonts:**
-
-For the initial implementation, we'll use a curated list of common fixed-width fonts:
-
-1.  Consolas
-2.  Courier New
-3.  Cascadia Mono
-4.  Lucida Console
-
-**Plan Overview:**
-
-1.  **Model & Settings:** Update `LogonautSettings` and `FileSystemSettingsService` to store and manage the new font preferences.
-2.  **ViewModel:** Extend `MainViewModel` to expose font properties, available choices, and commands to change them.
-3.  **View (Font Size):** Add UI controls to the toolbar in `MainWindow.xaml` for adjusting font size.
-4.  **View (Font Family):** Add a "View" menu in `MainWindow.xaml` for selecting the font family.
-5.  **Integration:** Ensure the AvalonEdit control (`LogOutputEditor`) and custom margins (`OriginalLineNumberMargin`) correctly reflect the selected font and size.
-6.  **Converters:** Implement necessary value converters for bindings.
-
-**Markdown File for Download:**
-
-```markdown
 # Logonaut: Font and Font Size Customization Plan
 
 This document outlines the steps to implement user-configurable font family and font size for the log display window in the Logonaut application.

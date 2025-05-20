@@ -1,12 +1,14 @@
 using Logonaut.Filters;
 using Newtonsoft.Json;
-using System.Collections.Generic; // Required for List
+using System.Collections.Generic;
 
 namespace Logonaut.Common;
 
-/// <summary>
-/// Represents the application settings that are saved and loaded.
-/// </summary>
+/*
+ * Represents the application settings that are saved and loaded.
+ * This class holds various user-configurable options, including filter profiles,
+ * display preferences, simulator configurations, and editor font settings.
+ */
 public class LogonautSettings
 {
     /// <summary>
@@ -37,6 +39,9 @@ public class LogonautSettings
     public double SimulatorErrorFrequency { get; set; } = 100.0; // Match VM property type and default
     public double SimulatorBurstSize { get; set; } = 1000.0; // Match VM property type and default
 
+    // Font Settings
+    public string EditorFontFamilyName { get; set; } = "Consolas"; // Default font
+    public double EditorFontSize { get; set; } = 12.0;          // Default font size
 
     public LogonautSettings() { }
 }

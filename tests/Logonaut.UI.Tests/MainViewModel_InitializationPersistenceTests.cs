@@ -14,8 +14,8 @@ namespace Logonaut.UI.Tests.ViewModels;
 /*
  * Unit tests for MainViewModel focusing on its initialization and persistence logic.
  * These tests verify that settings are correctly loaded upon construction,
- * default states are established, and changes to UI-related settings are
- * persisted and trigger appropriate updates within the application.
+ * default states are established, and changes to UI-related settings (including font preferences)
+ * are persisted and trigger appropriate updates within the application.
  */
 [TestClass] public class MainViewModel_InitializationPersistenceTests : MainViewModelTestBase
 {
@@ -51,7 +51,7 @@ namespace Logonaut.UI.Tests.ViewModels;
     }
 
     // Verifies: [ReqPersistSettingAutoScrollv1]
-    [TestMethod]     public void Constructor_LoadsAutoScrollSetting_False()
+    [TestMethod] public void Constructor_LoadsAutoScrollSetting_False()
     {
         // Arrange
         var settings = MockSettingsService.CreateDefaultTestSettings();
@@ -69,7 +69,7 @@ namespace Logonaut.UI.Tests.ViewModels;
     }
 
     // Verifies: [ReqPersistSettingAutoScrollv1]
-    [TestMethod]     public void IsAutoScrollEnabled_Set_SavesSettings()
+    [TestMethod] public void IsAutoScrollEnabled_Set_SavesSettings()
     {
         // Arrange: _viewModel created in TestInitialize uses default settings (AutoScroll=true)
         Assert.IsTrue(_viewModel.IsAutoScrollEnabled, "Initial state should be true");
@@ -331,5 +331,55 @@ namespace Logonaut.UI.Tests.ViewModels;
         // Assert
         Assert.IsNotNull(_mockSettings.SavedSettings);
         Assert.AreEqual(9999.0, _mockSettings.SavedSettings?.SimulatorBurstSize);
+    }
+
+    // Verifies: [ReqPersistSettingFontFamilyV1] (Loading), [ReqPersistSettingFontSizeV1] (Loading)
+    [TestMethod] public void Constructor_LoadsFontSettings()
+    {
+        // Arrange
+        var settings = MockSettingsService.CreateDefaultTestSettings();
+        settings.EditorFontFamilyName = "Courier New";
+        settings.EditorFontSize = 14.0;
+        _mockSettings.SettingsToReturn = settings;
+
+        // Act
+        var localViewModel = new MainViewModel(_mockSettings, _mockSourceProvider, _mockFileDialog, _testContext, _backgroundScheduler);
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(500).Ticks); // Allow initial setup
+
+        // Assert
+        Assert.AreEqual("Courier New", localViewModel.EditorFontFamilyName, "EditorFontFamilyName not loaded correctly.");
+        Assert.AreEqual(14.0, localViewModel.EditorFontSize, "EditorFontSize not loaded correctly.");
+
+        localViewModel.Dispose();
+    }
+
+    // Verifies: [ReqPersistSettingFontFamilyV1] (Saving)
+    [TestMethod] public void EditorFontFamilyName_Set_SavesSettings()
+    {
+        // Arrange: _viewModel is created in TestInitialize using default settings ("Consolas", 12.0)
+        _mockSettings.Reset(); // Clear any save calls from constructor
+
+        // Act
+        _viewModel.EditorFontFamilyName = "Cascadia Mono";
+
+        // Assert
+        Assert.IsNotNull(_mockSettings.SavedSettings, "Settings should have been saved.");
+        Assert.AreEqual("Cascadia Mono", _mockSettings.SavedSettings?.EditorFontFamilyName, "Saved EditorFontFamilyName mismatch.");
+        Assert.AreEqual("Cascadia Mono", _viewModel.EditorFontFamilyName, "ViewModel EditorFontFamilyName mismatch after set.");
+    }
+
+    // Verifies: [ReqPersistSettingFontSizeV1] (Saving)
+    [TestMethod] public void EditorFontSize_Set_SavesSettings()
+    {
+        // Arrange: _viewModel is created in TestInitialize using default settings ("Consolas", 12.0)
+        _mockSettings.Reset(); // Clear any save calls from constructor
+
+        // Act
+        _viewModel.EditorFontSize = 16.0;
+
+        // Assert
+        Assert.IsNotNull(_mockSettings.SavedSettings, "Settings should have been saved.");
+        Assert.AreEqual(16.0, _mockSettings.SavedSettings?.EditorFontSize, "Saved EditorFontSize mismatch.");
+        Assert.AreEqual(16.0, _viewModel.EditorFontSize, "ViewModel EditorFontSize mismatch after set.");
     }
 }

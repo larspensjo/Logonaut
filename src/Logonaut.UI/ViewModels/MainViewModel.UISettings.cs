@@ -1,11 +1,19 @@
+// ===== File: C:\Users\larsp\src\Logonaut\src\Logonaut.UI\ViewModels\MainViewModel.UISettings.cs =====
+
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Logonaut.Common;
 using Logonaut.UI.Commands;
+using System.Collections.ObjectModel; // Required for ObservableCollection
 
 namespace Logonaut.UI.ViewModels;
 
+/*
+ * This part of MainViewModel handles UI-specific settings.
+ * It includes properties for controlling display aspects like context lines,
+ * line numbers, timestamp highlighting, auto-scrolling, and editor font preferences.
+ */
 public partial class MainViewModel : ObservableObject, IDisposable, ICommandExecutor
 {
     [ObservableProperty] private int _contextLines = 0;
@@ -15,6 +23,28 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
     // Controls whether timestamp highlighting rules are applied in AvalonEdit.
     [ObservableProperty] private bool _highlightTimestamps = true;
     [ObservableProperty] private bool _isAutoScrollEnabled = true;
+
+    # region Font Settings Properties ---
+    [ObservableProperty]
+    private string _editorFontFamilyName = "Consolas";
+
+    [ObservableProperty]
+    private double _editorFontSize = 12.0;
+
+    public ObservableCollection<double> AvailableFontSizes { get; } = new()
+    {
+        8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0, 28.0, 32.0, 36.0, 48.0, 72.0
+    };
+
+    public ObservableCollection<string> AvailableFontFamilies { get; } = new()
+    {
+        "Consolas",
+        "Courier New",
+        "Cascadia Mono",
+        "Lucida Console"
+    };
+    #endregion Font Settings Properties ---
+
 
     [RelayCommand(CanExecute = nameof(CanDecrementContextLines))]
     private void DecrementContextLines() => ContextLines = Math.Max(0, ContextLines - 1);
@@ -28,7 +58,7 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         DecrementContextLinesCommand.NotifyCanExecuteChanged();
         // TriggerFilterUpdate will pick up the new ContextLines value and pass it
         // to _internalTabViewModel.ApplyFiltersFromProfile
-        TriggerFilterUpdate(); 
+        TriggerFilterUpdate();
         SaveCurrentSettingsDelayed();
     }
     public Visibility IsCustomLineNumberMarginVisible => ShowLineNumbers ? Visibility.Visible : Visibility.Collapsed;
@@ -37,13 +67,13 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
     // HighlightTimestamps changes AvalonEdit behavior via binding.
     // ShowLineNumbers changes margin visibility via binding.
     // IsAutoScrollEnabled directly affects behavior.
-    partial void OnShowLineNumbersChanged(bool value) 
+    partial void OnShowLineNumbersChanged(bool value)
     {
         // If _internalTabViewModel's ActivateAsync depends on this, it might need re-activation or specific update call.
         // For now, assuming bindings in AvalonEditHelper handle this.
         SaveCurrentSettingsDelayed();
     }
-    partial void OnHighlightTimestampsChanged(bool value) 
+    partial void OnHighlightTimestampsChanged(bool value)
     {
         // Similar to ShowLineNumbers, AvalonEditHelper binding should react.
         // If a re-filter/re-render of content is needed:
@@ -67,6 +97,22 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         SaveCurrentSettingsDelayed();
     }
 
+    partial void OnEditorFontFamilyNameChanged(string value)
+    {
+        SaveCurrentSettingsDelayed();
+        // The MainWindow.xaml.cs will listen for this PropertyChanged event
+        // to update custom margins like OriginalLineNumberMargin if needed.
+        // AvalonEdit's FontFamily is bound directly.
+    }
+
+    partial void OnEditorFontSizeChanged(double value)
+    {
+        SaveCurrentSettingsDelayed();
+        // The MainWindow.xaml.cs will listen for this PropertyChanged event
+        // to update custom margins.
+        // AvalonEdit's FontSize is bound directly.
+    }
+
     private void LoadUiSettings(LogonautSettings settings)
     {
         ContextLines = settings.ContextLines;
@@ -75,7 +121,11 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         IsAutoScrollEnabled = settings.AutoScrollToTail;
         // IsCaseSensitiveSearch is now part of TabViewModel, but the global default can be loaded here.
         // For Phase 0.1, MainViewModel.IsCaseSensitiveSearch acts as the source for _internalTabViewModel.
-        IsCaseSensitiveSearch = settings.IsCaseSensitiveSearch; 
+        IsCaseSensitiveSearch = settings.IsCaseSensitiveSearch;
+
+        // Load font settings
+        EditorFontFamilyName = settings.EditorFontFamilyName;
+        EditorFontSize = settings.EditorFontSize;
     }
 
     private void SaveUiSettings(LogonautSettings settings)
@@ -85,5 +135,9 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         settings.HighlightTimestamps = HighlightTimestamps;
         settings.AutoScrollToTail = IsAutoScrollEnabled;
         settings.IsCaseSensitiveSearch = IsCaseSensitiveSearch;
+
+        // Save font settings
+        settings.EditorFontFamilyName = EditorFontFamilyName;
+        settings.EditorFontSize = EditorFontSize;
     }
 }
