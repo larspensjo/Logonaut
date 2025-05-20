@@ -97,34 +97,34 @@ public partial class MainWindow : Window, IDisposable
     public MainWindow(MainViewModel viewModel)
     {
         InitializeComponent();
-        _logOutputEditor = LogOutputEditor;
+        _logOutputEditor = LogOutputEditor; // Get reference
         DataContext = viewModel;
         _viewModel = viewModel;
 
+        // Subscribe to ViewModel events AFTER _viewModel is assigned
         _viewModel.PropertyChanged += ViewModel_PropertyChanged;
         _viewModel.RequestGlobalScrollToEnd += ViewModel_RequestScrollToEnd;
         _viewModel.RequestGlobalScrollToLineIndex += ViewModel_RequestScrollToLineIndex;
 
-        // Apply dark title bar if supported
         if (IsWindows10OrGreater())
         {
             EnableDarkTitleBar();
         }
 
-        // --- Pass editor instance to ViewModel AFTER it's loaded ---
         _logOutputEditor.Loaded += (s, e) =>
         {
             _viewModel.SetLogEditorInstance(_logOutputEditor);
+            // Apply initial font settings to the editor's TextArea AFTER editor is loaded
+            // and ViewModel has loaded its persisted settings.
+            ApplyInitialFontSettingsToEditor(); 
         };
 
-        // Set up initial window state
-        Loaded += MainWindow_Loaded;
+        Loaded += MainWindow_Loaded; // For other loaded-time setup
         SourceInitialized += MainWindow_SourceInitialized;
-
-        // Add original line number and separator margins (code-behind approach)
         SetupCustomMargins();
 
-        _logOutputEditor.Loaded += LogOutputEditor_Loaded;
+        // Moved some editor event subscriptions to MainWindow_Loaded to ensure editor/textView are ready
+        // _logOutputEditor.Loaded += LogOutputEditor_Loaded; // This seems redundant with the one above, let's consolidate
         _logOutputEditor.TextArea.PreviewKeyDown += LogOutputEditor_PreviewKeyDown;
         _logOutputEditor.TextArea.PreviewMouseDown += LogOutputEditor_PreviewMouseDown;
 
@@ -157,45 +157,79 @@ public partial class MainWindow : Window, IDisposable
         }
     }
 
+    private void ApplyInitialFontSettingsToEditor()
+    {
+        if (_logOutputEditor?.TextArea != null && _viewModel != null)
+        {
+            // Apply FontFamily
+            if (!string.IsNullOrEmpty(_viewModel.EditorFontFamilyName))
+            {
+                _logOutputEditor.TextArea.FontFamily = new FontFamily(_viewModel.EditorFontFamilyName);
+                Debug.WriteLine($"MainWindow (Initial Apply): TextArea.FontFamily explicitly set to '{_viewModel.EditorFontFamilyName}'.");
+            }
+
+            // Apply FontSize
+            _logOutputEditor.TextArea.FontSize = _viewModel.EditorFontSize;
+            Debug.WriteLine($"MainWindow (Initial Apply): TextArea.FontSize explicitly set to '{_viewModel.EditorFontSize}'.");
+
+            // Also refresh custom margins as their initial setup might have used default font metrics
+            // if they were initialized before the editor's font was fully set from persisted settings.
+            if (_logOutputEditor.TextArea.LeftMargins != null)
+            {
+                foreach (var margin in _logOutputEditor.TextArea.LeftMargins.OfType<OriginalLineNumberMargin>())
+                {
+                    margin.RefreshFontProperties();
+                    Debug.WriteLine($"MainWindow (Initial Apply): Called RefreshFontProperties on OriginalLineNumberMargin.");
+                }
+            }
+        }
+        else
+        {
+            Debug.WriteLine("MainWindow (Initial Apply): Could not apply initial font settings - editor, TextArea, or ViewModel is null.");
+        }
+    }
+
     private void MainWindow_Loaded(object sender, RoutedEventArgs e)
     {
-        // --- Overview Ruler Setup ---
+        // Overview Ruler Setup
         _overviewRuler = FindVisualChild<Logonaut.UI.Helpers.OverviewRulerMargin>(_logOutputEditor);
         if (_overviewRuler is null)
             throw new InvalidOperationException("OverviewRulerMargin not found in TextEditor template.");
         _overviewRuler.RequestScrollOffset += OverviewRuler_RequestScrollOffset;
         _overviewRuler.PreviewMouseLeftButtonDown += OverviewRuler_PreviewMouseLeftButtonDown;
 
-        // Get TextView *once*
         TextView textView = _logOutputEditor.TextArea.TextView;
         if (textView == null)
             throw new InvalidOperationException("TextView not found within LogOutputEditor.");
 
         _selectedIndexTransformer = new SelectedIndexHighlightTransformer();
-        // Get the initial brush from the resource dictionary via the Tag proxy
         textView.SetResourceReference(TextView.TagProperty, "PersistedHighlightBrush");
         _selectedIndexTransformer.HighlightBrush = textView.Tag as Brush;
         _selectedIndexTransformer.FilteredLinesSource = _viewModel.FilteredLogLines;
         textView.LineTransformers.Add(_selectedIndexTransformer);
 
-        // --- Chunk Separator Setup ---
         _chunkSeparator = new ChunkSeparatorRenderer(textView);
-        textView.SetResourceReference(TextView.ToolTipProperty, "ChunkSeparatorBrush");
+        textView.SetResourceReference(TextView.ToolTipProperty, "ChunkSeparatorBrush"); // Using ToolTip as a temp holder
         Brush? separatorBrush = textView.ToolTip as Brush;
         _chunkSeparator.SeparatorBrush = separatorBrush ?? Brushes.Gray;
-        textView.ClearValue(TextView.ToolTipProperty);
+        textView.ClearValue(TextView.ToolTipProperty); // Clear it after use
         textView.BackgroundRenderers.Add(_chunkSeparator);
         _chunkSeparator.UpdateChunks(_viewModel.FilteredLogLines, _viewModel.ContextLines);
 
         _logOutputEditor.Unloaded += LogOutputEditor_Unloaded;
 
         _logOutputEditor.TextArea.PreviewMouseWheel += TextArea_PreviewMouseWheel;
-        _logOutputEditor.TextArea.PreviewKeyDown += TextArea_PreviewKeyDown;
-
+        // _logOutputEditor.TextArea.PreviewKeyDown += TextArea_PreviewKeyDown; // Already subscribed in constructor
         _logOutputEditor.TextArea.Caret.PositionChanged += Caret_PositionChanged;
         _lastKnownCaretLine = _logOutputEditor.TextArea.Caret.Line;
-
         _logOutputEditor.TextArea.SelectionChanged += LogOutputEditor_SelectionChanged;
+
+        // Call ApplyInitialFontSettingsToEditor here as well, if editor's Loaded event might fire too late
+        // relative to ViewModel settings being fully available. However, the editor's own Loaded event
+        // is probably the safest place. Let's rely on the _logOutputEditor.Loaded handler.
+        // If issues persist, uncommenting this and ensuring it's called AFTER ViewModel is fully loaded
+        // might be an alternative.
+        // ApplyInitialFontSettingsToEditor(); 
     }
 
     private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject

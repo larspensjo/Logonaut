@@ -5,14 +5,11 @@ using System.Windows.Media;
 using ICSharpCode.AvalonEdit.Editing;
 using ICSharpCode.AvalonEdit.Rendering;
 using Logonaut.Common; // For FilteredLogLine
+using System.Diagnostics; // For Debug
 
 namespace Logonaut.UI.Helpers;
 
 // Custom AvalonEdit margin to display original line numbers from FilteredLogLine data.
-//
-// Note: Interacts directly with TextView rendering details (VisualLines, Offsets).
-// Justification: This is standard practice for custom WPF/AvalonEdit rendering
-// components operating within the View layer; required for custom drawing and layout.
 public class OriginalLineNumberMargin : AbstractMargin
 {
     // DependencyProperty to bind the list of FilteredLogLine objects
@@ -29,7 +26,7 @@ public class OriginalLineNumberMargin : AbstractMargin
     private static void OnFilteredLinesSourceChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         // Invalidation is handled by AffectsMeasure/AffectsRender flags now
-        // (d as OriginalLineNumberMargin)?.UpdateCache(); // Update cache if source changes
+        (d as OriginalLineNumberMargin)?.UpdateCache(); // Update cache if source changes
     }
 
     private double _emSize;
@@ -54,11 +51,11 @@ public class OriginalLineNumberMargin : AbstractMargin
         base.OnTextViewChanged(oldTextView, newTextView);
         if (newTextView != null)
         {
-            // Use TryFindResource to get editor font settings if possible
             var fontFamily = newTextView.GetValue(TextBlock.FontFamilyProperty) as FontFamily ?? new FontFamily("Consolas");
             var fontStyle = (FontStyle)newTextView.GetValue(TextBlock.FontStyleProperty);
             var fontWeight = (FontWeight)newTextView.GetValue(TextBlock.FontWeightProperty);
-            _typeface = new Typeface(fontFamily, fontStyle, fontWeight, FontStretches.Normal);
+            var fontStretch = (FontStretch)newTextView.GetValue(TextBlock.FontStretchProperty); // Get FontStretch
+            _typeface = new Typeface(fontFamily, fontStyle, fontWeight, fontStretch); // Use FontStretch
             _emSize = (double)newTextView.GetValue(TextBlock.FontSizeProperty);
 
             newTextView.VisualLinesChanged += TextViewVisualLinesChanged;
@@ -66,13 +63,38 @@ public class OriginalLineNumberMargin : AbstractMargin
         }
         else
         {
-                // Reset to defaults if TextView is removed
-                _typeface = new Typeface("Consolas");
-                _emSize = 12;
+            // Reset to defaults if TextView is removed
+            _typeface = new Typeface("Consolas");
+            _emSize = 12;
         }
         InvalidateMeasure(); // Re-calculate width
         InvalidateVisual();
     }
+
+    /// <summary>
+    /// Public method to explicitly refresh font properties from the TextView and update the margin.
+    /// </summary>
+    public void RefreshFontProperties()
+    {
+        if (TextView != null)
+        {
+            var fontFamily = TextView.GetValue(TextBlock.FontFamilyProperty) as FontFamily ?? new FontFamily("Consolas");
+            var fontStyle = (FontStyle)TextView.GetValue(TextBlock.FontStyleProperty);
+            var fontWeight = (FontWeight)TextView.GetValue(TextBlock.FontWeightProperty);
+            var fontStretch = (FontStretch)TextView.GetValue(TextBlock.FontStretchProperty); // Get FontStretch
+            _typeface = new Typeface(fontFamily, fontStyle, fontWeight, fontStretch); // Use FontStretch
+            _emSize = (double)TextView.GetValue(TextBlock.FontSizeProperty);
+
+            InvalidateMeasure();
+            InvalidateVisual(); // Good practice to invalidate visual too
+            Debug.WriteLine($"OriginalLineNumberMargin: Refreshed font properties. New Size: {_emSize}, Family: {fontFamily.Source}");
+        }
+        else
+        {
+            Debug.WriteLine("OriginalLineNumberMargin: RefreshFontProperties called, but TextView is null.");
+        }
+    }
+
 
     private void TextViewScrollOffsetChanged(object? sender, EventArgs e)
     {
@@ -81,16 +103,13 @@ public class OriginalLineNumberMargin : AbstractMargin
 
     private void TextViewVisualLinesChanged(object? sender, EventArgs e)
     {
-        // Only invalidate measure if the line count potentially changes max digits
-        // For now, always invalidate measure and visual for simplicity
-            InvalidateMeasure();
+        InvalidateMeasure();
         InvalidateVisual();
     }
 
-    // Calculate the required width for the margin
     protected override Size MeasureOverride(Size availableSize)
     {
-        UpdateCache(); // Ensure cache is up-to-date
+        UpdateCache();
 
         int maxLineNumber = 1;
         if (_currentLinesCache != null && _currentLinesCache.Any())
@@ -99,95 +118,69 @@ public class OriginalLineNumberMargin : AbstractMargin
         }
         else if (TextView?.Document != null && TextView.Document.LineCount > 0)
         {
-                // Fallback: estimate based on document line count if no filtered lines yet
-                // This provides a better initial width guess
-                maxLineNumber = TextView.Document.LineCount;
+            maxLineNumber = TextView.Document.LineCount;
         }
 
-        // Determine the number of digits needed, ensuring at least _maxDigits
         _maxDigits = Math.Max(3, (int)Math.Log10(maxLineNumber) + 1);
-
-        // Create a dummy string with the required number of '9's for width calculation
         var widestNumberString = new string('9', _maxDigits);
 
-        // Format the dummy string to measure its width
-            var formattedNumber = new FormattedText(
-                widestNumberString,
-                CultureInfo.CurrentCulture,
-                FlowDirection.LeftToRight,
-                _typeface,
-                _emSize,
-                Brushes.Black, // Color doesn't matter for measurement
-                VisualTreeHelper.GetDpi(this).PixelsPerDip
-            );
+        var formattedNumber = new FormattedText(
+            widestNumberString,
+            CultureInfo.CurrentCulture,
+            FlowDirection.LeftToRight,
+            _typeface,
+            _emSize,
+            Brushes.Black,
+            VisualTreeHelper.GetDpi(this).PixelsPerDip
+        );
 
         _lineNumberWidth = formattedNumber.WidthIncludingTrailingWhitespace;
-        // Add some padding (e.g., 5 pixels)
-        return new Size(_lineNumberWidth + 5, 0); // Width + padding, height is determined by TextView
+        return new Size(_lineNumberWidth + 5, 0);
     }
 
-    // Render the line numbers
     protected override void OnRender(DrawingContext drawingContext)
     {
         var textView = TextView;
-        var renderSize = RenderSize; // Use RenderSize for clipping bounds
-
-        // Draw background if needed (e.g., to match editor theme)
-            // drawingContext.DrawRectangle(TextView.Background, null, new Rect(0, 0, renderSize.Width, renderSize.Height));
+        var renderSize = RenderSize;
 
         if (textView == null || !textView.VisualLinesValid || _currentLinesCache == null) return;
 
-        // Use the foreground color from the TextView for consistency
         var foreground = (Brush)textView.GetValue(Control.ForegroundProperty) ?? Brushes.Gray;
 
         foreach (var visualLine in textView.VisualLines)
         {
-            // Get the document line number (1-based) corresponding to this visual line
-            // This is the line number within the *filtered* document being displayed.
             int documentLineNumber = visualLine.FirstDocumentLine.LineNumber;
-            int lineIndex = documentLineNumber - 1; // Convert to 0-based index for list access
+            int lineIndex = documentLineNumber - 1;
 
             if (lineIndex >= 0 && lineIndex < _currentLinesCache.Count)
             {
-                // Get the FilteredLogLine for this displayed line index
                 var filteredLine = _currentLinesCache[lineIndex];
                 int originalNumber = filteredLine.OriginalLineNumber;
-
-                // Format the original line number string
                 string numberString = originalNumber.ToString(CultureInfo.CurrentCulture);
 
-                // Create FormattedText for drawing
-                    var formattedText = new FormattedText(
-                        numberString,
-                        CultureInfo.CurrentCulture,
-                        FlowDirection.LeftToRight,
-                        _typeface,
-                        _emSize,
-                        foreground,
-                        VisualTreeHelper.GetDpi(this).PixelsPerDip
-                    );
+                var formattedText = new FormattedText(
+                    numberString,
+                    CultureInfo.CurrentCulture,
+                    FlowDirection.LeftToRight,
+                    _typeface,
+                    _emSize,
+                    foreground,
+                    VisualTreeHelper.GetDpi(this).PixelsPerDip
+                );
 
-                // Calculate drawing position (right-aligned)
-                double xPos = renderSize.Width - formattedText.WidthIncludingTrailingWhitespace - 2; // Subtract padding (adjust as needed)
-                // Get Y position relative to the margin's top
+                double xPos = renderSize.Width - formattedText.WidthIncludingTrailingWhitespace - 2;
                 double yPos = visualLine.GetTextLineVisualYPosition(visualLine.TextLines[0], VisualYPosition.TextTop) - textView.VerticalOffset;
 
-                // Ensure the text is drawn within the margin's bounds
                 if (yPos >= 0 && yPos < renderSize.Height)
                 {
                     drawingContext.DrawText(formattedText, new Point(xPos, yPos));
                 }
             }
-            // else: Should not happen if _currentLinesCache matches the displayed document lines
         }
     }
 
-    // Optional: Handle mouse events if needed (e.g., for breakpoints)
     protected override void OnMouseLeftButtonDown(System.Windows.Input.MouseButtonEventArgs e)
     {
         base.OnMouseLeftButtonDown(e);
-        // Example: Hit-testing logic could go here
-        // var textView = this.TextView;
-        // if (textView != null) { ... }
     }
 }

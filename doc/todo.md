@@ -2,7 +2,6 @@
 
 This document has a list of ideas.
 
-* Support font cusomization [Plan.ImplementFontCustomization.md](Implement fonst customization).
 * Theming for Adorners: EmptyDropTargetAdorner creates brushes in code-behind. Consider moving these to theme resource dictionaries for better maintainability, similar to other controls.
 * Ctrl+F3 Search from Current Position: LogOutputEditor_PreviewKeyDown for Ctrl+F3 should search from the current selection/caret position rather than always starting from the beginning.
 * Error Handling for ScrollToSelectedLine: The current ScrollToSelectedLine has try-catch blocks but mainly logs to Debug. More user-visible feedback or robust recovery could be considered if scrolling errors become common.

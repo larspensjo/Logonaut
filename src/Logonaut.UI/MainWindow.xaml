@@ -220,6 +220,16 @@
                                 </StackPanel>
                             </StackPanel>
                             <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,2"/>
+                            <TextBlock Text="Font:" VerticalAlignment="Center" Margin="5,0,2,0"/>
+                            <ComboBox ItemsSource="{Binding AvailableFontFamilies}"
+                                      SelectedItem="{Binding EditorFontFamilyName, Mode=TwoWay}"
+                                      Width="110" Margin="0,0,2,0" VerticalAlignment="Center"
+                                      ToolTip="Select editor font family"/>
+                            <ComboBox ItemsSource="{Binding AvailableFontSizes}"
+                                      SelectedItem="{Binding EditorFontSize, Mode=TwoWay}"
+                                      Width="55" VerticalAlignment="Center"
+                                      ToolTip="Select editor font size"/>
+                            <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,2"/>
                             <controls:BusyIndicator Width="16" Height="16" VerticalAlignment="Center" Margin="10,0,5,0" ActiveStates="{Binding CurrentBusyStates}" ToolTip="Applying filters or loading data..."/>
                             <TextBlock Text="{Binding SearchStatusText}" VerticalAlignment="Center" Margin="10,0,5,0" FontStyle="Italic" Foreground="{DynamicResource SecondaryTextBrush}"/>
                         </WrapPanel>
