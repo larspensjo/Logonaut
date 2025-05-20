@@ -9,7 +9,11 @@ using Logonaut.Common;
 
 namespace Logonaut.UI.ViewModels;
 
-// Groups interactions specifically related to building and manipulating the filter rule tree for the active profile
+/*
+ * Partial class for MainViewModel responsible for managing interactions
+ * with the filter rule tree of the active filter profile. This includes
+ * adding, removing, and editing filter nodes, and handling drag-and-drop operations.
+ */
 public partial class MainViewModel : ObservableObject, IDisposable, ICommandExecutor
 {
     public ObservableCollection<PaletteItemDescriptor> FilterPaletteItems { get; } = new();
@@ -76,7 +80,7 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
             UpdateActiveTreeRootNodes(ActiveFilterProfile);
             SelectedFilterNode = ActiveFilterProfile.RootFilterViewModel;
             TriggerFilterUpdate(); 
-            SaveCurrentSettingsDelayed();
+            MarkSettingsAsDirty(); // Settings changed
             Debug.WriteLine("AddFilter: Set new root node (outside Undo system).");
             if (SelectedFilterNode != null && SelectedFilterNode.IsEditable)
                 SelectedFilterNode.BeginEditCommand.Execute(null);
@@ -117,7 +121,7 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
             UpdateActiveTreeRootNodes(ActiveFilterProfile);
             SelectedFilterNode = null;
             TriggerFilterUpdate();
-            SaveCurrentSettingsDelayed();
+            MarkSettingsAsDirty();
             Debug.WriteLine("RemoveFilterNode: Removed root node (outside Undo system).");
         }
         else if (parent != null)
@@ -159,7 +163,7 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
                 UpdateActiveTreeRootNodes(ActiveFilterProfile);
                 SelectedFilterNode = ActiveFilterProfile.RootFilterViewModel;
                 TriggerFilterUpdate();
-                SaveCurrentSettingsDelayed();
+                MarkSettingsAsDirty(); // Settings changed
                 Debug.WriteLine("ExecuteAddFilterFromDrop: Set new root node (outside Undo system).");
                 if (SelectedFilterNode != null && SelectedFilterNode.IsEditable)
                     SelectedFilterNode.BeginEditCommand.Execute(null);

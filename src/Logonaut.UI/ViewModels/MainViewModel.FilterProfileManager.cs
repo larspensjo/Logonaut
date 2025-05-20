@@ -9,6 +9,11 @@ using System.Diagnostics;
 
 namespace Logonaut.UI.ViewModels;
 
+/*
+ * Partial class for MainViewModel responsible for managing filter profiles.
+ * This includes loading, saving, creating, deleting, and selecting filter profiles.
+ * It also handles interactions related to the active filter profile's rule tree.
+ */
 public partial class MainViewModel : ObservableObject, IDisposable, ICommandExecutor
 {
     private FilterProfileViewModel? _observedActiveProfile;
@@ -50,7 +55,7 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         // This remains largely the same as it saves the global list of profiles
         if (ActiveFilterProfile == null && AvailableProfiles.Any()) // Ensure there's a fallback if Active is somehow null
         {
-             settings.LastActiveProfileName = AvailableProfiles.First().Name;
+            settings.LastActiveProfileName = AvailableProfiles.First().Name;
         }
         else if (ActiveFilterProfile != null)
         {
@@ -86,14 +91,14 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         var newProfileModel = new FilterProfile(newName, null);
         var newProfileVM = new FilterProfileViewModel(newProfileModel, this);
         AvailableProfiles.Add(newProfileVM);
-        ActiveFilterProfile = newProfileVM; 
-        
+        ActiveFilterProfile = newProfileVM;
+
         _uiContext.Post(_ =>
         {
             if (ActiveFilterProfile == newProfileVM)
                 newProfileVM.BeginRenameCommand.Execute(null);
         }, null);
-        SaveCurrentSettings(); // Save changes immediately
+        MarkSettingsAsDirty();
     }
 
     [RelayCommand(CanExecute = nameof(CanManageActiveProfile))]
@@ -114,7 +119,7 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         {
             ActiveFilterProfile = AvailableProfiles.ElementAtOrDefault(Math.Max(0, removedIndex - 1)) ?? AvailableProfiles.First();
         }
-        SaveCurrentSettings();
+        MarkSettingsAsDirty();
     }
 
     partial void OnActiveFilterProfileChanged(FilterProfileViewModel? oldValue, FilterProfileViewModel? newValue)
@@ -142,23 +147,23 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
 
             UpdateActiveTreeRootNodes(newValue); // Updates the TreeView for editing this profile
             SelectedFilterNode = null;
-            
+
             // Update the internal tab's associated profile and trigger its filter update
             _internalTabViewModel.AssociatedFilterProfileName = newValue.Name;
             _internalTabViewModel.ApplyFiltersFromProfile(this.AvailableProfiles, this.ContextLines);
-            
+
             // Update active filter matching status based on the internal tab's current filtered lines
-            UpdateActiveFilterMatchingStatus(); 
+            UpdateActiveFilterMatchingStatus();
         }
         else
         {
             UpdateActiveTreeRootNodes(null);
             SelectedFilterNode = null;
             _internalTabViewModel.AssociatedFilterProfileName = "Default"; // Or some sensible default
-             _internalTabViewModel.ApplyFiltersFromProfile(this.AvailableProfiles, this.ContextLines);
+            _internalTabViewModel.ApplyFiltersFromProfile(this.AvailableProfiles, this.ContextLines);
             UpdateActiveFilterMatchingStatus();
         }
-        SaveCurrentSettings(); // Save immediately on selection change as well
+        MarkSettingsAsDirty();
     }
 
     private void HandleActiveProfileNameChange(FilterProfileViewModel? profileVM)
@@ -178,7 +183,7 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
             return;
         }
         if (profileVM.Model.Name != newName) profileVM.Model.Name = newName;
-        
+
         // If the active profile's name changed, update the internal tab's association
         if (_internalTabViewModel.AssociatedFilterProfileName != newName)
         {
@@ -187,6 +192,6 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
             // TriggerFilterUpdate (which calls ApplyFiltersFromProfile on the tab) is usually
             // called after filter *content* changes. For just a name change, saving is enough.
         }
-        SaveCurrentSettings(); // Save the valid new name
+        MarkSettingsAsDirty();
     }
 }

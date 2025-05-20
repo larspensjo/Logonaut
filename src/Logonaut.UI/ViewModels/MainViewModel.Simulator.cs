@@ -45,7 +45,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             sim.LinesPerSecond = (int)Math.Round(value);
         }
-        SaveCurrentSettingsDelayed();
+        MarkSettingsAsDirty(); // Settings changed
         NotifySimulatorCommandsCanExecuteChanged();
     }
 
@@ -56,13 +56,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             sim.ErrorFrequency = (int)Math.Round(value);
         }
-        SaveCurrentSettingsDelayed();
+        MarkSettingsAsDirty(); // Settings changed
         NotifySimulatorCommandsCanExecuteChanged();
     }
 
     partial void OnSimulatorBurstSizeChanged(double value)
     {
-        SaveCurrentSettingsDelayed();
+        MarkSettingsAsDirty(); // Settings changed
         NotifySimulatorCommandsCanExecuteChanged();
     }
 

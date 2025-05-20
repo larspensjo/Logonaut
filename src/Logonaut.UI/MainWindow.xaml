@@ -11,7 +11,7 @@
         xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
         xmlns:System="clr-namespace:System;assembly=mscorlib"
         Title="Logonaut" Height="600" Width="900"
-        Closing="MainWindow_Closing_SaveGeometry"
+        Closing="MainWindow_Closing"
         Style="{DynamicResource {x:Type Window}}">
 
     <Window.InputBindings>

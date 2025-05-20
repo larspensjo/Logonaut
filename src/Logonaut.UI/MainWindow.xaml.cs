@@ -1,7 +1,7 @@
 ﻿using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Windows;
-using System.Windows.Controls;
+using System.Windows.Controls; // Required for TextBox
 using System.Windows.Media;
 using System.Windows.Input; 
 using System.Windows.Documents; 
@@ -12,10 +12,16 @@ using Logonaut.UI.ViewModels;
 using System.Diagnostics; 
 using Logonaut.Common;
 using Logonaut.Core;
-using System.Windows.Forms;
+using System.Windows.Forms; // Required for Screen
 
 namespace Logonaut.UI;
 
+/*
+ * Code-behind for the main application window.
+ * Handles window lifecycle events, interop for custom title bar theming,
+ * integration with AvalonEdit, and forwarding UI events/data to the MainViewModel.
+ * It also manages loading and applying initial window geometry and ensuring settings are saved on exit.
+ */
 public partial class MainWindow : Window, IDisposable
 {
     public static readonly RoutedUICommand ToggleSimulatorConfigCommand = new RoutedUICommand(
@@ -97,19 +103,16 @@ public partial class MainWindow : Window, IDisposable
     private readonly TextEditor _logOutputEditor; // Just for convenience. Referencing LogOutputEditor triggers an Intellisense error.
     private bool _disposed;
 
-    private readonly ISettingsService _settingsService;
-    private bool _isManuallySettingGeometry = false;
-    private bool _windowLoaded = false;
+    private bool _isProgrammaticallySettingGeometry = false;
+    private bool _windowFullyLoaded = false;
 
-    public MainWindow(MainViewModel viewModel, ISettingsService settingsService) // Add ISettingsService parameter
+    public MainWindow(MainViewModel viewModel, ISettingsService settingsService)
     {
         InitializeComponent();
-        _settingsService = settingsService; // Store injected service
         _logOutputEditor = LogOutputEditor;
         DataContext = viewModel;
         _viewModel = viewModel;
 
-        // Subscribe to ViewModel events AFTER _viewModel is assigned
         _viewModel.PropertyChanged += ViewModel_PropertyChanged;
         _viewModel.RequestGlobalScrollToEnd += ViewModel_RequestScrollToEnd;
         _viewModel.RequestGlobalScrollToLineIndex += ViewModel_RequestScrollToLineIndex;
@@ -127,34 +130,32 @@ public partial class MainWindow : Window, IDisposable
         _logOutputEditor.TextArea.PreviewKeyDown += LogOutputEditor_PreviewKeyDown;
         _logOutputEditor.TextArea.PreviewMouseDown += LogOutputEditor_PreviewMouseDown;
 
-        // Original Closing event handler:
-        // Closing += Window_Closing; 
-        // Replace with the modified one below that also saves geometry:
-        Closing += MainWindow_Closing_SaveGeometry; // Renamed to avoid conflict if you still have the old one
+        Closing += MainWindow_Closing; // Simplified closing event
     }
 
+    /*
+     * Loads the persisted window geometry (position and size) and applies it.
+     * This method is called once when the window is first initialized.
+     * It includes validation to ensure the window appears on a visible screen area.
+     */
     private void LoadAndApplyWindowGeometry()
     {
-        _isManuallySettingGeometry = true;
+        _isProgrammaticallySettingGeometry = true; // Prevent OnLocationChanged/OnRenderSizeChanged from marking dirty
+        Debug.WriteLine("LoadAndApplyWindowGeometry: Setting _isProgrammaticallySettingGeometry=true.");
         try
         {
-            LogonautSettings settings = _settingsService.LoadSettings();
-
-            // Window will always start Normal, so no need to set WindowState from settings
-            this.WindowState = WindowState.Normal; 
-
-            // Validate saved position and size
-            Rect savedBounds = new Rect(settings.WindowLeft, settings.WindowTop, settings.WindowWidth, settings.WindowHeight);
+            // ViewModel now holds the persisted geometry values after LoadPersistedSettings.
+            // We read from ViewModel instead of loading settings directly here.
+            Rect savedBounds = new Rect(_viewModel.WindowLeft, _viewModel.WindowTop, _viewModel.WindowWidth, _viewModel.WindowHeight);
             bool onScreen = false;
             foreach (var screen in Screen.AllScreens)
             {
                 var screenWorkingArea = new Rect(screen.WorkingArea.X, screen.WorkingArea.Y, screen.WorkingArea.Width, screen.WorkingArea.Height);
                 if (screenWorkingArea.IntersectsWith(savedBounds) || screenWorkingArea.Contains(savedBounds))
                 {
-                     // Check if a reasonable portion of the window is visible
                     if (savedBounds.Right > screenWorkingArea.Left + 50 &&
                         savedBounds.Left < screenWorkingArea.Right - 50 &&
-                        savedBounds.Bottom > screenWorkingArea.Top + 30 && // Check bottom against top + 30 (for title bar)
+                        savedBounds.Bottom > screenWorkingArea.Top + 30 &&
                         savedBounds.Top < screenWorkingArea.Bottom - 30)
                     {
                         onScreen = true;
@@ -163,124 +164,134 @@ public partial class MainWindow : Window, IDisposable
                 }
             }
 
-            if (onScreen && settings.WindowWidth > 100 && settings.WindowHeight > 100) // Ensure dimensions are sensible
+            this.WindowState = WindowState.Normal; // Always start normal
+
+            if (onScreen && _viewModel.WindowWidth > 100 && _viewModel.WindowHeight > 100)
             {
-                this.Top = settings.WindowTop;
-                this.Left = settings.WindowLeft;
-                this.Width = settings.WindowWidth;
-                this.Height = settings.WindowHeight;
-                Debug.WriteLine($"MainWindow: Restored Window Geometry - L:{Left}, T:{Top}, W:{Width}, H:{Height}");
+                this.Top = _viewModel.WindowTop;
+                this.Left = _viewModel.WindowLeft;
+                this.Width = _viewModel.WindowWidth;
+                this.Height = _viewModel.WindowHeight;
+                Debug.WriteLine($"MainWindow: Restored Window Geometry from ViewModel - L:{Left}, T:{Top}, W:{Width}, H:{Height}");
             }
             else
             {
-                Debug.WriteLine("MainWindow: Saved window position/size is off-screen or invalid. Using defaults or centering.");
-                // Allow WPF default placement or center if desired (WPF does this by default if not set)
-                // Setting default size if saved ones were problematic
-                this.Width = settings.WindowWidth > 100 ? settings.WindowWidth : 1000;
-                this.Height = settings.WindowHeight > 100 ? settings.WindowHeight : 700;
-                // Forcing centering if it was off-screen:
+                Debug.WriteLine("MainWindow: ViewModel's window position/size is off-screen or invalid. Using defaults or centering.");
+                this.Width = _viewModel.WindowWidth > 100 ? _viewModel.WindowWidth : 1000;
+                this.Height = _viewModel.WindowHeight > 100 ? _viewModel.WindowHeight : 700;
                 if (!onScreen) this.WindowStartupLocation = WindowStartupLocation.CenterScreen;
             }
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Error loading/applying window geometry: {ex.Message}");
+            Debug.WriteLine($"Error loading/applying window geometry from ViewModel: {ex.Message}");
         }
         finally
         {
-            _isManuallySettingGeometry = false;
+            _isProgrammaticallySettingGeometry = false;
+            Debug.WriteLine("LoadAndApplyWindowGeometry: Setting _isProgrammaticallySettingGeometry=false.");
         }
     }
 
     /*
-     * Saves the current window geometry (size, position, state) and the grid splitter position
-     * to the application settings. This is called on window move, resize, state change, or closing.
-     * It uses RestoreBounds for maximized/minimized states to save the normal-state geometry.
+     * Updates the MainViewModel with the current window geometry and marks settings as dirty.
+     * This is called on window move, resize, or when the splitter position changes.
+     * It ensures that the latest geometry is captured for persistence when the application eventually saves settings.
      */
-    private void SaveWindowGeometry()
+    private void UpdateViewModelWithCurrentGeometryAndMarkDirty()
     {
-        if (_isManuallySettingGeometry || !_windowLoaded || _settingsService == null) return;
+        if (_isProgrammaticallySettingGeometry || !_windowFullyLoaded || _viewModel == null) return;
 
-        LogonautSettings settings = _settingsService.LoadSettings();
+        // Update ViewModel properties with current geometry
+        if (this.WindowState == WindowState.Normal)
+        {
+            _viewModel.WindowTop = this.Top;
+            _viewModel.WindowLeft = this.Left;
+            _viewModel.WindowHeight = this.Height;
+            _viewModel.WindowWidth = this.Width;
+        }
+        else if (this.RestoreBounds != Rect.Empty && this.RestoreBounds.Width > 0 && this.RestoreBounds.Height > 0)
+        {
+            // If maximized or minimized, use RestoreBounds for the "normal" state geometry
+            _viewModel.WindowTop = this.RestoreBounds.Top;
+            _viewModel.WindowLeft = this.RestoreBounds.Left;
+            _viewModel.WindowHeight = this.RestoreBounds.Height;
+            _viewModel.WindowWidth = this.RestoreBounds.Width;
+        }
+        // If RestoreBounds is empty (e.g., started maximized and never normalized),
+        // the ViewModel retains its previously loaded/set "normal" geometry values.
 
-        // Always save the Normal bounds, regardless of current state, as per your requirement
-        // RestoreBounds is the key if maximized/minimized
-        if (this.WindowState == WindowState.Maximized || this.WindowState == WindowState.Minimized)
-        {
-             if (this.RestoreBounds != Rect.Empty && this.RestoreBounds.Width > 0 && this.RestoreBounds.Height > 0)
-             {
-                settings.WindowTop = this.RestoreBounds.Top;
-                settings.WindowLeft = this.RestoreBounds.Left;
-                settings.WindowHeight = this.RestoreBounds.Height;
-                settings.WindowWidth = this.RestoreBounds.Width;
-             }
-             // If RestoreBounds is empty (e.g. started maximized), we don't update these,
-             // keeping previously saved normal bounds.
-        }
-        else // WindowState.Normal
-        {
-            settings.WindowTop = this.Top;
-            settings.WindowLeft = this.Left;
-            settings.WindowHeight = this.Height;
-            settings.WindowWidth = this.Width;
-        }
-        // settings.MainWindowState = this.WindowState; // REMOVE - Not saving WindowState
 
         if (MainContentColumnsGrid != null && MainContentColumnsGrid.ColumnDefinitions.Count > 0)
         {
-            if (!double.IsNaN(MainContentColumnsGrid.ColumnDefinitions[0].ActualWidth) &&
-                !double.IsInfinity(MainContentColumnsGrid.ColumnDefinitions[0].ActualWidth) &&
-                 MainContentColumnsGrid.ColumnDefinitions[0].ActualWidth > 0)
+            double currentFilterPanelWidth = MainContentColumnsGrid.ColumnDefinitions[0].ActualWidth;
+            if (!double.IsNaN(currentFilterPanelWidth) &&
+                !double.IsInfinity(currentFilterPanelWidth) &&
+                 currentFilterPanelWidth > 0)
             {
-                settings.FilterPanelWidth = MainContentColumnsGrid.ColumnDefinitions[0].ActualWidth;
-                Debug.WriteLine($"MainWindow: Saving FilterPanelWidth as {settings.FilterPanelWidth}");
+                if (Math.Abs(_viewModel.FilterPanelWidth - currentFilterPanelWidth) > 1e-6) // Only update if changed
+                {
+                    _viewModel.FilterPanelWidth = currentFilterPanelWidth;
+                    Debug.WriteLine($"MainWindow: Updated ViewModel.FilterPanelWidth to {currentFilterPanelWidth}");
+                }
             }
             else
             {
-                 Debug.WriteLine($"MainWindow: Skipped saving FilterPanelWidth due to invalid ActualWidth ({MainContentColumnsGrid.ColumnDefinitions[0].ActualWidth}).");
+                Debug.WriteLine($"MainWindow: Skipped updating ViewModel.FilterPanelWidth due to invalid ActualWidth ({currentFilterPanelWidth}).");
             }
         }
-
-        _settingsService.SaveSettings(settings);
+        _viewModel.MarkSettingsAsDirty(); // Inform ViewModel that settings (geometry part) have changed
     }
 
-    // Event handlers for saving geometry
+    // Event handlers for updating ViewModel with geometry
     protected override void OnLocationChanged(EventArgs e)
     {
         base.OnLocationChanged(e);
-        if (_windowLoaded && WindowState == WindowState.Normal) // Only save if loaded and normal
+        if (_windowFullyLoaded && WindowState == WindowState.Normal)
         {
-            SaveWindowGeometry();
+            UpdateViewModelWithCurrentGeometryAndMarkDirty();
         }
     }
 
     protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
     {
         base.OnRenderSizeChanged(sizeInfo);
-        if (_windowLoaded && WindowState == WindowState.Normal) // Only save if loaded and normal
+        if (_windowFullyLoaded && WindowState == WindowState.Normal)
         {
-            // This also saves splitter implicitly if column 0 width is driven by it changing its ActualWidth
-            SaveWindowGeometry();
+            UpdateViewModelWithCurrentGeometryAndMarkDirty();
         }
+        // Also update if the window is NOT normal, but the RestoreBounds have changed (e.g. after maximizing then changing size of monitor)
+        // This ensures RestoreBounds are correctly captured if user closes while maximized.
+        // However, this check needs to be careful not to trigger excessively.
+        // The current logic in UpdateViewModelWithCurrentGeometryAndMarkDirty handles RestoreBounds.
+        if (_windowFullyLoaded && WindowState != WindowState.Normal)
+        {
+            UpdateViewModelWithCurrentGeometryAndMarkDirty();
+        }
+
+
     }
 
     protected override void OnStateChanged(EventArgs e)
     {
         base.OnStateChanged(e);
-        // WindowState is not saved, but if it becomes Normal, subsequent moves/resizes will save.
-        // If you wanted to save the *fact* that it was maximized to restore maximized,
-        // you'd save WindowState here. But since you don't, this doesn't need to call SaveWindowGeometry directly.
-        // However, if you manually restore from maximized and then close, the RestoreBounds
-        // would have been captured by SaveWindowGeometry().
+        // If the window state changes (e.g., maximized, minimized, then normalized),
+        // capture the geometry.
+        if (_windowFullyLoaded)
+        {
+            UpdateViewModelWithCurrentGeometryAndMarkDirty();
+        }
     }
 
-    // Modified closing event to include saving geometry
-    private void MainWindow_Closing_SaveGeometry(object? sender, CancelEventArgs e)
+    private void MainWindow_Closing(object? sender, CancelEventArgs e)
     {
-        if(_windowLoaded) // Ensure save only if window was fully loaded
+        if (_windowFullyLoaded)
         {
-          SaveWindowGeometry();
+            // Ensure ViewModel has the absolute latest geometry before it saves.
+            UpdateViewModelWithCurrentGeometryAndMarkDirty();
         }
+        // ViewModel's Cleanup method will handle saving settings if they are dirty.
+        // _viewModel.Cleanup() is called from Dispose().
         Dispose();
     }
 
@@ -288,7 +299,6 @@ public partial class MainWindow : Window, IDisposable
     {
         if (!_disposed)
         {
-            // Ensure editor unload cleanup runs if window closes before unload fires
             LogOutputEditor_Unloaded(null, null);
 
             if (_viewModel != null)
@@ -296,7 +306,7 @@ public partial class MainWindow : Window, IDisposable
                 _viewModel.PropertyChanged -= ViewModel_PropertyChanged;
                 _viewModel.RequestGlobalScrollToEnd -= ViewModel_RequestScrollToEnd;
                 _viewModel.RequestGlobalScrollToLineIndex -= ViewModel_RequestScrollToLineIndex;
-                _viewModel.Cleanup(); // ViewModel cleanup (saves settings internally)
+                _viewModel.Cleanup();
             }
 
             _disposed = true;
@@ -308,31 +318,19 @@ public partial class MainWindow : Window, IDisposable
     {
         if (_logOutputEditor?.TextArea != null && _viewModel != null)
         {
-            // Apply FontFamily
             if (!string.IsNullOrEmpty(_viewModel.EditorFontFamilyName))
             {
                 _logOutputEditor.TextArea.FontFamily = new FontFamily(_viewModel.EditorFontFamilyName);
-                Debug.WriteLine($"MainWindow (Initial Apply): TextArea.FontFamily explicitly set to '{_viewModel.EditorFontFamilyName}'.");
             }
-
-            // Apply FontSize
             _logOutputEditor.TextArea.FontSize = _viewModel.EditorFontSize;
-            Debug.WriteLine($"MainWindow (Initial Apply): TextArea.FontSize explicitly set to '{_viewModel.EditorFontSize}'.");
 
-            // Also refresh custom margins as their initial setup might have used default font metrics
-            // if they were initialized before the editor's font was fully set from persisted settings.
             if (_logOutputEditor.TextArea.LeftMargins != null)
             {
                 foreach (var margin in _logOutputEditor.TextArea.LeftMargins.OfType<OriginalLineNumberMargin>())
                 {
                     margin.RefreshFontProperties();
-                    Debug.WriteLine($"MainWindow (Initial Apply): Called RefreshFontProperties on OriginalLineNumberMargin.");
                 }
             }
-        }
-        else
-        {
-            Debug.WriteLine("MainWindow (Initial Apply): Could not apply initial font settings - editor, TextArea, or ViewModel is null.");
         }
     }
 
@@ -355,12 +353,13 @@ public partial class MainWindow : Window, IDisposable
         textView.LineTransformers.Add(_selectedIndexTransformer);
 
         _chunkSeparator = new ChunkSeparatorRenderer(textView);
-        textView.SetResourceReference(TextView.ToolTipProperty, "ChunkSeparatorBrush");
-        Brush? separatorBrush = textView.ToolTip as Brush;
-        _chunkSeparator.SeparatorBrush = separatorBrush ?? Brushes.Gray;
-        textView.ClearValue(TextView.ToolTipProperty);
+        textView.SetResourceReference(TextView.ToolTipProperty, "ChunkSeparatorBrush"); // Temporarily use ToolTip to pass brush resource key
+        Brush? separatorBrush = textView.ToolTip as Brush; // Retrieve the brush resolved from the key
+        _chunkSeparator.SeparatorBrush = separatorBrush ?? Brushes.Gray; // Assign to DP
+        textView.ClearValue(TextView.ToolTipProperty); // Clear the temporary use of ToolTip
         textView.BackgroundRenderers.Add(_chunkSeparator);
         _chunkSeparator.UpdateChunks(_viewModel.FilteredLogLines, _viewModel.ContextLines);
+
 
         _logOutputEditor.Unloaded += LogOutputEditor_Unloaded;
 
@@ -369,52 +368,45 @@ public partial class MainWindow : Window, IDisposable
         _lastKnownCaretLine = _logOutputEditor.TextArea.Caret.Line;
         _logOutputEditor.TextArea.SelectionChanged += LogOutputEditor_SelectionChanged;
 
-        // If LoadAndApplyWindowGeometry was not called in SourceInitialized or needs re-evaluation
-        // after full layout, it could be called here.
-        // For now, assuming SourceInitialized is sufficient for Top/Left/Width/Height.
-        // Splitter might be better here if its calculations need ActualWidth.
-        // Let's refine LoadAndApplyWindowGeometry to be smarter.
-
-        _windowLoaded = true; // Set flag indicating window is fully loaded
-        // Apply splitter here if it depends on fully resolved ActualWidth values
-        ApplySplitterPosition();
+        _windowFullyLoaded = true;
+        ApplySplitterPosition(); // Apply splitter position after window is fully loaded and measured
     }
 
     /*
-     * Applies the persisted splitter position. Called from MainWindow_Loaded,
-     * as it might rely on ActualWidth of the window.
+     * Applies the persisted splitter position. Called from MainWindow_Loaded.
+     * Reads the FilterPanelWidth from the MainViewModel (which would have loaded it from settings).
      */
     private void ApplySplitterPosition()
     {
-        _isManuallySettingGeometry = true; // Still relevant to prevent immediate save if column width change triggers event
+        _isProgrammaticallySettingGeometry = true;
+        Debug.WriteLine($"ApplySplitterPosition: Setting _isProgrammaticallySettingGeometry=true.");
         try
         {
-            LogonautSettings settings = _settingsService.LoadSettings(); // Could get from a field if already loaded
-            if (MainContentColumnsGrid != null && MainContentColumnsGrid.ColumnDefinitions.Count > 0)
+            if (MainContentColumnsGrid != null && MainContentColumnsGrid.ColumnDefinitions.Count > 0 && _viewModel != null)
             {
-                double filterPanelWidth = settings.FilterPanelWidth;
+                double filterPanelWidth = _viewModel.FilterPanelWidth; // Get from ViewModel
 
-                // Validate against current window width
-                double currentWindowWidth = this.ActualWidth; // Use ActualWidth now as window is loaded
-                if (currentWindowWidth <= 0) currentWindowWidth = settings.WindowWidth; // Fallback if ActualWidth not ready
+                double currentWindowWidth = this.ActualWidth;
+                if (currentWindowWidth <= 0) currentWindowWidth = _viewModel.WindowWidth;
 
                 if (filterPanelWidth < 50) filterPanelWidth = 50;
-                double maxAvailableWidth = currentWindowWidth - 150; // Ensure editor has at least 150px
-                if (maxAvailableWidth < 50) maxAvailableWidth = 50; // Minimum sensible for filter panel
+                double maxAvailableWidth = currentWindowWidth - 150;
+                if (maxAvailableWidth < 50) maxAvailableWidth = 50;
 
                 filterPanelWidth = Math.Min(filterPanelWidth, maxAvailableWidth);
 
                 MainContentColumnsGrid.ColumnDefinitions[0].Width = new GridLength(filterPanelWidth, GridUnitType.Pixel);
-                Debug.WriteLine($"MainWindow: Applied FilterPanelWidth to {filterPanelWidth} (Window ActualWidth: {this.ActualWidth})");
+                Debug.WriteLine($"MainWindow: Applied FilterPanelWidth {filterPanelWidth} from ViewModel (Window ActualWidth: {this.ActualWidth})");
             }
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Error applying splitter position: {ex.Message}");
+            Debug.WriteLine($"Error applying splitter position from ViewModel: {ex.Message}");
         }
         finally
         {
-            _isManuallySettingGeometry = false;
+            _isProgrammaticallySettingGeometry = false;
+            Debug.WriteLine($"ApplySplitterPosition: Setting _isProgrammaticallySettingGeometry=false.");
         }
     }
 
@@ -448,7 +440,8 @@ public partial class MainWindow : Window, IDisposable
         {
             EnableDarkTitleBar();
         }
-
+        // ViewModel would have loaded settings in its constructor.
+        // Now apply them to the window.
         LoadAndApplyWindowGeometry();
     }
 
@@ -471,6 +464,6 @@ public partial class MainWindow : Window, IDisposable
 
     private void ExitMenuItem_Click(object sender, RoutedEventArgs e)
     {
-        this.Close();
+        this.Close(); // This will trigger MainWindow_Closing
     }
 }

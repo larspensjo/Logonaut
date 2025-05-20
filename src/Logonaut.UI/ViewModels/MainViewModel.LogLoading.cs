@@ -65,7 +65,7 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
             Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} OpenLogFileAsync: Tab activated for '{selectedFile}'.");
 
             _lastOpenedFolderPath = System.IO.Path.GetDirectoryName(selectedFile);
-            SaveCurrentSettingsDelayed();
+            MarkSettingsAsDirty(); // LastOpenedFolderPath changed
         }
         catch (Exception ex)
         {

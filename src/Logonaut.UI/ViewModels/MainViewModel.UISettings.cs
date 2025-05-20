@@ -1,5 +1,3 @@
-// ===== File: C:\Users\larsp\src\Logonaut\src\Logonaut.UI\ViewModels\MainViewModel.UISettings.cs =====
-
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -13,6 +11,7 @@ namespace Logonaut.UI.ViewModels;
  * This part of MainViewModel handles UI-specific settings.
  * It includes properties for controlling display aspects like context lines,
  * line numbers, timestamp highlighting, auto-scrolling, and editor font preferences.
+ * Changes to these properties typically mark the overall application settings as dirty for persistence.
  */
 public partial class MainViewModel : ObservableObject, IDisposable, ICommandExecutor
 {
@@ -59,7 +58,7 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         // TriggerFilterUpdate will pick up the new ContextLines value and pass it
         // to _internalTabViewModel.ApplyFiltersFromProfile
         TriggerFilterUpdate();
-        SaveCurrentSettingsDelayed();
+        MarkSettingsAsDirty(); // Settings changed
     }
     public Visibility IsCustomLineNumberMarginVisible => ShowLineNumbers ? Visibility.Visible : Visibility.Collapsed;
 
@@ -71,14 +70,14 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
     {
         // If _internalTabViewModel's ActivateAsync depends on this, it might need re-activation or specific update call.
         // For now, assuming bindings in AvalonEditHelper handle this.
-        SaveCurrentSettingsDelayed();
+        MarkSettingsAsDirty(); // Settings changed
     }
     partial void OnHighlightTimestampsChanged(bool value)
     {
         // Similar to ShowLineNumbers, AvalonEditHelper binding should react.
         // If a re-filter/re-render of content is needed:
         // TriggerFilterUpdate(); // Could be too heavy, but ensures consistency.
-        SaveCurrentSettingsDelayed();
+        MarkSettingsAsDirty(); // Settings changed
     }
 
     partial void OnIsAutoScrollEnabledChanged(bool value)
@@ -94,12 +93,12 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
             HighlightedOriginalLineNumber = -1;
         }
         if (value == true) RequestGlobalScrollToEnd?.Invoke(this, EventArgs.Empty);
-        SaveCurrentSettingsDelayed();
+        MarkSettingsAsDirty(); // Settings changed
     }
 
     partial void OnEditorFontFamilyNameChanged(string value)
     {
-        SaveCurrentSettingsDelayed();
+        MarkSettingsAsDirty(); // Settings changed
         // The MainWindow.xaml.cs will listen for this PropertyChanged event
         // to update custom margins like OriginalLineNumberMargin if needed.
         // AvalonEdit's FontFamily is bound directly.
@@ -107,7 +106,7 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
 
     partial void OnEditorFontSizeChanged(double value)
     {
-        SaveCurrentSettingsDelayed();
+        MarkSettingsAsDirty(); // Settings changed
         // The MainWindow.xaml.cs will listen for this PropertyChanged event
         // to update custom margins.
         // AvalonEdit's FontSize is bound directly.
