@@ -39,6 +39,7 @@ This document has a list of ideas.
 *   Search Panel UserControl: Extract the search panel below AvalonEdit into SearchPanelView.xaml.
 *   Stats Bar UserControl: Extract the status bar at the bottom into StatusBarView.xaml.
 * ViewModel Specialization: As MainViewModel grows, consider if parts of its logic could be extracted into more specialized ViewModels that these new UserControls might bind to, rather than everything binding directly to the main MainViewModel. This would be a larger refactoring. For instance, a FilterPanelViewModel could be created and exposed as a property on MainViewModel.
+* Use CTR+ mouse wheel to increase and decrease font size.
 
 * **SimulatorLogSource UI overlay**
 *   6. Sliders or percentage inputs for INFO, WARN, ERROR, DEBUG, TRACE (could enforce sum=100%).
