@@ -16,7 +16,6 @@ This document has a list of ideas.
     * Some UI bindings may need to be updated for the TabbedControl?
     * MainViewModel.FilterTreeInteraction.cs: Review commands like AddFilter, RemoveFilterNode. They modify ActiveFilterProfile.RootFilterViewModel. After Execute(action) in these commands, you'll need to ensure the ActiveTabViewModel (if it's using this ActiveFilterProfile) re-evaluates its display. The current TriggerFilterUpdate() in MainViewModel.Execute() should be adapted to call ActiveTabViewModel?.ApplyCurrentFilters(...).
     * Global UI Settings (ContextLines, HighlightTimestamps): When these global settings in MainViewModel change, the ActiveTabViewModel needs to be informed so it can update its display/processing. OnContextLinesChanged already calls ActiveTabViewModel?.ApplyCurrentFilters. A similar notification mechanism will be needed if, for instance, HighlightTimestamps is a per-tab setting visually configured through the active tab's UI. For now, if it's a global setting, the TabViewModel's AvalonEdit setup would read this global value on activation.
-* CTRL+O for quick open file.
 * Any filter change or context change while Auto Scroll is enabled shall automatically scroll to the new end.
 * Animations for UI changes:
     * When Auto Scroll is automatically disabled, use an animation on top of the checkbox.
@@ -40,6 +39,7 @@ This document has a list of ideas.
 *   Stats Bar UserControl: Extract the status bar at the bottom into StatusBarView.xaml.
 * ViewModel Specialization: As MainViewModel grows, consider if parts of its logic could be extracted into more specialized ViewModels that these new UserControls might bind to, rather than everything binding directly to the main MainViewModel. This would be a larger refactoring. For instance, a FilterPanelViewModel could be created and exposed as a property on MainViewModel.
 * Use CTR+ mouse wheel to increase and decrease font size.
+* Implement ideas [IdeasUsingTimeStamps.md](how to use time stamps).
 
 * **SimulatorLogSource UI overlay**
 *   6. Sliders or percentage inputs for INFO, WARN, ERROR, DEBUG, TRACE (could enforce sum=100%).
