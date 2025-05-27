@@ -22,38 +22,57 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
 
     /*
      * Handles the "Open Log File" command. Prompts the user to select a log file,
-     * then reconfigures and activates the internal TabViewModel to load and display
-     * the content from the specified file.
-     *
-     * If the simulator is running, it is stopped first. The method updates the
-     * global display path and manages busy states during the loading process.
+     * then calls LoadLogFileCoreAsync to load and display the content from the specified file.
      */
     [RelayCommand(CanExecute = nameof(CanPerformActionWhileNotLoading))]
     private async Task OpenLogFileAsync()
+    {
+        string? selectedFile = _fileDialogService.OpenFile("Select a log file", "Log Files|*.log;*.txt|All Files|*.*", _lastOpenedFolderPath);
+        if (string.IsNullOrEmpty(selectedFile))
+        {
+            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} MainViewModel.OpenLogFileAsync: File selection cancelled by user.");
+            return;
+        }
+        
+        await LoadLogFileCoreAsync(selectedFile);
+    }
+
+    /*
+     * Core logic for loading a log file from a given path.
+     * This method reconfigures and activates the internal TabViewModel to handle the file.
+     * It updates UI elements related to the file path and manages busy states.
+     * 
+     * This method can be called directly if the file path is already known,
+     * bypassing the user file selection dialog.
+     */
+    public async Task LoadLogFileCoreAsync(string filePath)
     {
         if (_internalTabViewModel.LogSourceExposeDeprecated is ISimulatorLogSource sim && sim.IsRunning)
         {
             StopSimulatorInInternalTab();
         }
 
-        string? selectedFile = _fileDialogService.OpenFile("Select a log file", "Log Files|*.log;*.txt|All Files|*.*", _lastOpenedFolderPath);
-        if (string.IsNullOrEmpty(selectedFile)) return;
-        Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} MainViewModel.OpenLogFileAsync: '{selectedFile}'");
+        if (string.IsNullOrEmpty(filePath))
+        {
+            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} MainViewModel.LoadLogFileCoreAsync: Called with null or empty filePath. Aborting.");
+            // Optionally, display an error message or throw an ArgumentNullException
+            // For now, just logging and returning to match potential implicit behavior.
+            return;
+        }
 
+        Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} MainViewModel.LoadLogFileCoreAsync: Loading '{filePath}'");
         _uiContext.Post(_ => _internalTabViewModel.CurrentBusyStates.Add(TabViewModel.LoadingToken), null);
-        CurrentGlobalLogFilePathDisplay = selectedFile;
+        CurrentGlobalLogFilePathDisplay = filePath;
 
         try
         {
             _internalTabViewModel.DeactivateLogProcessing();
 
             // Reconfigure the internal tab for the new file
-            _internalTabViewModel.Header = Path.GetFileName(selectedFile);
+            _internalTabViewModel.Header = Path.GetFileName(filePath);
             _internalTabViewModel.SourceType = SourceType.File;
-            _internalTabViewModel.SourceIdentifier = selectedFile;
+            _internalTabViewModel.SourceIdentifier = filePath;
 
-            // TabViewModel.ActivateAsync will now internally use its LogDataProcessor
-            // to handle PrepareAndGetInitialLinesAsync and StartMonitoring.
             await _internalTabViewModel.ActivateAsync(
                 this.AvailableProfiles,
                 this.ContextLines,
@@ -62,9 +81,9 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
                 this.IsAutoScrollEnabled
             );
 
-            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} OpenLogFileAsync: Tab activated for '{selectedFile}'.");
+            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} LoadLogFileCoreAsync: Tab activated for '{filePath}'.");
 
-            _lastOpenedFolderPath = System.IO.Path.GetDirectoryName(selectedFile);
+            _lastOpenedFolderPath = Path.GetDirectoryName(filePath);
             MarkSettingsAsDirty(); // LastOpenedFolderPath changed
         }
         catch (Exception ex)
@@ -73,15 +92,18 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
             // MainViewModel catches to display a message and reset its own state if needed.
             _uiContext.Post(_ =>
             {
-                // Ensure tab's busy states are cleared if ActivateAsync threw before it could clear them.
                 _internalTabViewModel.CurrentBusyStates.Remove(TabViewModel.LoadingToken);
                 _internalTabViewModel.CurrentBusyStates.Remove(TabViewModel.FilteringToken);
 
-                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} OpenLogFileAsync: Error opening file '{selectedFile}': {ex.Message}");
-                MessageBox.Show($"Error opening or reading log file '{selectedFile}':\n{ex.Message}", "File Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} MainViewModel.LoadLogFileCoreAsync: Error opening file '{filePath}': {ex.Message}");
+                MessageBox.Show($"Error opening or reading log file '{filePath}':\n{ex.Message}", "File Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 CurrentGlobalLogFilePathDisplay = null;
             }, null);
+            // Consider re-throwing or returning a status if external callers need to know about the failure
         }
+        // Note: The TabViewModel.LoadingToken is removed by the TabViewModel itself upon successful
+        // completion of its activation and initial filtering (via FilteredUpdate with IsInitialLoadProcessingComplete = true),
+        // or by the catch block here in case of an error during this core loading phase.
     }
 
     /*
