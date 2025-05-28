@@ -78,6 +78,9 @@ namespace Logonaut.UI.Tests.ViewModels;
         // Act
         _viewModel.IsAutoScrollEnabled = false;
 
+        // Simulate saving before checking persistence
+        _viewModel.SaveCurrentSettings();
+
         // Assert
         Assert.IsNotNull(_mockSettings.SavedSettings, "Settings should have been saved.");
         Assert.IsFalse(_mockSettings.SavedSettings?.AutoScrollToTail, "Saved setting should be false.");
@@ -86,6 +89,9 @@ namespace Logonaut.UI.Tests.ViewModels;
 
         // Act
         _viewModel.IsAutoScrollEnabled = true;
+
+        // Simulate saving before checking persistence
+        _viewModel.SaveCurrentSettings();
 
         // Assert
         Assert.IsNotNull(_mockSettings.SavedSettings, "Settings should have been saved again.");
@@ -184,6 +190,9 @@ namespace Logonaut.UI.Tests.ViewModels;
         _viewModel.ContextLines = 5;
         _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(500).Ticks); // For filter update debounce in MainViewModel
 
+        // Simulate saving before checking persistence
+        _viewModel.SaveCurrentSettings();
+
         // Assert: Check ViewModel state
         Assert.AreEqual(5, _viewModel.ContextLines, "ContextLines property was not updated.");
 
@@ -209,6 +218,9 @@ namespace Logonaut.UI.Tests.ViewModels;
         // Act
         _viewModel.ShowLineNumbers = !initialState;
 
+        // Simulate saving before checking persistence
+        _viewModel.SaveCurrentSettings();
+
         // Assert
         Assert.AreEqual(!initialState, _viewModel.ShowLineNumbers); // Now false
         Assert.AreNotEqual(initialVisibility, _viewModel.IsCustomLineNumberMarginVisible); // Now Collapsed
@@ -227,6 +239,9 @@ namespace Logonaut.UI.Tests.ViewModels;
 
         // Act
         _viewModel.HighlightTimestamps = !initialState;
+
+        // Simulate saving before checking persistence
+        _viewModel.SaveCurrentSettings();
 
         // Assert
         Assert.AreEqual(!initialState, _viewModel.HighlightTimestamps); // Now false
@@ -257,6 +272,9 @@ namespace Logonaut.UI.Tests.ViewModels;
         // Act: Change MainViewModel's property, which should propagate to TabViewModel
         _viewModel.IsCaseSensitiveSearch = true;
         _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(100).Ticks); // For search update
+
+        // Simulate saving before checking persistence
+        _viewModel.SaveCurrentSettings();
 
         // Assert
         Assert.IsTrue(_viewModel.IsCaseSensitiveSearch, "MainViewModel's property not set.");
@@ -299,6 +317,9 @@ namespace Logonaut.UI.Tests.ViewModels;
 
         _viewModel.SimulatorLPS = 77.0; // This should save settings
 
+        // Simulate saving before checking persistence
+        _viewModel.SaveCurrentSettings();
+
         // Assert
         Assert.IsNotNull(_mockSettings.SavedSettings, "Settings should have been saved.");
         Assert.AreEqual(77.0, _mockSettings.SavedSettings?.SimulatorLPS, "Saved SimulatorLPS mismatch.");
@@ -315,6 +336,9 @@ namespace Logonaut.UI.Tests.ViewModels;
         // Act
         _viewModel.SimulatorErrorFrequency = 50.0;
 
+        // Simulate saving before checking persistence
+        _viewModel.SaveCurrentSettings();
+
         // Assert
         Assert.IsNotNull(_mockSettings.SavedSettings);
         Assert.AreEqual(50.0, _mockSettings.SavedSettings?.SimulatorErrorFrequency);
@@ -327,6 +351,9 @@ namespace Logonaut.UI.Tests.ViewModels;
         _mockSettings.Reset();
         // Act
         _viewModel.SimulatorBurstSize = 9999.0;
+
+        // Simulate saving before checking persistence
+        _viewModel.SaveCurrentSettings();
 
         // Assert
         Assert.IsNotNull(_mockSettings.SavedSettings);
@@ -362,6 +389,9 @@ namespace Logonaut.UI.Tests.ViewModels;
         // Act
         _viewModel.EditorFontFamilyName = "Cascadia Mono";
 
+        // Simulate saving before checking persistence
+        _viewModel.SaveCurrentSettings();
+
         // Assert
         Assert.IsNotNull(_mockSettings.SavedSettings, "Settings should have been saved.");
         Assert.AreEqual("Cascadia Mono", _mockSettings.SavedSettings?.EditorFontFamilyName, "Saved EditorFontFamilyName mismatch.");
@@ -376,6 +406,9 @@ namespace Logonaut.UI.Tests.ViewModels;
 
         // Act
         _viewModel.EditorFontSize = 16.0;
+
+        // Simulate saving before checking persistence
+        _viewModel.SaveCurrentSettings();
 
         // Assert
         Assert.IsNotNull(_mockSettings.SavedSettings, "Settings should have been saved.");

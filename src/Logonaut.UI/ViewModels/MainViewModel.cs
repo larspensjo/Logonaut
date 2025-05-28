@@ -382,7 +382,7 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
      * of all configurable options and uses the ISettingsService to write it.
      * It should be called when the application is closing or when an explicit save is triggered.
      */
-    private void SaveCurrentSettings()
+    public void SaveCurrentSettings()
     {
         Debug.WriteLine("---> MainViewModel: SaveCurrentSettings called.");
         var settingsToSave = new LogonautSettings

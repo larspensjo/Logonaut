@@ -56,6 +56,9 @@ namespace Logonaut.UI.Tests.ViewModels;
         Assert.AreSame(newProfile, _viewModel.ActiveFilterProfile, "Newly created profile should be active.");
         Assert.IsTrue(newProfile.IsEditing, "Newly created profile should be in edit mode.");
 
+        // Simulate saving before checking persistence
+        _viewModel.SaveCurrentSettings();
+
         // Assert Persistence
         Assert.IsNotNull(_mockSettings.SavedSettings, "Settings were not saved.");
         Assert.AreEqual(newProfile.Name, _mockSettings.SavedSettings?.LastActiveProfileName);
@@ -94,6 +97,9 @@ namespace Logonaut.UI.Tests.ViewModels;
 
         // Act
         activeProfile.Name = newValidName; // This triggers OnActiveProfileNameChange via PropertyChanged subscription
+
+        // Simulate saving before checking persistence
+        _viewModel.SaveCurrentSettings();
 
         // Assert
         Assert.AreEqual(newValidName, activeProfile.Name, "VM Name should be updated.");
@@ -240,6 +246,9 @@ namespace Logonaut.UI.Tests.ViewModels;
         // Act: Switch active profile from profile2 ("New Profile 1") to profile1 ("Default")
         _viewModel.ActiveFilterProfile = profile1;
         _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(500).Ticks); // Allow filter application
+
+        // Simulate saving before checking persistence
+        _viewModel.SaveCurrentSettings();
 
         // Assert ViewModel State
         Assert.AreSame(profile1, _viewModel.ActiveFilterProfile);

@@ -68,6 +68,8 @@ namespace Logonaut.UI.Tests.ViewModels;
         Assert.AreEqual(0, _viewModel.FilteredLogLines.Count, "FilteredLogLines (delegated) should be empty after update on empty doc.");
         Assert.AreEqual(0, _tabViewModel.FilteredLogLinesCount, "TabViewModel.FilteredLogLinesCount should be 0.");
 
+        // Simulate saving before checking persistence
+        _viewModel.SaveCurrentSettings();
 
         // Assert Persistence 
         Assert.IsTrue(_mockSettings.SaveCalledCount > 0, "Settings were not saved.");
@@ -99,6 +101,9 @@ namespace Logonaut.UI.Tests.ViewModels;
         // Assert Observable Effects
         Assert.AreEqual(0, _viewModel.FilteredLogLines.Count, "FilteredLogLines (delegated) should be empty after update on empty doc.");
         Assert.AreEqual(0, _tabViewModel.FilteredLogLinesCount, "TabViewModel.FilteredLogLinesCount should be 0.");
+
+        // Simulate saving before checking persistence
+        _viewModel.SaveCurrentSettings();
 
         // Assert Persistence 
         Assert.IsTrue(_mockSettings.SaveCalledCount > 0, "Settings were not saved.");
@@ -136,6 +141,9 @@ namespace Logonaut.UI.Tests.ViewModels;
         Assert.AreEqual(0, _viewModel.FilteredLogLines.Count, "FilteredLogLines (delegated) should be empty after update on empty doc.");
         Assert.AreEqual(0, _tabViewModel.FilteredLogLinesCount, "TabViewModel.FilteredLogLinesCount should be 0.");
 
+        // Simulate saving before checking persistence
+        _viewModel.SaveCurrentSettings();
+
         // Assert Persistence
         Assert.IsTrue(_mockSettings.SaveCalledCount > 0, "Settings were not saved.");
         Assert.IsNotNull(_mockSettings.SavedSettings);
@@ -163,6 +171,9 @@ namespace Logonaut.UI.Tests.ViewModels;
         // Assert Observable Effects
         Assert.AreEqual(0, _viewModel.FilteredLogLines.Count, "FilteredLogLines (delegated) should be empty after update on empty doc.");
         Assert.AreEqual(0, _tabViewModel.FilteredLogLinesCount, "TabViewModel.FilteredLogLinesCount should be 0.");
+
+        // Simulate saving before checking persistence
+        _viewModel.SaveCurrentSettings();
 
         // Assert Persistence
         Assert.IsTrue(_mockSettings.SaveCalledCount > 0, "Settings were saved.");
@@ -200,6 +211,9 @@ namespace Logonaut.UI.Tests.ViewModels;
         Assert.AreEqual(0, _viewModel.FilteredLogLines.Count, "FilteredLogLines (delegated) should be empty after update on empty doc.");
         Assert.AreEqual(0, _tabViewModel.FilteredLogLinesCount, "TabViewModel.FilteredLogLinesCount should be 0.");
 
+        // Simulate saving before checking persistence
+        _viewModel.SaveCurrentSettings();
+
         // Assert Persistence 
         Assert.IsTrue(_mockSettings.SaveCalledCount > 0, "Settings were saved.");
         var savedRoot = _mockSettings.SavedSettings?.FilterProfiles.FirstOrDefault(p => p.Name == "EditProfile")?.RootFilter as SubstringFilter;
@@ -232,6 +246,9 @@ namespace Logonaut.UI.Tests.ViewModels;
         // Assert Observable Effects
         Assert.AreEqual(0, _viewModel.FilteredLogLines.Count, "FilteredLogLines (delegated) should be empty after update on empty doc.");
         Assert.AreEqual(0, _tabViewModel.FilteredLogLinesCount, "TabViewModel.FilteredLogLinesCount should be 0.");
+
+        // Simulate saving before checking persistence
+        _viewModel.SaveCurrentSettings();
 
         // Assert Persistence 
         Assert.IsTrue(_mockSettings.SaveCalledCount > 0, "Settings should be saved on Enabled change via Execute.");

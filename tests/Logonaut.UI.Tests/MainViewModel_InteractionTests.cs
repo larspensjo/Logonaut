@@ -186,6 +186,35 @@ namespace Logonaut.UI.Tests.ViewModels;
         Assert.IsTrue(_mockFileLogSource.IsDisposed, "_mockFileLogSource was not disposed when simulator was activated or during final cleanup.");
     }
 
+    [TestMethod] public async Task LogFileTruncation_TriggersReload_ThroughCallbackMechanism()
+    {
+        // Arrange
+        string filePath = "C:\\test_truncation.log";
+        _mockFileDialog.FileToReturn = filePath;
+        _mockFileLogSource.LinesForInitialRead = new List<string> { "Original line 1", "Original line 2" };
+
+        // Act 1: Initial load
+        await _viewModel.LoadLogFileCoreAsync(filePath);
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(500).Ticks); // Allow initial load to complete
+
+        Assert.AreEqual(1, _mockFileLogSource.PrepareCallCount, "Prepare should be called once for initial load.");
+        Assert.AreEqual(2, _viewModel.FilteredLogLines.Count, "Initial filtered lines count mismatch.");
+
+        // Arrange 2: Change lines for the "re-read"
+        _mockFileLogSource.LinesForInitialRead = new List<string> { "New line A after reset" };
+
+        // Act 2: Simulate the file reset callback
+        _mockFileLogSource.SimulateFileResetCallback(); // This invokes MainViewModel.OnLogfileRestart -> LoadLogFileCoreAsync
+        _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(500).Ticks); // Allow reload to complete
+
+        // Assert
+        Assert.AreEqual(2, _mockFileLogSource.PrepareCallCount, "Prepare should be called a second time for reload.");
+        Assert.AreEqual(1, _viewModel.FilteredLogLines.Count, "Filtered lines count after reload mismatch.");
+        Assert.AreEqual("New line A after reset", _viewModel.FilteredLogLines[0].Text, "Filtered line content after reload mismatch.");
+        Assert.AreEqual(filePath, _viewModel.CurrentGlobalLogFilePathDisplay, "Global display path should remain the same after reload.");
+        Assert.IsTrue(_mockFileLogSource.IsRunning, "FileLogSource should be running again after reload.");
+    }
+
     /*
      * Helper to setup the internal TabViewModel with initial lines loaded
      * by simulating the OpenLogFileCommand.
