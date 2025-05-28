@@ -79,7 +79,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         string filePath = "C:\\test.log";
 
         // Act
-        await _processor.ActivateAsync(SourceType.File, filePath, initialFilter, initialContextLines);
+        await _processor.ActivateAsync(SourceType.File, filePath, initialFilter, initialContextLines, null);
         _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(300).Ticks);
 
         // Assert
@@ -110,7 +110,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         // Arrange
         _mockFileLogSource.LinesForInitialRead = new List<string> { "Initial INFO line" }; // Use inherited mock
         var filter = new SubstringFilter("INFO");
-        await _processor.ActivateAsync(SourceType.File, "C:\\test.log", filter, 0);
+        await _processor.ActivateAsync(SourceType.File, "C:\\test.log", filter, 0, null);
         _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(300).Ticks);
         _receivedFilteredUpdates.Clear();
 
@@ -140,7 +140,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         // Arrange
         var initialLines = new List<string> { "Error line", "Info line", "Debug line" };
         _mockFileLogSource.LinesForInitialRead = initialLines; // Use inherited mock
-        await _processor.ActivateAsync(SourceType.File, "C:\\test.log", new SubstringFilter("Error"), 0);
+        await _processor.ActivateAsync(SourceType.File, "C:\\test.log", new SubstringFilter("Error"), 0, null);
         _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(300).Ticks);
 
         var initialFilteredUpdate = _receivedFilteredUpdates.LastOrDefault() as ReplaceFilteredUpdate;
@@ -189,7 +189,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         Assert.AreEqual(2, _processor.LogDocDeprecated.Count, "LogDocument not populated correctly by LoadPastedLogContent.");
         Assert.AreEqual(2, _receivedTotalLines.LastOrDefault(), "TotalLinesProcessed not updated after LoadPastedLogContent.");
 
-        await _processor.ActivateAsync(SourceType.Pasted, null, filter, 0); // Activates processing
+        await _processor.ActivateAsync(SourceType.Pasted, null, filter, 0, null); // Activates processing
         _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(300).Ticks); // Allow processing
 
         // Assert
@@ -208,7 +208,7 @@ namespace Logonaut.UI.Tests.ViewModels;
     [TestMethod] public async Task Deactivate_StopsSourceAndStream()
     {
         // Arrange
-        await _processor.ActivateAsync(SourceType.File, "C:\\test.log", new TrueFilter(), 0);
+        await _processor.ActivateAsync(SourceType.File, "C:\\test.log", new TrueFilter(), 0, null);
         _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(100).Ticks);
         Assert.IsTrue(_mockFileLogSource.IsRunning, "Source should be monitoring before deactivate.");
         Assert.IsNotNull(_processor.ReactiveFilteredLogStream, "Reactive stream should exist before deactivate.");
@@ -233,7 +233,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         _mockFileLogSource.LinesForInitialRead = new List<string> { "context before", "MATCH_ME", "context after" };
         var filter = new SubstringFilter("MATCH_ME");
         int contextLines = 1;
-        await _processor.ActivateAsync(SourceType.File, "C:\\test.log", filter, contextLines);
+        await _processor.ActivateAsync(SourceType.File, "C:\\test.log", filter, contextLines, null);
         _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(300).Ticks);
 
         var initialUpdate = _receivedFilteredUpdates.LastOrDefault() as ReplaceFilteredUpdate;
@@ -284,7 +284,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         string simulatorId = "TestSim";
 
         // Act
-        await _processor.ActivateAsync(SourceType.Simulator, simulatorId, initialFilter, 0);
+        await _processor.ActivateAsync(SourceType.Simulator, simulatorId, initialFilter, 0, null);
         _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(300).Ticks);
 
         // Assert
@@ -315,7 +315,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         // Act
         try
         {
-            await _processor.ActivateAsync(SourceType.File, failingFilePath, initialFilter, 0);
+            await _processor.ActivateAsync(SourceType.File, failingFilePath, initialFilter, 0, null);
         }
         catch (IOException ex) // Expecting the IOException from MockLogSource
         {

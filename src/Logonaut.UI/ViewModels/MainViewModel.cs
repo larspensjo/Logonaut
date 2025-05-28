@@ -122,7 +122,8 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
             this.ContextLines,
             this.HighlightTimestamps,
             this.ShowLineNumbers,
-            this.IsAutoScrollEnabled
+            this.IsAutoScrollEnabled,
+            null
             ).ContinueWith(t => {
                 if (t.IsFaulted) Debug.WriteLine($"Error activating internal tab: {t.Exception}");
             });

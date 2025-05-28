@@ -37,6 +37,17 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         await LoadLogFileCoreAsync(selectedFile);
     }
 
+    // A callback that asks us to restart the same log file.
+    private void OnLogfileRestart()
+    {
+        Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} MainViewModel.OnLogfileRestart: invoked.");
+        _uiContext.Post(_ =>
+        {
+            // The callback comes from another thread, so we need to use the _uicontext.
+            _ = LoadLogFileCoreAsync(CurrentGlobalLogFilePathDisplay!);
+        }, null);
+    }
+
     /*
      * Core logic for loading a log file from a given path.
      * This method reconfigures and activates the internal TabViewModel to handle the file.
@@ -78,7 +89,8 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
                 this.ContextLines,
                 this.HighlightTimestamps,
                 this.ShowLineNumbers,
-                this.IsAutoScrollEnabled
+                this.IsAutoScrollEnabled,
+                OnLogfileRestart
             );
 
             Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} LoadLogFileCoreAsync: Tab activated for '{filePath}'.");
@@ -132,7 +144,8 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
            this.ContextLines,
            this.HighlightTimestamps,
            this.ShowLineNumbers,
-           this.IsAutoScrollEnabled
+           this.IsAutoScrollEnabled,
+           null
        ).ContinueWith(t =>
        {
            if (t.IsFaulted && t.Exception != null) Debug.WriteLine($"Error activating internal tab after paste: {t.Exception.Flatten().Message}");
@@ -168,7 +181,8 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
            this.ContextLines,
            this.HighlightTimestamps,
            this.ShowLineNumbers,
-           this.IsAutoScrollEnabled
+           this.IsAutoScrollEnabled,
+           null
        ).ContinueWith(t =>
        {
            if (t.IsFaulted && t.Exception != null) Debug.WriteLine($"Error reactivating internal tab after reset: {t.Exception.Flatten().Message}");

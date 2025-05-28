@@ -21,7 +21,7 @@ namespace Logonaut.LogTailing.Tests
                 File.WriteAllText(tempFile, "Initial line\n");
 
                 // Create an instance of LogTailer for the temporary file.
-                using (var tailer = new LogTailer(tempFile))
+                using (var tailer = new LogTailer(tempFile, 0, null))
                 {
                     var capturedLines = new List<string>();
 

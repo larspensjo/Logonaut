@@ -126,7 +126,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 this.ContextLines,
                 this.HighlightTimestamps,
                 this.ShowLineNumbers,
-                this.IsAutoScrollEnabled
+                this.IsAutoScrollEnabled,
+                null
             );
 
             // After activation, the LogSource should be an ISimulatorLogSource.
@@ -213,7 +214,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
                this.ContextLines,
                this.HighlightTimestamps,
                this.ShowLineNumbers,
-               this.IsAutoScrollEnabled
+               this.IsAutoScrollEnabled,
+               null
            ).ContinueWith(t =>
            {
                if (t.IsFaulted && t.Exception != null)

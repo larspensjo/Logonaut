@@ -62,7 +62,7 @@ public class MockLogSource : ISimulatorLogSource
     }
 
     // Explicit ILogSource calls delegate to ISimulatorLogSource methods
-    void ILogSource.StartMonitoring() => Start();
+    void ILogSource.StartMonitoring(Action? callback) => Start();
     void ILogSource.StopMonitoring() => Stop();
 
     public void Start()

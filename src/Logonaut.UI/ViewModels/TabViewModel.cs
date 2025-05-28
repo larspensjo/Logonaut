@@ -150,7 +150,7 @@ public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecu
     * This method is typically called when a tab becomes the active tab in the UI,
     * or when its underlying source (e.g., file path, simulator state) is defined or changes.
     */
-    public async Task ActivateAsync(IEnumerable<FilterProfileViewModel> availableProfiles, int globalContextLines, bool globalHighlightTimestamps, bool globalShowLineNumbers, bool globalAutoScrollEnabled)
+    public async Task ActivateAsync(IEnumerable<FilterProfileViewModel> availableProfiles, int globalContextLines, bool globalHighlightTimestamps, bool globalShowLineNumbers, bool globalAutoScrollEnabled, Action? callback)
     {
         // Check if already active with the same source configuration to avoid redundant work.
         // This is a simple check; more sophisticated checks might involve comparing actual source instances if they were exposed.
@@ -186,7 +186,7 @@ public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecu
         try
         {
             // Delegate to the processor to handle source creation, stream setup, and initial load/filtering
-            await _processor.ActivateAsync(SourceType, SourceIdentifier, initialFilter, globalContextLines);
+            await _processor.ActivateAsync(SourceType, SourceIdentifier, initialFilter, globalContextLines, callback);
             // ApplyFiltersFromProfile is now implicitly handled by the initialFilter/ContextLines in processor's ActivateAsync
         }
         catch (Exception ex)
@@ -735,7 +735,7 @@ public class NullLogSource : ILogSource
 {
     public IObservable<string> LogLines => Observable.Empty<string>();
     public Task<long> PrepareAndGetInitialLinesAsync(string sourceIdentifier, Action<string> addLineToDocumentCallback) => Task.FromResult(0L);
-    public void StartMonitoring() { }
+    public void StartMonitoring(Action? callback) { }
     public void StopMonitoring() { }
     public void Dispose() { }
 }

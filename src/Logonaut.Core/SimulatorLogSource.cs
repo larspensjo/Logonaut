@@ -46,7 +46,7 @@ public class SimulatorLogSource : ISimulatorLogSource
     }
 
     // Explicitly implement ILogSource methods by calling ISimulatorLogSource methods
-    void ILogSource.StartMonitoring() => Start();
+    void ILogSource.StartMonitoring(Action? callback) => Start();
     void ILogSource.StopMonitoring() => Stop();
 
     #region ISimulatorLogSource Methods

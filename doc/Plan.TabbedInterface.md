@@ -8,12 +8,12 @@
 *   **Action:** Create a new `TabViewModel` class.
 *   **Details:**
     *   Move the following properties and their related logic from `MainViewModel` into `TabViewModel`:
-        *   `LogDocument LogDoc`
-        *   `ILogSource CurrentActiveLogSource` (rename to `LogSource` in `TabViewModel`)
-        *   `IReactiveFilteredLogStream ReactiveFilteredLogStream`
+        *   `LogDocument LogDocDeprecated` (owned by `LogDataProcessor` within `TabViewModel`)
+        *   `ILogSource CurrentActiveLogSource` (renamed to `LogSource`, exposed from `LogDataProcessor` if needed, or internal to it)
+        *   `IReactiveFilteredLogStream ReactiveFilteredLogStream` (owned by `LogDataProcessor`)
         *   `ObservableCollection<FilteredLogLine> FilteredLogLines`
         *   `long TotalLogLines`
-        *   `string? CurrentLogFilePath` (or a more generic `SourceIdentifier`)
+        *   `string? CurrentLogFilePath` (now `SourceIdentifier` in `TabViewModel`)
         *   `ObservableCollection<IFilter> FilterHighlightModels`
         *   `int HighlightedFilteredLineIndex`, `int HighlightedOriginalLineNumber`
         *   `string TargetOriginalLineNumberInput`, `string? JumpStatusMessage`, `bool IsJumpTargetInvalid` (and associated jump commands)
@@ -23,39 +23,45 @@
         *   `string initialAssociatedProfileName`
         *   `SourceType initialSourceType`
         *   `string? initialSourceIdentifier` (e.g., file path or pasted content storage path)
-        *   Services: `ILogSourceProvider`, `ICommandExecutor` (from `MainViewModel`), `SynchronizationContext`.
-        *   It will create its own `LogDocument`, and will create its `ILogSource` and `IReactiveFilteredLogStream` when activated.
-    *   `TabViewModel` should implement `IDisposable` to dispose its `LogSource` and `ReactiveFilteredLogStream`.
+        *   Services: `ILogSourceProvider`, `ICommandExecutor` (from `MainViewModel`), `SynchronizationContext`, `IScheduler? backgroundScheduler`.
+        *   It will create its own `LogDataProcessor` instance, which in turn manages `LogDocument`, `ILogSource`, and `IReactiveFilteredLogStream`.
+    *   `TabViewModel` should implement `IDisposable` to dispose its `LogDataProcessor` (which disposes its `LogSource` and `ReactiveFilteredLogStream`).
     *   Add `Header` property (string, for user-editable tab name).
-    *   Add `DisplayHeader` property (string, combines `Header` and `LastActivityTimestamp` for tab display).
+    *   Add `DisplayHeader` property (string, combines `Header` and `LastActivityTimestamp`/status for tab display).
     *   Add `IsActive` property (bool) to `TabViewModel`.
-    *   Add `AssociatedFilterProfileName` (string) to `TabViewModel`. When this changes, the tab's filter pipeline should be updated.
+    *   Add `AssociatedFilterProfileName` (string) to `TabViewModel`. When this changes, the tab's filter pipeline should be updated if the tab is active.
     *   Add `LastActivityTimestamp` (DateTime?) to `TabViewModel`.
-    *   Add `SourceType SourceType` (enum: File, Pasted, Simulator).
-    *   Add `SourceIdentifier` (string, stores file path or pasted content temp path).
-    *   Add `PastedContentStoragePath` (string, only for `SourceType.Pasted`).
+    *   Add `SourceType SourceType` (enum: File, Pasted, Simulator, Snapshot).
+    *   Add `SourceIdentifier` (string, stores file path or pasted content temp path / unique ID for snapshots).
+    *   Add `PastedContentStoragePath` (string, only for `SourceType.Pasted` or `Snapshot` if its content is saved this way).
     *   Add `IsModified` (bool, for pasted content tabs to track if they need saving).
+    *   Add `public event Action<TabViewModel /*snapshotTab*/, string /*restartedFilePath*/>? SourceRestartDetected;`
     *   Implement methods in `TabViewModel` for:
-        *   `ActivateAsync()`: Creates/recreates `ILogSource`, `IReactiveFilteredLogStream`, subscribes, calls `PrepareAndGetInitialLinesAsync` (if needed), starts monitoring, triggers initial filter.
-        *   `Deactivate()`: Calls `StopMonitoring`, disposes source/stream (optional), updates `LastActivityTimestamp`.
-        *   `LoadPastedContent(string text)`: Initializes `LogDoc` with pasted text.
-        *   `LoadFromFileAsync(string filePath)`: For file-based tabs.
-        *   `StartSimulator()`: For simulator tabs.
-        *   `TriggerFilterUpdate()`: Calls `UpdateFilterSettings` on its `ReactiveFilteredLogStream`.
-        *   Search-related methods (UpdateSearchMatches, SelectAndScrollToCurrentMatch) now operate on this tab's `FilteredLogLines` and `LogOutputEditor` instance (passed or accessed).
-    *   The `AddLineToLogDocument` callback for `IReactiveFilteredLogStream` will now be a method within `TabViewModel` that adds to *its own* `LogDoc`.
+        *   `ActivateAsync(IEnumerable<FilterProfileViewModel> availableProfiles, int globalContextLines, ...)`: Creates/recreates `LogDataProcessor`'s `ILogSource`, `IReactiveFilteredLogStream`, subscribes, calls `PrepareAndGetInitialLinesAsync` (if needed via processor), starts monitoring, triggers initial filter. For `SourceType.File`, it will ensure `OnSourceFileRestarted` is passed as the restart callback to the `LogDataProcessor`.
+        *   `DeactivateLogProcessing()`: Calls `LogDataProcessor.Deactivate()`, updates `LastActivityTimestamp`.
+        *   `LoadPastedContent(string text)`: Initializes `LogDataProcessor.LogDocDeprecated` with pasted text.
+        *   `TriggerFilterUpdate(IEnumerable<FilterProfileViewModel> availableProfiles, int globalContextLines)`: Calls `ApplyFilterSettings` on its `LogDataProcessor` if active.
+        *   Search-related methods (UpdateSearchMatches, SelectAndScrollToCurrentMatch) now operate on this tab's `FilteredLogLines` and `LogOutputEditor` instance.
+        *   Private `OnSourceFileRestarted()`:
+            *   Updates `Header` (e.g., `Header += $" (Snapshot @ {DateTime.Now:HH:mm:ss})" `).
+            *   Calls `DeactivateLogProcessing()`.
+            *   Sets `SourceType = SourceType.Snapshot` (or `SourceType.Pasted`).
+            *   Sets `SourceIdentifier` to a new unique ID (e.g., `Guid.NewGuid().ToString()`). If becoming `Pasted`, `PastedContentStoragePath` will be determined on save.
+            *   Sets `IsModified = true` if treated like pasted content that needs saving.
+            *   Raises `SourceRestartDetected` event, passing `this` (the snapshot tab) and its original file path.
+    *   The `AddLineToLogDocument` callback for `IReactiveFilteredLogStream` is internal to `LogDataProcessor`.
 *   **Impact:**
     *   `MainViewModel` will become much leaner regarding single log state.
     *   Application still works with one implicit "tab" internally.
 *   **Testing:**
-    *   Unit test `TabViewModel`'s ability to load a log file, process filters, and manage its active/inactive state (mocking services).
+    *   Unit test `TabViewModel`'s ability to load a log file, process filters, manage its active/inactive state, and handle the `OnSourceFileRestarted` logic (mocking services and verifying event raising).
     *   Ensure existing `MainViewModel` tests (if any focusing on log processing) are adapted or new ones created for `TabViewModel`.
 
 ### Step 0.2: `MainViewModel` Manages a Single `TabViewModel`
 *   **Action:** Modify `MainViewModel` to instantiate and manage a single `TabViewModel`.
 *   **Details:**
     *   `MainViewModel` will have an `ActiveTabViewModel` property (of type `TabViewModel`).
-    *   On startup, `MainViewModel` creates one `TabViewModel` (e.g., an empty "Untitled" pasted content tab) and sets it as `ActiveTabViewModel`. Calls `ActiveTabViewModel.ActivateAsync()`.
+    *   On startup, `MainViewModel` creates one `TabViewModel` (e.g., an empty "Untitled" pasted content tab) and sets it as `ActiveTabViewModel`. Calls `ActiveTabViewModel.ActivateAsync(...)`.
     *   `MainViewModel`'s commands (Open File, Paste, Simulator Start, etc.) will now delegate to the `ActiveTabViewModel` or create new tabs.
     *   UI elements (like `LogOutputEditor`, status bar stats) previously bound to `MainViewModel` properties will now need to bind to `MainViewModel.ActiveTabViewModel.RelevantProperty`.
     *   The globally selected `ActiveFilterProfile` in `MainViewModel` will set `ActiveTabViewModel.AssociatedFilterProfileName`.
@@ -97,12 +103,13 @@
 *   **Action:** Modify "Open Log File" logic in `MainViewModel` to create a new `TabViewModel` for each new file.
 *   **Details:**
     *   When `MainViewModel.OpenLogFileAsync` is invoked:
-        *   **Check for existing tab:** Iterate `TabViewModels`. If a tab with the same `SourceIdentifier` (file path) exists, set it as `ActiveTabViewModel` and return.
-        *   If not found, create a new `TabViewModel` instance:
+        *   **Check for existing tab:** Iterate `TabViewModels`. If a tab with the same `SourceIdentifier` (file path) and `SourceType.File` exists and is active, set it as `ActiveTabViewModel` and return. (Consider if a non-active file tab should be reactivated or a new one opened - current behavior is to activate existing).
+        *   If not found or different type, create a new `TabViewModel` instance:
             *   `initialHeader`: File name.
             *   `initialAssociatedProfileName`: `MainViewModel.ActiveFilterProfile.Name`.
             *   `initialSourceType`: `SourceType.File`.
             *   `initialSourceIdentifier`: Selected file path.
+            *   Subscribe to its `SourceRestartDetected` event.
         *   Add the new `TabViewModel` to `MainViewModel.TabViewModels`.
         *   Set the new `TabViewModel` as `ActiveTabViewModel`. (This will trigger its `ActivateAsync` via `OnActiveTabViewModelChanged`).
 *   **Impact:**
@@ -136,23 +143,21 @@
 *   **Details:**
     *   In `MainViewModel.OnActiveTabViewModelChanged(TabViewModel oldValue, TabViewModel newValue)`:
         *   **Old Active Tab (if `oldValue` is not null):**
-            *   Call `oldValue.Deactivate()`.
+            *   Call `oldValue.DeactivateLogProcessing()`.
         *   **New Active Tab (if `newValue` is not null):**
-            *   Call `newValue.ActivateAsync()`.
-    *   `TabViewModel.Deactivate()`:
-        *   Calls `StopMonitoring()` on its `LogSource`.
+            *   Call `newValue.ActivateAsync(...)` passing necessary global settings (profiles, context lines, etc.).
+    *   `TabViewModel.DeactivateLogProcessing()`:
+        *   Calls `LogDataProcessor.Deactivate()`.
         *   Sets `LastActivityTimestamp`.
-        *   Disposes its `ReactiveFilteredLogStream` and `LogSource`.
         *   Sets `IsActive = false`.
         *   Updates `DisplayHeader`.
-    *   `TabViewModel.ActivateAsync()`:
+        *   Ensures busy tokens are cleared.
+    *   `TabViewModel.ActivateAsync(...)`:
         *   Sets `IsActive = true`.
-        *   Creates `LogSource` (based on `SourceType` and `SourceIdentifier`).
-        *   Creates `ReactiveFilteredLogStream`.
-        *   Subscribes to stream updates (updating its own `FilteredLogLines`, etc.).
-        *   Calls `LogSource.PrepareAndGetInitialLinesAsync(...)` if first activation or if needed (e.g., file changed).
-        *   Calls `LogSource.StartMonitoring()`.
-        *   Triggers its filter update using its `AssociatedFilterProfileName` (fetching the profile from `MainViewModel.AvailableProfiles`).
+        *   Clears `LastActivityTimestamp`.
+        *   (Re)Initializes `LogDataProcessor` for its `SourceType` and `SourceIdentifier`.
+        *   Processor handles `LogSource` creation, `PrepareAndGetInitialLinesAsync`, `StartMonitoring`.
+        *   Processor applies initial filter based on tab's `AssociatedFilterProfileName` and global context lines.
         *   Updates `DisplayHeader`.
 *   **Impact:**
     *   Resource usage is optimized.
@@ -171,8 +176,9 @@
             *   `initialAssociatedProfileName`: `MainViewModel.ActiveFilterProfile.Name`.
             *   `initialSourceType`: `SourceType.Simulator`.
             *   `initialSourceIdentifier`: null or a unique simulator ID.
-        *   Add to `TabViewModels` and set as `ActiveTabViewModel`. (This triggers its `ActivateAsync`, which will internally call its `StartSimulator` method or similar to set up the `ISimulatorLogSource`).
-        *   Simulator controls (LPS, Error Freq, Burst) in `MainViewModel` now operate on `ActiveTabViewModel.LogSource` (cast to `ISimulatorLogSource` if `ActiveTabViewModel.SourceType == SourceType.Simulator`).
+            *   Do *not* subscribe to `SourceRestartDetected` for simulator tabs.
+        *   Add to `TabViewModels` and set as `ActiveTabViewModel`. (This triggers its `ActivateAsync`, which will internally set up `LogDataProcessor` for `ISimulatorLogSource`).
+        *   Simulator controls (LPS, Error Freq, Burst) in `MainViewModel` now operate on `ActiveTabViewModel.LogSourceExposeDeprecated` (cast to `ISimulatorLogSource` if `ActiveTabViewModel.SourceType == SourceType.Simulator`).
     *   If stopping the simulator via UI, it effectively deactivates/closes the simulator tab.
 *   **Impact:** Simulator runs in its own dedicated tab.
 *   **Testing:**
@@ -188,12 +194,13 @@
             *   `initialHeader`: "Pasted Content" (or "Pasted 1").
             *   `initialAssociatedProfileName`: `MainViewModel.ActiveFilterProfile.Name`.
             *   `initialSourceType`: `SourceType.Pasted`.
-            *   `initialSourceIdentifier`: null initially.
+            *   `initialSourceIdentifier`: A new unique ID (e.g., `Guid.NewGuid().ToString()`), used for potential persistence.
+            *   Do *not* subscribe to `SourceRestartDetected` for pasted tabs.
+        *   Call `newTabViewModel.LoadPastedContent(text)` to populate its `LogDataProcessor.LogDocDeprecated`.
         *   Add to `TabViewModels` and set as `ActiveTabViewModel`.
-        *   The `ActiveTabViewModel.ActivateAsync()` for a pasted tab will involve:
-            *   Calling its `LoadPastedContent(text)` method to populate its `LogDoc`.
-            *   Setting up its `ReactiveFilteredLogStream` (with a "null" or "completed" `ILogSource` as there are no further lines).
-            *   Triggering its filter update.
+        *   The `ActiveTabViewModel.ActivateAsync(...)` for a pasted tab will then involve:
+            *   Setting up its `ReactiveFilteredLogStream` (with a "null" or "completed" `ILogSource` as there are no further lines from the source itself).
+            *   Triggering its filter update on the already loaded content.
 *   **Impact:** Pasted content gets its own tab.
 *   **Testing:**
     *   Paste text; a new tab appears with the content.
@@ -207,8 +214,9 @@
     *   `TabViewModel.CloseCommand` execution:
         *   Raises an event or calls a method on `MainViewModel` (passed via constructor or event aggregator) requesting its own closure.
         *   `MainViewModel` receives this request:
+            *   Unsubscribe from the closing tab's `SourceRestartDetected` event if applicable.
             *   Removes the `TabViewModel` from `TabViewModels`.
-            *   Calls `Dispose()` on the removed `TabViewModel` (which handles `Deactivate` and resource cleanup).
+            *   Calls `Dispose()` on the removed `TabViewModel` (which handles `DeactivateLogProcessing` and resource cleanup via `LogDataProcessor`).
             *   Handles deletion of `PastedContentStoragePath` file if applicable (see Phase 4.1).
             *   If `TabViewModels` becomes empty, create a default empty tab.
             *   Select another tab to be active.
@@ -218,6 +226,47 @@
     *   Active tab selection logic works correctly after a close.
     *   Ensure resources of closed tabs are released.
 
+### Step 2.5: File Reset Handling in Tabs
+*   **Action:** Implement the new behavior for log file restarts: inactivate the current tab (make it a snapshot) and create a new tab for the restarted file.
+*   **Details:**
+    *   **`TabViewModel.ActivateAsync(...)` Modification:**
+        *   When `SourceType` is `File`, `TabViewModel` will pass its internal `OnSourceFileRestarted` method as the callback to `LogDataProcessor.ActivateAsync`.
+    *   **`TabViewModel.OnSourceFileRestarted()` Method (defined in Step 0.1):**
+        *   Invoked by the `LogTailer` -> `FileLogSource` -> `LogDataProcessor` callback chain when a file truncation is detected.
+        *   Stores its original `SourceIdentifier` (file path).
+        *   Updates its `Header` (e.g., `Header += $" (Snapshot @ {DateTime.Now:HH:mm:ss})" `).
+        *   Calls `DeactivateLogProcessing()` (stops monitoring).
+        *   Changes its `SourceType` to `SourceType.Snapshot` (or `SourceType.Pasted`).
+        *   Changes its `SourceIdentifier` to a new unique ID (e.g., `Guid.NewGuid().ToString()`). This prevents it from trying to reload the original file and facilitates saving its current `LogDoc` content if it's treated like a pasted tab.
+        *   Sets `IsModified = true` (if its content is to be saved like pasted tabs).
+        *   Raises its `SourceRestartDetected` event, passing `this` (the snapshot tab) and the original `restartedFilePath`.
+    *   **`MainViewModel` Subscribes to `SourceRestartDetected`:**
+        *   When creating any `TabViewModel` with `SourceType.File`, `MainViewModel` subscribes to its `SourceRestartDetected` event.
+        *   **`MainViewModel.HandleTabSourceRestart(TabViewModel snapshotTab, string restartedFilePath)`:**
+            *   This method is the event handler.
+            *   `snapshotTab` has already transitioned itself into a snapshot state.
+            *   Create a new `TabViewModel`:
+                *   `initialHeader`: `Path.GetFileName(restartedFilePath)`.
+                *   `initialAssociatedProfileName`: `snapshotTab.AssociatedFilterProfileName` (or current global active profile).
+                *   `initialSourceType`: `SourceType.File`.
+                *   `initialSourceIdentifier`: `restartedFilePath`.
+                *   Subscribe to the new tab's `SourceRestartDetected` event.
+            *   Add this new `TabViewModel` to `MainViewModel.TabViewModels`.
+            *   Set the new `TabViewModel` as `ActiveTabViewModel`. This will trigger its `ActivateAsync`, causing it to load and monitor the (now truncated/restarted) file from the beginning.
+*   **Impact:**
+    *   When a monitored file is reset, the original tab becomes an inactive snapshot of the pre-reset content.
+    *   A new tab is automatically created and activated, monitoring the file from its reset state.
+    *   This is per-tab, addressing the limitations of the previous global restart mechanism.
+*   **Testing:**
+    *   Open a file in a tab.
+    *   Truncate or replace the file with shorter content.
+    *   Verify:
+        *   The original tab's header changes (e.g., "mylog.txt (Snapshot...)").
+        *   The original tab becomes inactive and stops monitoring.
+        *   A new tab (e.g., "mylog.txt") appears and becomes active.
+        *   The new tab displays the content of the reset file.
+        *   The snapshot tab retains the old content.
+
 ## Phase 3: Persistence
 
 **Goal:** Save and restore tab sessions and their states.
@@ -226,15 +275,15 @@
 *   **Action:** Create `TabSessionInfo` class in `Logonaut.Common`.
 *   **Details:**
     *   Properties:
-        *   `string? FilePath` (for file-based tabs)
-        *   `string? PastedContentStoragePath` (for pasted content tabs)
-        *   `bool IsPastedContent`
         *   `string TabHeaderName` (user-defined name)
         *   `string AssociatedFilterProfileName`
         *   `DateTime? LastActivityTimestamp`
         *   `double ScrollOffset` (vertical scroll position of the `LogOutputEditor`)
         *   `int HighlightedOriginalLineNumber` (to restore selected line)
-        *   `SourceType` enum (File, Pasted, Simulator) - easier than multiple booleans.
+        *   `SourceType SourceType` (enum: File, Pasted, Simulator, Snapshot)
+        *   `string? SourceIdentifier` (file path for File, unique ID for Pasted/Snapshot)
+        *   `string? OriginalFilePathForSnapshot` (Only for `SourceType.Snapshot`, stores the original file path before it became a snapshot. Optional, for display/info purposes).
+        *   `string? PastedContentStoragePath` (Path to saved LogDoc content for `SourceType.Pasted` and `SourceType.Snapshot`).
 *   **Impact:** Defines the data structure for saving tab state.
 *   **Testing:** (No direct testing yet, part of settings save/load).
 
@@ -248,20 +297,22 @@
 *   **Action:** Implement saving of `OpenTabs` in `MainViewModel.SaveCurrentSettings`.
 *   **Details:**
     *   Iterate `MainViewModel.TabViewModels`.
-    *   For each `TabViewModel` that is NOT `IsSimulatorSession`:
+    *   For each `TabViewModel` that is NOT `SourceType.Simulator`:
         *   Create a `TabSessionInfo` object.
-        *   Populate it from `TabViewModel` properties (FilePath, ProfileName, Header, Timestamps, ScrollPosition, HighlightedLine).
-        *   **For pasted content:**
-            *   If `TabViewModel.IsPastedContent` is true and `PastedContentStoragePath` is null (or content changed):
-                *   Generate a unique filename (e.g., `guid.logonautpaste`).
-                *   Save `TabViewModel.LogDoc.ToList()` content to this file in `AppData/Logonaut/PastedLogs/`.
+        *   Populate it from `TabViewModel` properties (Header, ProfileName, Timestamps, ScrollPosition, HighlightedLine, SourceType, SourceIdentifier).
+        *   **For `SourceType.Pasted` or `SourceType.Snapshot`:**
+            *   If `TabViewModel.PastedContentStoragePath` is null (or content changed, indicated by `IsModified` for `Pasted`):
+                *   Generate a unique filename (e.g., using `TabViewModel.SourceIdentifier`.logonautsession).
+                *   Save `TabViewModel.LogDocDeprecated.ToList()` content to this file in `AppData/Logonaut/PastedLogs/`.
                 *   Store this path in `TabSessionInfo.PastedContentStoragePath`.
-        *   Add to `LogonautSettings.OpenTabs`.
-*   **Impact:** Tab states (excluding simulator) are persisted.
+                *   Update `TabViewModel.PastedContentStoragePath` and set `IsModified = false`.
+            *   If `TabViewModel.SourceType == SourceType.Snapshot`, also save `TabViewModel.OriginalFilePathBeforeSnapshot` to `TabSessionInfo.OriginalFilePathForSnapshot`.
+        *   Add `TabSessionInfo` to `LogonautSettings.OpenTabs`.
+*   **Impact:** Tab states (excluding simulator) are persisted. Snapshot tabs save their captured content.
 *   **Testing:**
-    *   Open various tabs (file, pasted).
+    *   Open various tabs (file, pasted). Trigger a file reset to create a snapshot tab.
     *   Close app; inspect `settings.json` and `PastedLogs` folder.
-    *   Verify `TabSessionInfo` and pasted content files are created correctly.
+    *   Verify `TabSessionInfo` (with correct `SourceType` and paths) and snapshot/pasted content files are created correctly.
 
 ### Step 3.4: Restore Tab State
 *   **Action:** Implement restoring of tabs in `MainViewModel` constructor (or a `LoadPersistedState` method called after settings are loaded).
@@ -270,50 +321,50 @@
         *   Iterate `settings.OpenTabs`.
         *   For each `TabSessionInfo`:
             *   Create a new `TabViewModel`.
-            *   Set `IsFileBased` or `IsPastedContent`.
-            *   Set `Header`, `AssociatedFilterProfileName`, `LastActivityTimestamp`.
-            *   If `IsFileBased`, set `CurrentLogFilePath`.
-            *   If `IsPastedContent` and `PastedContentStoragePath` exists:
-                *   Load content from the stored temp file into `TabViewModel.LogDoc`.
+            *   Set `Header`, `AssociatedFilterProfileName`, `LastActivityTimestamp`, `SourceType`, `SourceIdentifier`.
+            *   Subscribe to `SourceRestartDetected` if `SourceType == SourceType.File`.
+            *   If `SourceType == SourceType.Pasted` or `SourceType == SourceType.Snapshot`:
+                *   If `PastedContentStoragePath` exists, load content from this file into `TabViewModel.LogDataProcessor.LogDocDeprecated` via `TabViewModel.LoadPastedContent()` or a similar direct load mechanism for snapshots.
+                *   Set `TabViewModel.PastedContentStoragePath` to the loaded path.
             *   Store `ScrollOffset` and `HighlightedOriginalLineNumber` in `TabViewModel` to be applied when the tab view is ready.
             *   Add to `MainViewModel.TabViewModels`.
-        *   All restored tabs are initially inactive (no `StartMonitoring` yet).
-        *   If no tabs were restored (e.g., first run or empty `OpenTabs`), create a default empty tab.
-        *   Select the first tab (or a last active remembered tab if you store that too) as `ActiveTabViewModel`. This will trigger its activation logic (Step 2.1).
-*   **Impact:** Application restores its previous tab layout on startup.
+        *   All restored tabs are initially inactive (no `ActivateAsync` called yet).
+        *   If no tabs were restored, create a default empty tab.
+        *   Select the first tab (or a last active remembered tab if stored) as `ActiveTabViewModel`. This will trigger its activation logic (Step 2.1).
+*   **Impact:** Application restores its previous tab layout on startup, including snapshot tabs with their content.
 *   **Testing:**
-    *   Start app; previously open tabs (file, pasted) are restored.
-    *   Headers, profiles should be correct.
-    *   Pasted content is restored.
-    *   Initially, no tab is actively monitoring. Activating one starts monitoring.
+    *   Start app; previously open tabs (file, pasted, snapshot) are restored.
+    *   Headers, profiles, SourceTypes should be correct.
+    *   Pasted/Snapshot content is restored.
+    *   Initially, no tab is actively monitoring. Activating one starts monitoring (for File/Simulator tabs). Snapshot/Pasted tabs will just display their content.
 
 ### Step 3.5: Restore Scroll Position and Selected Line
 *   **Action:** When a tab becomes active (or its view is loaded), apply stored scroll and selection.
 *   **Details:**
-    *   `TabViewModel` will need to store `RestoredScrollOffset` and `RestoredHighlightedOriginalLineNumber`.
-    *   When a `TabViewModel`'s view content is loaded (e.g., its `LogOutputEditor` is ready):
+    *   `TabViewModel` will need to store `RestoredScrollOffset` and `RestoredHighlightedOriginalLineNumber` (populated during Step 3.4).
+    *   When a `TabViewModel`'s view content is loaded (e.g., its `LogOutputEditor` is ready, possibly after `ActivateAsync` has populated `FilteredLogLines`):
         *   If `RestoredScrollOffset` is valid, scroll the editor.
         *   Set `HighlightedOriginalLineNumber` to `RestoredHighlightedOriginalLineNumber`. This will trigger highlighting and potentially scrolling via existing mechanisms.
-    *   This might require an event from the View (e.g., `LogOutputEditor.Loaded` for that specific tab's editor) back to the `TabViewModel` or `MainViewModel` to trigger this restoration.
+    *   This might require an event from the View (e.g., `LogOutputEditor.Loaded` for that specific tab's editor, or a flag in `TabViewModel` checked after `ActivateAsync`) to trigger this restoration.
 *   **Impact:** Better UX, restores user's context within each tab.
 *   **Testing:**
     *   Scroll and select lines in tabs. Close and reopen app.
-    *   Verify scroll position and selection are restored for each tab when it's viewed.
+    *   Verify scroll position and selection are restored for each tab when it's viewed/activated.
 
 ## Phase 4: Pasted Content Management & Filter Profile Interaction
 
 **Goal:** Refine pasted content handling and profile interactions across tabs.
 
 ### Step 4.1: Deleting Saved Pasted Content
-*   **Action:** When a `TabViewModel` representing pasted content is closed, delete its associated temp storage file.
+*   **Action:** When a `TabViewModel` representing pasted or snapshot content is closed, delete its associated temp storage file.
 *   **Details:**
     *   In `MainViewModel`'s logic for handling tab closure:
-        *   If the closing `TabViewModel.IsPastedContent` is true and `TabViewModel.PastedContentStoragePath` is not null:
+        *   If the closing `TabViewModel.SourceType` is `Pasted` or `Snapshot`, and `TabViewModel.PastedContentStoragePath` is not null:
             *   Delete the file at `PastedContentStoragePath`.
-*   **Impact:** Prevents orphaned pasted content files in AppData.
+*   **Impact:** Prevents orphaned pasted/snapshot content files in AppData.
 *   **Testing:**
-    *   Create a pasted content tab. Close app (content saved). Reopen (content restored).
-    *   Close the pasted content tab from the UI. Verify the temp file is deleted.
+    *   Create a pasted content tab / snapshot tab. Close app (content saved). Reopen (content restored).
+    *   Close the pasted/snapshot content tab from the UI. Verify the temp file is deleted.
 
 ### Step 4.2: Profile Change Applies to Active Tab Only
 *   **Action:** Ensure changing the selected profile in `MainViewModel`'s UI only affects the `ActiveTabViewModel`.
@@ -321,25 +372,27 @@
     *   When `MainViewModel.ActiveFilterProfile` (the ComboBox selection) changes:
         *   If `MainViewModel.ActiveTabViewModel` is not null:
             *   Set `ActiveTabViewModel.AssociatedFilterProfileName` to the new profile's name.
-            *   This change on `ActiveTabViewModel` should trigger it to re-evaluate its filters.
+            *   This change on `ActiveTabViewModel` should trigger it to re-evaluate its filters via its `TriggerFilterUpdate` method (or by calling `ActivateAsync` again, which re-applies filters).
 *   **Impact:** Profile selection is now correctly scoped to the active tab.
 *   **Testing:**
     *   Have multiple tabs open with different profiles.
     *   Select Tab A. Change global profile to Profile X. Verify Tab A now uses Profile X.
     *   Select Tab B (which was using Profile Y). Verify Tab B is still using Profile Y. Change global profile to Profile Z. Verify Tab B now uses Profile Z, and Tab A is still on X.
 
-### Step 4.3: Filter Settings Change in a Profile Affects All Tabs Using It (On Activation)
-*   **Action:** When a filter within a `FilterProfileViewModel` is modified (e.g., text change, enabled toggle), this change is saved to the model (`FilterProfile`). Inactive tabs using this profile will see the changes when they are next activated.
+### Step 4.3: Filter Settings Change in a Profile Affects All Tabs Using It (On Activation or explicit refresh)
+*   **Action:** When a filter within a `FilterProfileViewModel` is modified (e.g., text change, enabled toggle), this change is saved to the model (`FilterProfile`). The active tab using this profile should update immediately. Inactive tabs using this profile will see the changes when they are next activated.
 *   **Details:**
     *   Current undo/redo system in `MainViewModel` already modifies the `FilterProfile` model directly or via `FilterViewModel` wrappers.
-    *   When an inactive `TabViewModel` becomes active (Step 2.1):
+    *   When `ActiveFilterProfile`'s underlying model changes, `MainViewModel` should call `ActiveTabViewModel?.TriggerFilterUpdate(...)`.
+    *   When an inactive `TabViewModel` becomes active (Step 2.1, via `ActivateAsync`):
         *   It re-applies its filter. It will fetch its `AssociatedFilterProfileName` and get the (potentially updated) `FilterProfile` model from `MainViewModel.AvailableProfiles`.
-        *   The `ReactiveFilteredLogStream` for that tab will then use the latest definition from this profile.
-*   **Impact:** Filter changes are consistently applied. No immediate visual update for inactive tabs, which is acceptable as per requirements.
+        *   The `LogDataProcessor` for that tab will then use the latest definition from this profile.
+*   **Impact:** Filter changes are consistently applied. Active tab updates; inactive tabs update on activation.
 *   **Testing:**
-    *   Tab A uses Profile P1. Tab B uses Profile P1.
-    *   Activate Tab A. Modify a filter in P1.
+    *   Tab A uses Profile P1. Tab B uses Profile P1. Tab C uses Profile P2.
+    *   Activate Tab A. Modify a filter in P1. Verify Tab A updates.
     *   Activate Tab B. Verify Tab B's view reflects the modified P1.
+    *   Activate Tab C. Verify it's still using P2. Modify P2. Verify Tab C updates.
 
 ## Phase 5: Polish, UX Enhancements, and Future Ideas
 
@@ -350,17 +403,17 @@
 *   **Details:**
     *   Add `ContextMenu` to `TabItem.Header` `DataTemplate`.
     *   Bind `MenuItem` commands to commands in `TabViewModel` or `MainViewModel`.
-    *   Commands: Close, Close Others, Reload (for file tabs), Copy Path.
+    *   Commands: Close, Close Others, Reload (for file tabs, if snapshot behavior isn't always desired), Copy Path/Identifier.
 *   **Impact:** Improved tab management.
 *   **Testing:** Verify context menu commands work as expected.
 
 ### Step 5.2: Visual Indication for File Changes in Inactive Tabs
 *   **Action:** (Future Idea) Add a small visual cue (e.g., a dot on the tab header) if an inactive file-based tab's underlying file has changed on disk since it was last active.
 *   **Details:**
-    *   This would require `TabViewModel`s for inactive file tabs to periodically (or via `FileSystemWatcher`) check `LastWriteTime` of their file.
+    *   This would require `TabViewModel`s for inactive file tabs to periodically (or via `FileSystemWatcher`, carefully managed to avoid resource overuse) check `LastWriteTime` of their file.
     *   If changed, set a boolean flag `HasUnseenChanges` on `TabViewModel`.
     *   Bind this flag to a visual element in the tab header template.
-    *   When tab is activated, flag is cleared, and `PrepareAndGetInitialLinesAsync` needs to be smart about handling new content (e.g., tailing from last known good position, or offering a full reload).
+    *   When tab is activated, flag is cleared, and `ActivateAsync` (which calls `PrepareAndGetInitialLinesAsync`) needs to handle new content (e.g., by reading the whole file again, or more complex diffing/tailing from last known good position. The file reset mechanism might cover some of this if the change is a truncation).
 *   **Impact:** Users are aware of updates in background tabs.
 *   **Testing:** Modify a file for an inactive tab; indicator appears. Activate tab; content updates and indicator clears.
 
