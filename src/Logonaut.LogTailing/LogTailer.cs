@@ -15,8 +15,6 @@ namespace Logonaut.LogTailing
         private readonly string _filePath;
         private readonly Subject<string> _logLinesSubject = new Subject<string>();
         
-        // AsyncSubject is suitable because it only emits the last value (or error) to subscribers after it completes. We only care about the event of completion.
-        private readonly AsyncSubject<Unit> _initialReadCompleteSubject = new AsyncSubject<Unit>();
         private FileSystemWatcher? _watcher;
         private long _lastPosition;
         private long _startPosition; // Position to start reading from
@@ -27,7 +25,6 @@ namespace Logonaut.LogTailing
         /// </summary>
         public IObservable<string> LogLines => _logLinesSubject;
 
-        public IObservable<Unit> InitialReadComplete => _initialReadCompleteSubject.AsObservable();
         private readonly Action? _onLogFileResetDetected;
 
         /// <summary>

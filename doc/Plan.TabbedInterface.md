@@ -7,6 +7,7 @@
 ### Step 0.1: `TabViewModel` Enhancements (File Reset Logic)
 
 *   **Action:** Implement the planned "snapshot" behavior in `TabViewModel` for when a monitored file is reset.
+Notice, some of the messaging is already in place, using callbacks from logtailer.
 *   **Details:**
     *   **Modify `TabViewModel.ActivateAsync(...)`:**
         *   When `SourceType` is `File`, ensure `TabViewModel` passes a new internal method, let's call it `HandleSourceFileRestarted`, as the callback to its `LogDataProcessor.ActivateAsync`.
