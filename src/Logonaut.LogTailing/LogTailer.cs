@@ -28,21 +28,21 @@ namespace Logonaut.LogTailing
         public IObservable<string> LogLines => _logLinesSubject;
 
         public IObservable<Unit> InitialReadComplete => _initialReadCompleteSubject.AsObservable();
-        private readonly Action? _callback;
+        private readonly Action? _onLogFileResetDetected;
 
         /// <summary>
         /// Initializes a new instance of the LogTailer class.
         /// </summary>
         /// <param name="filePath">The full path to the log file.</param>
 
-        public LogTailer(string filePath, long startPosition, Action? callback)
+        public LogTailer(string filePath, long startPosition, Action? onLogFileResetDetected)
         {
             if (string.IsNullOrWhiteSpace(filePath))
                 throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
 
             _filePath = filePath;
             _startPosition = startPosition; // Store the starting position
-            _callback = callback;
+            _onLogFileResetDetected = onLogFileResetDetected;
             if (!File.Exists(_filePath))
             throw new FileNotFoundException("Log file not found", _filePath);
         }
@@ -92,7 +92,7 @@ namespace Logonaut.LogTailing
                 if (stream.Length < _lastPosition)
                 {
                     _lastPosition = 0; // File was likely truncated, reset position
-                    _callback?.Invoke();
+                    _onLogFileResetDetected?.Invoke();
                 }
                 stream.Seek(_lastPosition, SeekOrigin.Begin); // Seek to last known position
 

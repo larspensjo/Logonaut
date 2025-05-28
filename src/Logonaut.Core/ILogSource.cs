@@ -45,7 +45,7 @@ public interface ILogSource : IDisposable
     /// Starts monitoring the source for *new* lines and emitting them via the LogLines observable.
     /// Should only be called after PrepareAndGetInitialLinesAsync has completed successfully.
     /// </summary>
-    void StartMonitoring(Action? callback);
+    void StartMonitoring(Action? onLogSourceReset);
 
     /// <summary>
     /// Stops monitoring the source for new lines and releases associated resources for monitoring.

@@ -13,7 +13,7 @@ public class MockLogSource : ISimulatorLogSource
     private Subject<string> _logLinesSubject = new Subject<string>(); // Re-creatable
     private bool _isMonitoring = false;
     private bool _isPrepared = false;
-    private Action? _fileResetCallbackFromStartMonitoring;
+    private Action? _onLogFileResetDetected;
 
     public bool IsDisposed { get; private set; } = false; // Keep for interface/contract
     public bool IsActuallyDisposed { get; private set; } = false; // For mock's internal state
@@ -71,9 +71,9 @@ public class MockLogSource : ISimulatorLogSource
         return Task.FromResult(count);
     }
 
-    void ILogSource.StartMonitoring(Action? callback)
+    void ILogSource.StartMonitoring(Action? onLogFileResetDetected)
     {
-        _fileResetCallbackFromStartMonitoring = callback;
+        _onLogFileResetDetected = onLogFileResetDetected;
         Start();
     }
     void ILogSource.StopMonitoring() => Stop();
@@ -153,7 +153,7 @@ public class MockLogSource : ISimulatorLogSource
     {
         if (IsActuallyDisposed) throw new ObjectDisposedException(nameof(MockLogSource));
         Debug.WriteLine($"---> MockLogSource: Simulating file reset callback invocation.");
-        _fileResetCallbackFromStartMonitoring?.Invoke();
+        _onLogFileResetDetected?.Invoke();
     }
 
     public Task GenerateBurstAsync(int lineCount)

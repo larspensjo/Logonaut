@@ -56,7 +56,7 @@ public class LogDataProcessor : IDisposable
     * source type and identifier. It prepares the source, subscribes to updates, and handles
     * the initial loading of log lines.
     */
-    public async Task ActivateAsync(SourceType sourceType, string? sourceIdentifier, IFilter initialFilter, int initialContextLines, Action? callback)
+    public async Task ActivateAsync(SourceType sourceType, string? sourceIdentifier, IFilter initialFilter, int initialContextLines, Action? onSourceResetDetectedHandler)
     {
         Debug.WriteLine($"---> LogDataProcessor: Activating. SourceType: {sourceType}, Identifier: '{sourceIdentifier}'");
         CurrentSourceType = sourceType;
@@ -96,7 +96,7 @@ public class LogDataProcessor : IDisposable
             {
                 initialLinesLoaded = await LogSource.PrepareAndGetInitialLinesAsync(sourceIdentifier, AddLineToLogDocumentCallback).ConfigureAwait(true);
                 _uiContext.Post(count => _totalLinesOutSubject.OnNext((long)count!), initialLinesLoaded);
-                LogSource.StartMonitoring(callback);
+                LogSource.StartMonitoring(onSourceResetDetectedHandler);
             }
             catch (Exception ex)
             {
@@ -110,7 +110,7 @@ public class LogDataProcessor : IDisposable
             // LogDoc is cleared by TabViewModel
             initialLinesLoaded = await LogSource.PrepareAndGetInitialLinesAsync(sourceIdentifier, AddLineToLogDocumentCallback).ConfigureAwait(false);
             _uiContext.Post(count => _totalLinesOutSubject.OnNext((long)count!), initialLinesLoaded); // Usually 0 for simulator start
-            LogSource.StartMonitoring(callback);
+            LogSource.StartMonitoring(onSourceResetDetectedHandler);
         }
         else if (sourceType == SourceType.Pasted)
         {

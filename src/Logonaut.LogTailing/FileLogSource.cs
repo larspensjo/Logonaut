@@ -69,7 +69,7 @@ public class FileLogSource : ILogSource
         }
     }
 
-    public void StartMonitoring(Action? callback)
+    public void StartMonitoring(Action? onLogFileResetDetected)
     {
         lock (_lock)
         {
@@ -88,7 +88,7 @@ public class FileLogSource : ILogSource
                 // --- Start Tailing for NEW Lines ---
                 StopMonitoringInternal(); // Ensure previous tailer is disposed if any
 
-                _currentTailer = new LogTailer(_currentFilePath, _startPositionForTailing, callback);
+                _currentTailer = new LogTailer(_currentFilePath, _startPositionForTailing, onLogFileResetDetected);
 
                 _tailerSubscription = _currentTailer.LogLines.Subscribe(
                     _logLinesSubject.OnNext,    // Forward new lines
