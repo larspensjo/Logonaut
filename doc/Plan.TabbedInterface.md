@@ -4,75 +4,53 @@
 
 **Goal:** Prepare the `MainViewModel` and core components to support multiple log contexts without immediately showing a tabbed UI. The application should still function as a single-log-view application after this phase.
 
-### Step 0.1: Introduce `TabViewModel` (Core Structure)
-*   **Action:** Create a new `TabViewModel` class.
-*   **Details:**
-    *   Move the following properties and their related logic from `MainViewModel` into `TabViewModel`:
-        *   `LogDocument LogDocDeprecated` (owned by `LogDataProcessor` within `TabViewModel`)
-        *   `ILogSource CurrentActiveLogSource` (renamed to `LogSource`, exposed from `LogDataProcessor` if needed, or internal to it)
-        *   `IReactiveFilteredLogStream ReactiveFilteredLogStream` (owned by `LogDataProcessor`)
-        *   `ObservableCollection<FilteredLogLine> FilteredLogLines`
-        *   `long TotalLogLines`
-        *   `string? CurrentLogFilePath` (now `SourceIdentifier` in `TabViewModel`)
-        *   `ObservableCollection<IFilter> FilterHighlightModels`
-        *   `int HighlightedFilteredLineIndex`, `int HighlightedOriginalLineNumber`
-        *   `string TargetOriginalLineNumberInput`, `string? JumpStatusMessage`, `bool IsJumpTargetInvalid` (and associated jump commands)
-        *   Search state: `SearchText`, `IsCaseSensitiveSearch`, `_searchMatches`, `_currentSearchIndex`, `SearchMarkers`, `CurrentMatchOffset`, `CurrentMatchLength`, and search commands (`PreviousSearchCommand`, `NextSearchCommand`).
-    *   `TabViewModel` constructor should accept:
-        *   `string initialHeader`
-        *   `string initialAssociatedProfileName`
-        *   `SourceType initialSourceType`
-        *   `string? initialSourceIdentifier` (e.g., file path or pasted content storage path)
-        *   Services: `ILogSourceProvider`, `ICommandExecutor` (from `MainViewModel`), `SynchronizationContext`, `IScheduler? backgroundScheduler`.
-        *   It will create its own `LogDataProcessor` instance, which in turn manages `LogDocument`, `ILogSource`, and `IReactiveFilteredLogStream`.
-    *   `TabViewModel` should implement `IDisposable` to dispose its `LogDataProcessor` (which disposes its `LogSource` and `ReactiveFilteredLogStream`).
-    *   Add `Header` property (string, for user-editable tab name).
-    *   Add `DisplayHeader` property (string, combines `Header` and `LastActivityTimestamp`/status for tab display).
-    *   Add `IsActive` property (bool) to `TabViewModel`.
-    *   Add `AssociatedFilterProfileName` (string) to `TabViewModel`. When this changes, the tab's filter pipeline should be updated if the tab is active.
-    *   Add `LastActivityTimestamp` (DateTime?) to `TabViewModel`.
-    *   Add `SourceType SourceType` (enum: File, Pasted, Simulator, Snapshot).
-    *   Add `SourceIdentifier` (string, stores file path or pasted content temp path / unique ID for snapshots).
-    *   Add `PastedContentStoragePath` (string, only for `SourceType.Pasted` or `Snapshot` if its content is saved this way).
-    *   Add `IsModified` (bool, for pasted content tabs to track if they need saving).
-    *   Add `public event Action<TabViewModel /*snapshotTab*/, string /*restartedFilePath*/>? SourceRestartDetected;`
-    *   Implement methods in `TabViewModel` for:
-        *   `ActivateAsync(IEnumerable<FilterProfileViewModel> availableProfiles, int globalContextLines, ...)`: Creates/recreates `LogDataProcessor`'s `ILogSource`, `IReactiveFilteredLogStream`, subscribes, calls `PrepareAndGetInitialLinesAsync` (if needed via processor), starts monitoring, triggers initial filter. For `SourceType.File`, it will ensure `OnSourceFileRestarted` is passed as the restart callback to the `LogDataProcessor`.
-        *   `DeactivateLogProcessing()`: Calls `LogDataProcessor.Deactivate()`, updates `LastActivityTimestamp`.
-        *   `LoadPastedContent(string text)`: Initializes `LogDataProcessor.LogDocDeprecated` with pasted text.
-        *   `TriggerFilterUpdate(IEnumerable<FilterProfileViewModel> availableProfiles, int globalContextLines)`: Calls `ApplyFilterSettings` on its `LogDataProcessor` if active.
-        *   Search-related methods (UpdateSearchMatches, SelectAndScrollToCurrentMatch) now operate on this tab's `FilteredLogLines` and `LogOutputEditor` instance.
-        *   Private `OnSourceFileRestarted()`:
-            *   Updates `Header` (e.g., `Header += $" (Snapshot @ {DateTime.Now:HH:mm:ss})" `).
-            *   Calls `DeactivateLogProcessing()`.
-            *   Sets `SourceType = SourceType.Snapshot` (or `SourceType.Pasted`).
-            *   Sets `SourceIdentifier` to a new unique ID (e.g., `Guid.NewGuid().ToString()`). If becoming `Pasted`, `PastedContentStoragePath` will be determined on save.
-            *   Sets `IsModified = true` if treated like pasted content that needs saving.
-            *   Raises `SourceRestartDetected` event, passing `this` (the snapshot tab) and its original file path.
-    *   The `AddLineToLogDocument` callback for `IReactiveFilteredLogStream` is internal to `LogDataProcessor`.
-*   **Impact:**
-    *   `MainViewModel` will become much leaner regarding single log state.
-    *   Application still works with one implicit "tab" internally.
-*   **Testing:**
-    *   Unit test `TabViewModel`'s ability to load a log file, process filters, manage its active/inactive state, and handle the `OnSourceFileRestarted` logic (mocking services and verifying event raising).
-    *   Ensure existing `MainViewModel` tests (if any focusing on log processing) are adapted or new ones created for `TabViewModel`.
+### Step 0.1: `TabViewModel` Enhancements (File Reset Logic)
 
-### Step 0.2: `MainViewModel` Manages a Single `TabViewModel`
-*   **Action:** Modify `MainViewModel` to instantiate and manage a single `TabViewModel`.
+*   **Action:** Implement the planned "snapshot" behavior in `TabViewModel` for when a monitored file is reset.
 *   **Details:**
-    *   `MainViewModel` will have an `ActiveTabViewModel` property (of type `TabViewModel`).
-    *   On startup, `MainViewModel` creates one `TabViewModel` (e.g., an empty "Untitled" pasted content tab) and sets it as `ActiveTabViewModel`. Calls `ActiveTabViewModel.ActivateAsync(...)`.
-    *   `MainViewModel`'s commands (Open File, Paste, Simulator Start, etc.) will now delegate to the `ActiveTabViewModel` or create new tabs.
-    *   UI elements (like `LogOutputEditor`, status bar stats) previously bound to `MainViewModel` properties will now need to bind to `MainViewModel.ActiveTabViewModel.RelevantProperty`.
-    *   The globally selected `ActiveFilterProfile` in `MainViewModel` will set `ActiveTabViewModel.AssociatedFilterProfileName`.
+    *   **Modify `TabViewModel.ActivateAsync(...)`:**
+        *   When `SourceType` is `File`, ensure `TabViewModel` passes a new internal method, let's call it `HandleSourceFileRestarted`, as the callback to its `LogDataProcessor.ActivateAsync`.
+    *   **Implement `TabViewModel.HandleSourceFileRestarted()` method:**
+        *   This method will be invoked by the `LogTailer` -> `FileLogSource` -> `LogDataProcessor` callback chain when a file truncation is detected.
+        *   **Store original file path:** Keep the current `SourceIdentifier` (which is the file path) in a new private field, e.g., `_originalFilePathBeforeSnapshot`.
+        *   **Update `Header`:** Append a timestamp or "Snapshot" indicator to the current `Header` (e.g., `Header += $" (Snapshot @ {DateTime.Now:HH:mm:ss})"`). This makes the current tab visually distinct as a snapshot.
+        *   **Call `DeactivateLogProcessing()`:** This will stop any active monitoring on the (now reset) file.
+        *   **Change `SourceType`:** Set `this.SourceType = SourceType.Snapshot;` (A `Snapshot` enum value needs to be added to `SourceType`).
+        *   **Change `SourceIdentifier`:** Set `this.SourceIdentifier = Guid.NewGuid().ToString();` to give this snapshot tab a unique ID, distinct from the original file path. This prevents it from trying to reload the original file if it were to be reactivated.
+        *   **Set `IsModified = true;`**: This flags the snapshot tab's content (its `LogDocument`) as needing to be saved if persistence for pasted/snapshot content is implemented later (as per Phase 3.3).
+        *   **Raise `SourceRestartDetected` event:**
+            *   Define the event in `TabViewModel`: `public event Action<TabViewModel /*snapshotTab*/, string /*restartedFilePath*/>? SourceRestartDetected;`
+            *   Invoke it: `SourceRestartDetected?.Invoke(this, _originalFilePathBeforeSnapshot);`
 *   **Impact:**
-    *   Application still looks and behaves identically to the user.
-    *   Internal architecture is now prepared for multiple tabs.
-    *   Undo/Redo stack remains global in `MainViewModel`.
+    *   `TabViewModel` will now correctly transition into a "snapshot" state when its underlying file is reset, retaining its current `LogDocument` content.
+    *   It will notify `MainViewModel` (which will subscribe to this event) that the original file path needs to be re-monitored (likely in a new tab, as per Phase 1/2).
 *   **Testing:**
-    *   Ensure all existing application functionalities work as before (opening files, filtering, search, simulator).
-    *   Unit test `MainViewModel`'s delegation to `ActiveTabViewModel`.
+    *   Unit test `TabViewModel`:
+        *   Mock the `LogDataProcessor` or the callback chain to simulate a file reset signal.
+        *   Verify that `HandleSourceFileRestarted` correctly changes `Header`, `SourceType`, `SourceIdentifier`, sets `IsModified`.
+        *   Verify the `SourceRestartDetected` event is raised with the correct `TabViewModel` instance (itself) and the original file path.
 
+### Step 0.2: `MainViewModel` Responding to `TabViewModel`'s `SourceRestartDetected` (Single-Tab Context)
+
+*   **Action:** Modify `MainViewModel` to subscribe to `_internalTabViewModel.SourceRestartDetected` and handle it in a way that fits the current single-tab model (i.e., by reloading the *same* internal tab).
+*   **Details:**
+    *   In `MainViewModel`'s constructor, after creating `_internalTabViewModel`:
+        *   Subscribe: `_internalTabViewModel.SourceRestartDetected += HandleInternalTabSourceRestart;`
+        *   Remember to unsubscribe in `Dispose`.
+    *   **Implement `MainViewModel.HandleInternalTabSourceRestart(TabViewModel snapshotTab, string restartedFilePath)`:**
+        *   For Phase 0, since there's only one tab, the "snapshotTab" *is* `_internalTabViewModel`.
+        *   Log a message indicating that a file reset was detected for `restartedFilePath`.
+        *   Call `this.LoadLogFileCoreAsync(restartedFilePath);`. This will reconfigure `_internalTabViewModel` to load the `restartedFilePath` from scratch. The previous content (now marked as a snapshot within `_internalTabViewModel`) will be overwritten.
+        *   *(Self-correction from plan: The original plan was for MainViewModel to create a *new* tab here. For Phase 0, we keep it to one tab, so the internal tab is re-purposed. The snapshot tab essentially "disappears" in terms of its old content being visible, but the mechanism for `TabViewModel` to become a snapshot and raise the event is tested).*
+*   **Impact:**
+    *   The application will now correctly reload a file if it's reset, maintaining the single-view behavior.
+    *   The underlying `TabViewModel` properly transitions to a snapshot state internally, even if that state isn't fully utilized in the UI yet.
+*   **Testing:**
+    *   Modify the existing `LogFileTruncation_TriggersReload_ThroughCallbackMechanism` test:
+        *   Ensure `MockLogSource.SimulateFileResetCallback()` is called.
+        *   Verify `_mockFileLogSource.PrepareCallCount` is incremented (indicating `LoadLogFileCoreAsync` was called again by `MainViewModel`).
+        *   Verify that after the reload, `_internalTabViewModel.SourceType` is back to `SourceType.File` and `SourceIdentifier` is the `restartedFilePath`.
+        *   Verify `_internalTabViewModel.Header` no longer has the "(Snapshot)" text from before the reload (it gets reset by `LoadLogFileCoreAsync`).
 ## Phase 1: Basic Tabbed UI and Multiple Tab Management
 
 **Goal:** Introduce the `TabControl` UI and allow opening multiple file-based tabs.
