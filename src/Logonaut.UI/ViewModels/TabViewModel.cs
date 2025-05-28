@@ -34,7 +34,7 @@ public record SearchResult(int Offset, int Length);
 *
 * Manages activation/deactivation and applies filters based on an associated profile.
 */
-public partial class TabViewModel : ObservableObject, IDisposable, ICommandExecutorProvider
+public partial class TabViewModel : ObservableObject, IDisposable
 {
     // --- Services & Context (Injected) ---
     private readonly ICommandExecutor _globalCommandExecutor; 

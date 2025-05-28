@@ -34,22 +34,11 @@ public class AddFilterAction : IUndoableAction
     {
         if (_parentVm.Filter is CompositeFilter compositeParent)
         {
-            // 1. Add model to parent model
             // Ensure index is valid for insertion
             int modelInsertIndex = Math.Min(_targetIndex, compositeParent.SubFilters.Count);
             compositeParent.SubFilters.Insert(modelInsertIndex, _newFilterModel);
-
-            // 2. Create and add VM to parent VM
-            // Need to get the CommandExecutor from the parent (or somewhere accessible)
-            if (_parentVm is not ICommandExecutorProvider provider) // Assuming we add this interface to FilterViewModel
-            {
-                    // Fallback: Try finding it via a static service locator or MainViewModel instance if desperate
-                    // This highlights a potential dependency management challenge.
-                    // Let's assume FilterViewModel can provide it for now.
-                    throw new InvalidOperationException("Cannot get CommandExecutor from parent ViewModel.");
-            }
-            var commandExecutor = provider.CommandExecutor; // Get executor from parent
-            _newFilterVm = new FilterViewModel(_newFilterModel, commandExecutor, _parentVm); // Pass executor
+            var commandExecutor = _parentVm.CommandExecutor;
+            _newFilterVm = new FilterViewModel(_newFilterModel, commandExecutor, _parentVm);
 
             // Ensure index is valid for VM insertion
             int vmInsertIndex = Math.Min(_targetIndex, _parentVm.Children.Count);
@@ -95,10 +84,4 @@ public class AddFilterAction : IUndoableAction
                 Debug.WriteLine($"ERROR in AddFilterAction Undo: Parent not composite or new VM is null.");
         }
     }
-}
-
-// Helper Interface to allow actions to get the executor
-public interface ICommandExecutorProvider
-{
-    ICommandExecutor CommandExecutor { get; }
 }

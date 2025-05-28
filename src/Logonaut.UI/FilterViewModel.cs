@@ -27,7 +27,7 @@ public record FilterHighlightColorChoice(string Name, string Key);
  * Decouples View from Model, enables data binding, supports hierarchy, integrates
  * with Undo/Redo.
  */
-public partial class FilterViewModel : ObservableObject, ICommandExecutorProvider
+public partial class FilterViewModel : ObservableObject
 {
     public IFilter Filter { get; }
     public FilterViewModel? Parent { get; }
