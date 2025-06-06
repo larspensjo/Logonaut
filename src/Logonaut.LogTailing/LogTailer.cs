@@ -26,6 +26,7 @@ namespace Logonaut.LogTailing
         public IObservable<string> LogLines => _logLinesSubject;
 
         private readonly Action? _onLogFileResetDetected;
+        private bool _ignoreInputs = false; // Flag to ignore inputs during reset
 
         /// <summary>
         /// Initializes a new instance of the LogTailer class.
@@ -41,7 +42,7 @@ namespace Logonaut.LogTailing
             _startPosition = startPosition; // Store the starting position
             _onLogFileResetDetected = onLogFileResetDetected;
             if (!File.Exists(_filePath))
-            throw new FileNotFoundException("Log file not found", _filePath);
+                throw new FileNotFoundException("Log file not found", _filePath);
         }
 
         /// <summary>
@@ -82,6 +83,11 @@ namespace Logonaut.LogTailing
         /// </summary>
         private async Task ReadNewLinesAsync(CancellationToken token)
         {
+            if (_ignoreInputs)
+            {
+                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}---> LogTailer is ignoring inputs for {_filePath} due to reset.");
+                return; // Ignore inputs during reset
+            }
             // Read lines *beyond* _lastPosition
             try
             {
@@ -89,6 +95,8 @@ namespace Logonaut.LogTailing
                 if (stream.Length < _lastPosition)
                 {
                     _lastPosition = 0; // File was likely truncated, reset position
+                    _ignoreInputs = true; // Ignore inputs until reset is handled
+                    Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}!!! LogTailer detected file reset for {_filePath}. Resetting position to 0.");
                     _onLogFileResetDetected?.Invoke();
                 }
                 stream.Seek(_lastPosition, SeekOrigin.Begin); // Seek to last known position
@@ -115,12 +123,12 @@ namespace Logonaut.LogTailing
             }
             catch (FileNotFoundException) // Handle case where file disappears between checks
             {
-                 Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}!!! LogTailer Error: File not found during read attempt: {_filePath}");
-                 _logLinesSubject.OnError(new FileNotFoundException($"Log file '{_filePath}' was not found or became inaccessible during tailing.", _filePath));
-                 // Consider disposing the tailer as it can't continue
-                 Dispose();
+                Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}!!! LogTailer Error: File not found during read attempt: {_filePath}");
+                _logLinesSubject.OnError(new FileNotFoundException($"Log file '{_filePath}' was not found or became inaccessible during tailing.", _filePath));
+                // Consider disposing the tailer as it can't continue
+                Dispose();
             }
-             catch (IOException ioEx) // Handle other potential IO errors (e.g., network issues, locks)
+            catch (IOException ioEx) // Handle other potential IO errors (e.g., network issues, locks)
             {
                 Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff}!!! LogTailer IO Error during read for {_filePath}: {ioEx.Message}");
                 _logLinesSubject.OnError(ioEx);
