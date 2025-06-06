@@ -22,7 +22,8 @@ public enum SourceType
 {
     File,
     Pasted,
-    Simulator
+    Simulator,
+    Snapshot 
 }
 
 public record SearchResult(int Offset, int Length);
@@ -46,6 +47,9 @@ public partial class TabViewModel : ObservableObject, IDisposable
     private readonly CompositeDisposable _processorSubscriptions = new CompositeDisposable();
     private readonly HashSet<int> _existingOriginalLineNumbers = new HashSet<int>();
 
+    // --- Fields for Snapshot/File Reset Logic ---
+    private string? _originalFilePathBeforeSnapshot;
+
     public ILogSource? LogSourceExposeDeprecated => _processor.LogSource;
     // --- UI Bound Properties ---
     [ObservableProperty] private string _header; // User-editable name
@@ -58,7 +62,7 @@ public partial class TabViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string? _sourceIdentifier; // File path or pasted content temp path 
     [ObservableProperty] private bool _isAutoScrollEnabled = true; // Default to true, will be updated by MainViewModel
 
-    public SourceType SourceType { get; set; } 
+    [ObservableProperty] private SourceType _sourceType; 
     public string? PastedContentStoragePath { get; set; } 
     [ObservableProperty] private bool _isModified; 
 
@@ -96,6 +100,7 @@ public partial class TabViewModel : ObservableObject, IDisposable
     public event EventHandler? RequestScrollToEnd;
     public event EventHandler<int>? RequestScrollToLineIndex;
     public event EventHandler? FilteredLinesUpdated;
+    public event Action<TabViewModel /*snapshotTab*/, string /*restartedFilePath*/>? SourceRestartDetected;
 
     public static readonly object LoadingToken = new(); // Specific to tab loading
     public static readonly object FilteringToken = new(); // Specific to tab filtering
@@ -150,7 +155,7 @@ public partial class TabViewModel : ObservableObject, IDisposable
     * This method is typically called when a tab becomes the active tab in the UI,
     * or when its underlying source (e.g., file path, simulator state) is defined or changes.
     */
-    public async Task ActivateAsync(IEnumerable<FilterProfileViewModel> availableProfiles, int globalContextLines, bool globalHighlightTimestamps, bool globalShowLineNumbers, bool globalAutoScrollEnabled, Action? onSourceResetDetectedHandler)
+    public async Task ActivateAsync(IEnumerable<FilterProfileViewModel> availableProfiles, int globalContextLines, bool globalHighlightTimestamps, bool globalShowLineNumbers, bool globalAutoScrollEnabled, Action? onSourceResetDetectedHandler /* This parameter is now effectively unused by this method, but kept for compatibility if MainViewModel still passes it directly */)
     {
         // Check if already active with the same source configuration to avoid redundant work.
         // This is a simple check; more sophisticated checks might involve comparing actual source instances if they were exposed.
@@ -173,7 +178,7 @@ public partial class TabViewModel : ObservableObject, IDisposable
         }
         // For Pasted type, LogDoc is managed by LoadPastedContent, and ResetUICollectionsAndState
         // would have been called there if it was a new paste.
-
+        
         IsActive = true; 
         LastActivityTimestamp = null; 
         UpdateDisplayHeader();
@@ -181,13 +186,25 @@ public partial class TabViewModel : ObservableObject, IDisposable
         // Determine the filter and context to apply initially
         var activeProfileVM = availableProfiles.FirstOrDefault(p => p.Name == AssociatedFilterProfileName);
         IFilter initialFilter = activeProfileVM?.Model?.RootFilter ?? new TrueFilter();
-        // globalContextLines is passed directly as initialContextLines
-
+        
         try
         {
-            // Delegate to the processor to handle source creation, stream setup, and initial load/filtering
-            await _processor.ActivateAsync(SourceType, SourceIdentifier, initialFilter, globalContextLines, onSourceResetDetectedHandler);
-            // ApplyFiltersFromProfile is now implicitly handled by the initialFilter/ContextLines in processor's ActivateAsync
+            // Pass internal HandleSourceFileRestarted for File types
+            Action? effectiveSourceResetHandler = null;
+            if (SourceType == SourceType.File)
+            {
+                effectiveSourceResetHandler = this.HandleSourceFileRestarted;
+            }
+            // For other types like Simulator, we might still pass the original onSourceResetDetectedHandler if it's meaningful,
+            // or null if not. Currently, LogTailer's reset is specific to files.
+            // For Simulator, the original onSourceResetDetectedHandler might be null or not used.
+            else if (SourceType == SourceType.Simulator)
+            {
+                 effectiveSourceResetHandler = onSourceResetDetectedHandler; // Keep passing original for simulator if it uses it
+            }
+
+
+            await _processor.ActivateAsync(SourceType, SourceIdentifier, initialFilter, globalContextLines, effectiveSourceResetHandler);
         }
         catch (Exception ex)
         {
@@ -200,6 +217,52 @@ public partial class TabViewModel : ObservableObject, IDisposable
         // Note: LoadingToken is expected to be removed by the stream update from the processor
         // (ReplaceFilteredUpdate with IsInitialLoadProcessingComplete = true) or by HandleActivationError.
         Debug.WriteLine($"---> TabViewModel '{Header}': Activation initiated. Processor will handle data loading and filtering.");
+    }
+
+    private void HandleSourceFileRestarted()
+    {
+        // This method is called by the LogDataProcessor (which gets it from FileLogSource/LogTailer)
+        // when a file truncation is detected. It should already be on the correct thread or LogDataProcessor should handle it.
+        // However, since we are modifying UI-bound properties, ensure it's marshaled to the UI thread.
+
+        _uiContext.Post(_ =>
+        {
+            // Defensive check: ensure this logic only runs if the tab is indeed a File source.
+            // It's possible, though unlikely, that the source type changes between the callback setup and invocation.
+            if (this.SourceType != SourceType.File || string.IsNullOrEmpty(this.SourceIdentifier))
+            {
+                Debug.WriteLine($"WARN: TabViewModel '{Header}' - HandleSourceFileRestarted called, but current SourceType is {this.SourceType} or SourceIdentifier is null/empty. Aborting snapshot transition.");
+                return;
+            }
+
+            Debug.WriteLine($"---> TabViewModel '{Header}': File reset detected for '{this.SourceIdentifier}'. Transitioning to snapshot state.");
+
+            _originalFilePathBeforeSnapshot = this.SourceIdentifier; // Store the original file path
+
+            // Update Header and other properties
+            Header += $" (Snapshot @ {DateTime.Now:HH:mm:ss})"; // DisplayHeader will update due to OnPropertyChanged on Header
+
+            // Deactivate current processing. This stops monitoring, sets IsActive=false, updates LastActivityTimestamp.
+            // It's important to do this before changing SourceType/Identifier if DeactivateLogProcessing relies on them.
+            // However, DeactivateLogProcessing primarily calls _processor.Deactivate, which doesn't critically depend on these
+            // for just stopping.
+            DeactivateLogProcessing(); // This will also update DisplayHeader based on new IsActive and LastActivityTimestamp
+
+            SourceType = SourceType.Snapshot; // Change SourceType to reflect it's now a snapshot
+
+            // Change SourceIdentifier to make this tab unique and prevent it from reloading the original file.
+            // Also ensures if it's persisted, it's distinct.
+            SourceIdentifier = $"{_originalFilePathBeforeSnapshot}_snapshot_{Guid.NewGuid()}";
+
+            IsModified = true; // Mark as modified, indicating its LogDocument content (the snapshot) should be persisted.
+
+            // Raise the event to notify MainViewModel (or other subscribers)
+            // that the original file path needs to be re-monitored.
+            SourceRestartDetected?.Invoke(this, _originalFilePathBeforeSnapshot!);
+
+            Debug.WriteLine($"---> TabViewModel '{Header}': Transitioned to snapshot. New SourceType: {SourceType}, New SourceIdentifier: {SourceIdentifier}");
+
+        }, null);
     }
 
     private void HandleActivationError(string errorMessage)
