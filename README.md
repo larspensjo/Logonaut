@@ -2,6 +2,8 @@
 
 **Logonaut** is a modern, modular log viewer application for Windows built with C# and WPF. It provides real-time log tailing, advanced filtering capabilities, customizable syntax highlighting, and a clean, responsive user interface with theme support.
 
+![Logonaut screenshot](rawfiles/ScreenShot.png)
+
 ## Key Features
 
 *   **Live Log Tailing:** Continuously monitors and displays updates from log files.
