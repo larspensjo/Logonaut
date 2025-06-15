@@ -1,6 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 
-namespace Logonaut.Common;
+namespace Logonaut.UI.Descriptors;
 
 public partial class PaletteItemDescriptor : ObservableObject
 {

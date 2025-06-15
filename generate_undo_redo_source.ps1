@@ -18,7 +18,7 @@ $FilePaths = @(
     "src/Logonaut.Filters/FilterNor.cs",
     "src/Logonaut.Filters/FilterSubstring.cs",
     "src/Logonaut.Filters/FilterRegex.cs",
-    "src/Logonaut.Common/FilterTypeDescriptor.cs",
+    "src/Logonaut.UI/Descriptors/FilterTypeDescriptor.cs",
     "src/Logonaut.Common/FilterProfile.cs",
 
     # --- Commands (Undo/Redo Framework - Essential for DnD actions) ---
