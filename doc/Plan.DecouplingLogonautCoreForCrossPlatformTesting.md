@@ -40,102 +40,13 @@ This document outlines the process of refactoring the Logonaut solution to separ
 **Goal:** `Logonaut.Common` contains two classes with UI dependencies (`LogonautSettings` and `PaletteItemDescriptor`). We need to move these dependencies into the `Logonaut.UI` project before we can make `Logonaut.Common` platform-agnostic.
 
 #### **Part A: Move `PaletteItemDescriptor.cs`**
-
-This class is a ViewModel descriptor used exclusively by the UI.
-
-**Actions:**
-1.  In the `Logonaut.UI` project, create a new folder named `Descriptors`.
-2.  In the Solution Explorer, drag the `FilterTypeDescriptor.cs` file from `Logonaut.Common` into the new `Logonaut.UI/Descriptors` folder. **Note:** In Visual Studio, this will move the file on disk and update the project files.
-3.  Open the moved file (`Logonaut.UI/Descriptors/FilterTypeDescriptor.cs`).
-4.  Change its namespace from `Logonaut.Common` to `Logonaut.UI.Descriptors`.
-5.  Search for all usages of `PaletteItemDescriptor` in the `Logonaut.UI` project (e.g., in `MainViewModel.FilterTreeInteraction.cs` and `DarkTheme.xaml`/`LightTheme.xaml`) and update the `using` statements or XAML namespace declarations.
-    *   In `MainViewModel.FilterTreeInteraction.cs`, change `using Logonaut.Common;` to `using Logonaut.UI.Descriptors;`.
-    *   In your theme XAML files, change `xmlns:common="clr-namespace:Logonaut.Common;assembly=Logonaut.Common"` to `xmlns:descriptors="clr-namespace:Logonaut.UI.Descriptors;assembly=Logonaut.UI"` and update usages like `<... DataType="{x:Type descriptors:PaletteItemDescriptor}">`.
-
-**Verification:**
-*   Rebuild the solution. It should compile without errors.
-*   Run the application. The filter palette in the UI should look and function identically.
+**Completed **
 
 #### **Part B: Decouple `LogonautSettings.cs` from WPF**
-
-This class has a dependency on `System.Windows.WindowState`. We will replace it with a platform-agnostic equivalent.
-
-**Actions:**
-1.  Open `Logonaut.Common/LogonautSettings.cs`.
-2.  **Remove** the line `using System.Windows;`.
-3.  Add a new public enum inside the `Logonaut.Common` namespace (you can place it in a new file or at the bottom of `LogonautSettings.cs`):
-    ```csharp
-    namespace Logonaut.Common
-    {
-        public enum AppWindowState { Normal, Maximized, Minimized }
-        // ... LogonautSettings class
-    }
-    ```
-4.  In the `LogonautSettings` class, find the `WindowState` property and **delete it**.
-5.  Add a new property to replace it, using your new enum:
-    ```csharp
-    /// <summary>
-    /// Stores the last known window state (Normal, Maximized, or Minimized).
-    /// </summary>
-    public AppWindowState WindowState { get; set; } = AppWindowState.Normal;
-    ```
-6.  Open `Logonaut.Core/FileSystemSettingsService.cs`. The compiler will show an error in `EnsureValidSettings`. Remove the entire `WindowState` validation block, as it's no longer needed. The enum handles validity.
-7.  Open `Logonaut.UI/MainWindow.xaml.cs`. This is where you will create the "shim" to translate between the WPF `WindowState` and your `AppWindowState`.
-    *   In `UpdateViewModelWithCurrentGeometryAndMarkDirty()`, find the section that updates `_viewModel.WindowState`. **Replace it** with this logic:
-        ```csharp
-        // Inside UpdateViewModelWithCurrentGeometryAndMarkDirty() in MainWindow.xaml.cs
-        // ... (Update Top, Left, Height, Width properties on the ViewModel)
-
-        _viewModel.WindowState = this.WindowState switch
-        {
-            WindowState.Maximized => AppWindowState.Maximized,
-            WindowState.Minimized => AppWindowState.Minimized,
-            _ => AppWindowState.Normal,
-        };
-        ```
-    *   In `LoadAndApplyWindowGeometry()`, find the line `this.WindowState = _viewModel.WindowState;`. **Replace it** with this logic:
-        ```csharp
-        // Inside LoadAndApplyWindowGeometry() in MainWindow.xaml.cs
-        this.WindowState = _viewModel.WindowState switch
-        {
-            AppWindowState.Maximized => WindowState.Maximized,
-            AppWindowState.Minimized => WindowState.Minimized,
-            _ => WindowState.Normal,
-        };
-
-        if (_viewModel.WindowState == AppWindowState.Normal)
-        {
-            if (onScreen && _viewModel.WindowWidth > 100 && _viewModel.WindowHeight > 100)
-            {
-                // ... existing logic to set Top, Left, Width, Height
-            }
-        }
-        ```
-
-**Verification:**
-*   Rebuild the solution. It must compile without errors.
-*   Run the application. Maximize the window, close the app, and reopen it. It should restore to a maximized state. Do the same for a normal (restored) window size and position. The window geometry persistence must still work correctly.
-
----
+**Completed **
 
 ### **Step 3: Make Core Libraries Platform-Agnostic**
-
-**Goal:** Now that the dependencies are removed, we can change the target framework for `Logonaut.Common`, `Logonaut.Core`, and `Logonaut.LogTailing`.
-
-**Actions:**
-1.  For **each** of the following projects, perform these steps:
-    *   `Logonaut.Common`
-    *   `Logonaut.Core`
-    *   `Logonaut.LogTailing`
-2.  Right-click the project and select "Edit Project File".
-3.  Change `<TargetFramework>net8.0-windows</TargetFramework>` to `<TargetFramework>net8.0</TargetFramework>`.
-4.  Save the file.
-
-**Verification:**
-*   Rebuild the entire solution. It should compile without errors.
-*   Run the application and test its main features: open a file, use the simulator, and apply a filter. Everything should function as before.
-
----
+**Completed **
 
 ### **Step 4: Consolidate Core Logic into `Logonaut.Core`**
 
