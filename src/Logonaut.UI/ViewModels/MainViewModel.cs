@@ -361,6 +361,7 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         WindowHeight = settings.WindowHeight;
         WindowWidth = settings.WindowWidth;
         FilterPanelWidth = settings.FilterPanelWidth;
+        WindowState = settings.WindowState;
         Debug.WriteLine($"---> MainViewModel: Applied geometry to ViewModel. VM.WindowWidth: {WindowWidth}, VM.FilterPanelWidth: {FilterPanelWidth}");
 
         _uiContext.Post(_ => CurrentGlobalBusyStates.Remove(GlobalLoadingToken), null);
@@ -399,6 +400,7 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         settingsToSave.WindowHeight = WindowHeight;
         settingsToSave.WindowWidth = WindowWidth;
         settingsToSave.FilterPanelWidth = FilterPanelWidth;
+        settingsToSave.WindowState = WindowState;
 
         SaveUiSettings(settingsToSave);
         SaveSimulatorSettings(settingsToSave);
@@ -500,5 +502,6 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
     [ObservableProperty] private double _windowHeight;
     [ObservableProperty] private double _windowWidth;
     [ObservableProperty] private double _filterPanelWidth;
+    [ObservableProperty] private AppWindowState _windowState;
     #endregion
 }

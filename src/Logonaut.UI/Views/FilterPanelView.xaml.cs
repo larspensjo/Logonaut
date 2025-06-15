@@ -133,7 +133,7 @@ public partial class FilterPanelView : UserControl
         // Find the ContentPresenter for the PaletteItemDescriptor
         while (originalSource != null && originalSource != sender as ItemsControl)
         {
-            if (originalSource is ContentPresenter cp && cp.DataContext is Logonaut.Common.PaletteItemDescriptor)
+            if (originalSource is ContentPresenter cp && cp.DataContext is Logonaut.UI.Descriptors.PaletteItemDescriptor)
             {
                 paletteItemContainer = cp;
                 break;
@@ -141,7 +141,7 @@ public partial class FilterPanelView : UserControl
             originalSource = VisualTreeHelper.GetParent(originalSource);
         }
 
-        if (paletteItemContainer != null && paletteItemContainer.DataContext is Logonaut.Common.PaletteItemDescriptor descriptor)
+        if (paletteItemContainer != null && paletteItemContainer.DataContext is Logonaut.UI.Descriptors.PaletteItemDescriptor descriptor)
         {
             if (!descriptor.IsEnabled)
             {
