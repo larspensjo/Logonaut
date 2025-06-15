@@ -1,7 +1,6 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:converters="clr-namespace:Logonaut.Theming.Converters"
-                    xmlns:descriptors="clr-namespace:Logonaut.UI.Descriptors;assembly=Logonaut.UI"
                     xmlns:selectors="clr-namespace:Logonaut.Theming.Selectors">
 
     <converters:TreeViewIndentConverter x:Key="TreeViewIndentConverter"/>
@@ -155,7 +154,7 @@
         <Setter Property="Margin" Value="2"/>
     </Style>
 
-    <DataTemplate x:Key="FilterPaletteItemTemplate" DataType="{x:Type descriptors:PaletteItemDescriptor}">
+    <DataTemplate x:Key="FilterPaletteItemTemplate">
         <Border x:Name="PaletteItemBorder"
                 IsEnabled="{Binding IsEnabled}"
                 Background="{DynamicResource ControlBackgroundBrush}"
