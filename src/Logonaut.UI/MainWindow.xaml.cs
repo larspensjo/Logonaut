@@ -164,22 +164,30 @@ public partial class MainWindow : Window, IDisposable
                 }
             }
 
-            this.WindowState = WindowState.Normal; // Always start normal
+            this.WindowState = _viewModel.WindowState switch
+            {
+                AppWindowState.Maximized => WindowState.Maximized,
+                AppWindowState.Minimized => WindowState.Minimized,
+                _ => WindowState.Normal,
+            };
 
-            if (onScreen && _viewModel.WindowWidth > 100 && _viewModel.WindowHeight > 100)
+            if (_viewModel.WindowState == AppWindowState.Normal)
             {
-                this.Top = _viewModel.WindowTop;
-                this.Left = _viewModel.WindowLeft;
-                this.Width = _viewModel.WindowWidth;
-                this.Height = _viewModel.WindowHeight;
-                Debug.WriteLine($"MainWindow: Restored Window Geometry from ViewModel - L:{Left}, T:{Top}, W:{Width}, H:{Height}");
-            }
-            else
-            {
-                Debug.WriteLine("MainWindow: ViewModel's window position/size is off-screen or invalid. Using defaults or centering.");
-                this.Width = _viewModel.WindowWidth > 100 ? _viewModel.WindowWidth : 1000;
-                this.Height = _viewModel.WindowHeight > 100 ? _viewModel.WindowHeight : 700;
-                if (!onScreen) this.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+                if (onScreen && _viewModel.WindowWidth > 100 && _viewModel.WindowHeight > 100)
+                {
+                    this.Top = _viewModel.WindowTop;
+                    this.Left = _viewModel.WindowLeft;
+                    this.Width = _viewModel.WindowWidth;
+                    this.Height = _viewModel.WindowHeight;
+                    Debug.WriteLine($"MainWindow: Restored Window Geometry from ViewModel - L:{Left}, T:{Top}, W:{Width}, H:{Height}");
+                }
+                else
+                {
+                    Debug.WriteLine("MainWindow: ViewModel's window position/size is off-screen or invalid. Using defaults or centering.");
+                    this.Width = _viewModel.WindowWidth > 100 ? _viewModel.WindowWidth : 1000;
+                    this.Height = _viewModel.WindowHeight > 100 ? _viewModel.WindowHeight : 700;
+                    if (!onScreen) this.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+                }
             }
         }
         catch (Exception ex)
@@ -220,6 +228,13 @@ public partial class MainWindow : Window, IDisposable
         }
         // If RestoreBounds is empty (e.g., started maximized and never normalized),
         // the ViewModel retains its previously loaded/set "normal" geometry values.
+
+        _viewModel.WindowState = this.WindowState switch
+        {
+            WindowState.Maximized => AppWindowState.Maximized,
+            WindowState.Minimized => AppWindowState.Minimized,
+            _ => AppWindowState.Normal,
+        };
 
 
         if (MainContentColumnsGrid != null && MainContentColumnsGrid.ColumnDefinitions.Count > 0)

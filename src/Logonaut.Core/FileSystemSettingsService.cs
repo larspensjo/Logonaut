@@ -6,7 +6,6 @@ using System.IO;
 using System;
 using System.Linq;
 using System.Collections.Generic;
-using System.Windows; // Required for WindowState
 
 namespace Logonaut.Core;
 
@@ -110,6 +109,9 @@ public class FileSystemSettingsService : ISettingsService
             SimulatorBurstSize = 1000.0,
             EditorFontFamilyName = "Consolas",
             EditorFontSize = 12.0,
+
+            // Persisted window state
+            WindowState = AppWindowState.Normal,
 
             // --- Default Window Geometry Settings ---
             WindowTop = 100,        // Sensible default top

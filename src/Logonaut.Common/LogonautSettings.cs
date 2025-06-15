@@ -1,7 +1,6 @@
 using Logonaut.Filters;
 using Newtonsoft.Json;
 using System.Collections.Generic;
-using System.Windows; // Required for WindowState
 
 namespace Logonaut.Common;
 
@@ -49,6 +48,11 @@ public class LogonautSettings
     public double WindowLeft { get; set; } = 100; // Default position
     public double WindowHeight { get; set; } = 700; // Default size
     public double WindowWidth { get; set; } = 1000; // Default size
+
+    /// <summary>
+    /// Stores the last known window state (Normal, Maximized, or Minimized).
+    /// </summary>
+    public AppWindowState WindowState { get; set; } = AppWindowState.Normal;
 
     // GridSplitter Settings (Column 0 width for Filter Panel)
     // Using GridLength.Value directly. GridLength itself is not easily serializable.
