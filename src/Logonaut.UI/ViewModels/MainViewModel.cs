@@ -103,10 +103,12 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         _internalTabViewModel.RequestScrollToLineIndex += (s, e) => RequestGlobalScrollToLineIndex?.Invoke(s, e);
         _internalTabViewModel.PropertyChanged += InternalTabViewModel_PropertyChanged;
         _internalTabViewModel.FilteredLinesUpdated += InternalTabViewModel_FilteredLinesUpdated;
+        _internalTabViewModel.SourceRestartDetected += HandleInternalTabSourceRestart;
         _disposables.Add(Disposable.Create(() =>
             {
                 _internalTabViewModel.PropertyChanged -= InternalTabViewModel_PropertyChanged;
                 _internalTabViewModel.FilteredLinesUpdated -= InternalTabViewModel_FilteredLinesUpdated;
+                _internalTabViewModel.SourceRestartDetected -= HandleInternalTabSourceRestart;
             }));
 
         // STEP 2: Now load settings, which will set ActiveFilterProfile and trigger its OnChanged ---
