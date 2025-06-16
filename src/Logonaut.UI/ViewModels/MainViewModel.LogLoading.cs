@@ -48,6 +48,14 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         }, null);
     }
 
+    // Handles the SourceRestartDetected event from the internal TabViewModel.
+    // In the single-tab setup, simply reload the specified file in the same tab.
+    private void HandleInternalTabSourceRestart(TabViewModel snapshotTab, string restartedFilePath)
+    {
+        Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} MainViewModel.HandleInternalTabSourceRestart: '{restartedFilePath}'");
+        _uiContext.Post(_ => _ = LoadLogFileCoreAsync(restartedFilePath), null);
+    }
+
     /*
      * Core logic for loading a log file from a given path.
      * This method reconfigures and activates the internal TabViewModel to handle the file.
