@@ -1,5 +1,6 @@
 using Logonaut.UI.ViewModels;
 using System.Diagnostics;
+using Logonaut.Core.Commands;
 
 namespace Logonaut.UI.Commands;
 
