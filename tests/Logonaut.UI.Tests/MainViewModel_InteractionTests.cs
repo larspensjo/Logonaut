@@ -7,6 +7,7 @@ using Logonaut.UI.ViewModels;
 using System.Linq;
 using Logonaut.Filters;
 using CommunityToolkit.Mvvm.Input; // For AsyncRelayCommand
+using Logonaut.TestUtils;
 
 namespace Logonaut.UI.Tests.ViewModels;
 

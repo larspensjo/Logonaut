@@ -2,8 +2,9 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Linq;
 using Logonaut.Filters;
 using Logonaut.UI.ViewModels;
-using Logonaut.Core; 
+using Logonaut.Core;
 using Logonaut.Common;
+using Logonaut.TestUtils;
 
 namespace Logonaut.UI.Tests.ViewModels;
 

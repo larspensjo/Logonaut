@@ -7,6 +7,7 @@ using Logonaut.UI.ViewModels;
 using Logonaut.Core.Commands; // Added
 using Logonaut.TestUtils; // Added
 using System.Linq;
+using Logonaut.UI.Commands;
 
 namespace Logonaut.UI.Tests.ViewModels;
 

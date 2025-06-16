@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using Logonaut.Filters;
 using Logonaut.Core.Commands;
 using Logonaut.UI.Descriptors;
+using Logonaut.UI.Commands;
 
 namespace Logonaut.UI.ViewModels;
 

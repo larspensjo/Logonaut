@@ -63,7 +63,8 @@ namespace Logonaut.TestUtils;
         _initEvent.WaitOne(); // Wait for dispatcher to be ready
     }
 
-    [ClassCleanup] public static void ClassCleanup()
+    [ClassCleanup]
+    public static void ClassCleanup()
     {
         _dispatcher?.InvokeShutdown();
         _dispatcher = null;

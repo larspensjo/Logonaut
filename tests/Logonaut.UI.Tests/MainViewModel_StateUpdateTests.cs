@@ -6,6 +6,7 @@ using Logonaut.Filters;
 using Logonaut.UI.ViewModels;
 using System.Threading.Tasks;
 using System;
+using Logonaut.TestUtils;
 
 namespace Logonaut.UI.Tests.ViewModels;
 
