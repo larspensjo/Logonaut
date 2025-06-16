@@ -1,6 +1,5 @@
 using Logonaut.Core;
 using Logonaut.TestUtils; // Where MockLogSource lives
-using Logonaut.UI.ViewModels;
 
 public class MockLogSourceProvider : ILogSourceProvider
 {
@@ -33,9 +32,4 @@ public class MockLogSourceProvider : ILogSourceProvider
         return MockSimulatorSource;
     }
 
-    // GetActiveMock helper remains the same conceptually
-    public MockLogSource GetActiveMock(MainViewModel vm)
-    {
-        return vm.IsSimulatorRunning ? MockSimulatorSource : MockFileSource;
-    }
 }
