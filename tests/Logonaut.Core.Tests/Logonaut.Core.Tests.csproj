@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
 
@@ -25,7 +25,7 @@
     <ProjectReference Include="..\..\src\Logonaut.Common\Logonaut.Common.csproj" />
     <ProjectReference Include="..\..\src\Logonaut.Filters\Logonaut.Filters.csproj" />
     <ProjectReference Include="..\..\src\Logonaut.Core\Logonaut.Core.csproj" />
-    <ProjectReference Include="..\Logonaut.TestUtils\Logonaut.TestUtils.csproj" />
+    <ProjectReference Include="..\Logonaut.TestUtils.Core\Logonaut.TestUtils.Core.csproj" />
   </ItemGroup>
 
 </Project>
