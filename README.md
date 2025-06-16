@@ -28,6 +28,27 @@
 2.  Build the solution: `dotnet build Logonaut.sln`
 3.  Run the UI project: `dotnet run --project src/Logonaut.UI/Logonaut.UI.csproj`
 
+## Running Unit Tests
+
+The solution includes both cross-platform tests and Windows-only UI tests.
+
+* **Core tests** for `Logonaut.Common`, `Logonaut.Core`, `Logonaut.Filters`, and
+  `Logonaut.LogTailing` target **.NET 8** and can be executed on any platform:
+
+  ```bash
+  dotnet test tests/Logonaut.Common.Tests/Logonaut.Common.Tests.csproj
+  dotnet test tests/Logonaut.Core.Tests/Logonaut.Core.Tests.csproj
+  dotnet test tests/Logonaut.Filters.Tests/Logonaut.Filters.Tests.csproj
+  dotnet test tests/Logonaut.LogTailing.Tests/Logonaut.LogTailing.Tests.csproj
+  ```
+
+* **UI tests** (`Logonaut.UI.Tests`) require the **.NET 8 Windows Desktop SDK**
+  and can only be run on Windows:
+
+  ```bash
+  dotnet test tests/Logonaut.UI.Tests/Logonaut.UI.Tests.csproj
+  ```
+
 ## Dependencies and Tools
 
 Logonaut utilizes several external libraries and tools:
