@@ -65,7 +65,6 @@ namespace Logonaut.TestUtils;
 
     [ClassCleanup(Microsoft.VisualStudio.TestTools.UnitTesting.InheritanceBehavior.BeforeEachDerivedClass)]
     public static void ClassCleanup()
-    public static void ClassCleanup()
     {
         _dispatcher?.InvokeShutdown();
         _dispatcher = null;
