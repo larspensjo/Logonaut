@@ -76,7 +76,7 @@ public class CustomHighlightingDefinition : IHighlightingDefinition
     }
 
     // Helper to get brush from theme resources with a fallback
-    private SimpleHighlightingBrush GetThemeBrush(string resourceKey, Color fallbackColor)
+    private static SimpleHighlightingBrush GetThemeBrush(string resourceKey, Color fallbackColor)
     {
         Brush? themeBrush = Application.Current?.TryFindResource(resourceKey) as Brush;
         if (themeBrush is SolidColorBrush scb)

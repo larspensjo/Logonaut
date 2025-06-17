@@ -36,7 +36,7 @@ namespace Logonaut.Theming
             CurrentTheme = theme;
         }
 
-        private string GetDictionaryPath(ThemeType theme)
+        private static string GetDictionaryPath(ThemeType theme)
         {
             return theme == ThemeType.Dark ? DarkThemeDictionary : LightThemeDictionary;
         }

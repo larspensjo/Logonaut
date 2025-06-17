@@ -19,7 +19,7 @@ public class FileSystemSettingsService : ISettingsService
     private const string AppFolderName = "Logonaut";
     private const string SettingsFileName = "settings.json";
 
-    private string GetSettingsFilePath()
+    private static string GetSettingsFilePath()
     {
         string localAppDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         string appFolderPath = Path.Combine(localAppDataPath, AppFolderName);
@@ -89,7 +89,7 @@ public class FileSystemSettingsService : ISettingsService
      * Creates a LogonautSettings object with default values for all settings.
      * This is used when no settings file is found or if loading fails.
      */
-    private LogonautSettings CreateDefaultSettings()
+    private static LogonautSettings CreateDefaultSettings()
     {
         var settings = new LogonautSettings
         {
@@ -123,7 +123,7 @@ public class FileSystemSettingsService : ISettingsService
         return settings;
     }
 
-    private void EnsureValidSettings(LogonautSettings settings)
+    private static void EnsureValidSettings(LogonautSettings settings)
     {
         if (settings.FilterProfiles == null || !settings.FilterProfiles.Any())
         {

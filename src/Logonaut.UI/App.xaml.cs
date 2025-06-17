@@ -36,7 +36,7 @@ public partial class App : Application
         }
     }
 
-    private void ConfigureServices(IServiceCollection services)
+    private static void ConfigureServices(IServiceCollection services)
     {
         services.AddSingleton<ISettingsService, FileSystemSettingsService>(); // FileSystemSettingsService is in Logonaut.Core
         services.AddSingleton<IFileDialogService, FileDialogService>();

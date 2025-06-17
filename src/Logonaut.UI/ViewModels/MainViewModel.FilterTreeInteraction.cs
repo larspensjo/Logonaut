@@ -206,7 +206,7 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         }
     }
 
-    private IFilter CreateFilterModelFromType(string typeIdentifier, string? initialValue = null)
+    private static IFilter CreateFilterModelFromType(string typeIdentifier, string? initialValue = null)
     {
         return typeIdentifier switch
         {
@@ -220,7 +220,7 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         };
     }
 
-    private void TraverseFilterTreeForHighlighting(FilterViewModel filterViewModel, ObservableCollection<IFilter> models)
+    private static void TraverseFilterTreeForHighlighting(FilterViewModel filterViewModel, ObservableCollection<IFilter> models)
     {
         if (!filterViewModel.Enabled) return;
         if ((filterViewModel.Filter is SubstringFilter || filterViewModel.Filter is RegexFilter) &&
@@ -243,7 +243,7 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         UpdateMatchingStatusInternal(ActiveFilterProfile.RootFilterViewModel, directMatchTexts);
     }
 
-    private void UpdateMatchingStatusInternal(FilterViewModel fvm, List<string> directMatchTexts)
+    private static void UpdateMatchingStatusInternal(FilterViewModel fvm, List<string> directMatchTexts)
     {
         bool isContributing = false;
         if (fvm.Enabled)
@@ -265,7 +265,7 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         }
     }
 
-    private void ClearActiveFilterMatchingStatusRecursive(FilterViewModel fvm)
+    private static void ClearActiveFilterMatchingStatusRecursive(FilterViewModel fvm)
     {
         fvm.IsActivelyMatching = false;
         foreach (var child in fvm.Children)

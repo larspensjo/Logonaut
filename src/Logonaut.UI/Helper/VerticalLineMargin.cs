@@ -10,7 +10,7 @@ public class VerticalLineMargin : AbstractMargin
     private Pen? _linePen;
 
     // NEON: Use DynamicResource lookup for the pen brush
-    private Pen CreateThemeAwarePen(TextView? textView)
+    private static Pen CreateThemeAwarePen(TextView? textView)
     {
         // Default color if resource not found or textview is null
         Brush defaultBrush = Brushes.Gray;

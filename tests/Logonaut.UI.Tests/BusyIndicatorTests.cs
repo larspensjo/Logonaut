@@ -33,7 +33,7 @@ namespace Logonaut.UI.Tests.Controls;
     }
 
     // --- Helper to simulate ActiveStates collection changing ---
-    private void SimulateCollectionChange(BusyIndicator indicator, NotifyCollectionChangedAction action)
+    private static void SimulateCollectionChange(BusyIndicator indicator, NotifyCollectionChangedAction action)
     {
         MethodInfo? collectionChangedMethod = typeof(BusyIndicator).GetMethod("ActiveStates_CollectionChanged", BindingFlags.NonPublic | BindingFlags.Instance);
         Assert.IsNotNull(collectionChangedMethod, "Could not find ActiveStates_CollectionChanged method.");
@@ -71,7 +71,7 @@ namespace Logonaut.UI.Tests.Controls;
     }
 
     // --- Helper to simulate IsVisible property changing ---
-    private void SimulateVisibilityChange(BusyIndicator indicator, bool newIsVisibleValue, bool oldIsVisibleValue = false)
+    private static void SimulateVisibilityChange(BusyIndicator indicator, bool newIsVisibleValue, bool oldIsVisibleValue = false)
     {
          MethodInfo? isVisibleChangedMethod = typeof(BusyIndicator).GetMethod("BusyIndicator_IsVisibleChanged", BindingFlags.NonPublic | BindingFlags.Instance);
          Assert.IsNotNull(isVisibleChangedMethod, "Could not find BusyIndicator_IsVisibleChanged method.");

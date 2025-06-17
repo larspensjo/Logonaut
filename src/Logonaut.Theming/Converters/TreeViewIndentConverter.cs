@@ -32,7 +32,7 @@ namespace Logonaut.Theming.Converters
         }
 
         // Helper method to calculate the depth of a TreeViewItem
-        private int GetDepth(DependencyObject item)
+        private static int GetDepth(DependencyObject item)
         {
             int depth = 0;
             DependencyObject? parent = VisualTreeHelper.GetParent(item);

@@ -50,7 +50,7 @@ public class LoadingScanlineOverlay : FrameworkElement
     }
 
     // Helper to find the effective background of the control or its parent
-    private SolidColorBrush? FindBackgroundBrush(DependencyObject? element)
+    private static SolidColorBrush? FindBackgroundBrush(DependencyObject? element)
     {
         while (element != null)
         {
@@ -69,7 +69,7 @@ public class LoadingScanlineOverlay : FrameworkElement
     }
 
     // Simple heuristic to determine if a color is "dark"
-    private bool IsDarkColor(Color color)
+    private static bool IsDarkColor(Color color)
     {
         // Calculate perceived brightness (luminance formula)
         double luminance = (0.299 * color.R + 0.587 * color.G + 0.114 * color.B) / 255;

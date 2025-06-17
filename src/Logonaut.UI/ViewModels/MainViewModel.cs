@@ -141,7 +141,7 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
     #region About command
     [ObservableProperty] private bool _isAboutOverlayVisible;
     [ObservableProperty] private string? _aboutRevisionHistory;
-    public string ApplicationVersion => Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0";
+    public static string ApplicationVersion => Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0";
     public IRelayCommand ToggleAboutOverlayCommand { get; }
 
     private void ExecuteToggleAboutOverlay()

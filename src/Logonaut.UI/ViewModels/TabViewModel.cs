@@ -565,7 +565,7 @@ public partial class TabViewModel : ObservableObject, IDisposable
         FilterHighlightModels = newFilterModels; // This will notify AvalonEditHelper via binding
     }
 
-    private void TraverseFilterTreeForHighlightingRecursive(IFilter filter, ObservableCollection<IFilter> models)
+    private static void TraverseFilterTreeForHighlightingRecursive(IFilter filter, ObservableCollection<IFilter> models)
     {
         if (!filter.Enabled) return;
         // Only add filters that have a value and are of a type that we highlight based on value

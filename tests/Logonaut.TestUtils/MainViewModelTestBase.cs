@@ -125,7 +125,7 @@ namespace Logonaut.TestUtils;
      * Retrieves the internal TabViewModel instance from a MainViewModel using reflection.
      * This is intended for testing purposes to access an internal component.
      */
-    protected TabViewModel GetInternalTabViewModel(MainViewModel mainVm)
+    protected static TabViewModel GetInternalTabViewModel(MainViewModel mainVm)
     {
         var fieldInfo = typeof(MainViewModel).GetField("_internalTabViewModel", BindingFlags.NonPublic | BindingFlags.Instance);
         if (fieldInfo == null)
@@ -239,7 +239,7 @@ namespace Logonaut.TestUtils;
      * Executes an action on the STA thread, ensuring UI-related operations are performed safely.
      * Propagates any exceptions from the action.
      */
-    protected void RunOnSta(Action action)
+    protected static void RunOnSta(Action action)
     {
         Exception? threadException = null;
         _dispatcher?.Invoke(() =>

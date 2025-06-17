@@ -40,7 +40,7 @@ namespace Logonaut.Core.Tests;
     }
 
     // Helper to simplify assertions
-    private void AssertLine(FilteredLogLine actual, int expectedNum, string expectedText, bool expectedContext)
+    private static void AssertLine(FilteredLogLine actual, int expectedNum, string expectedText, bool expectedContext)
     {
         Assert.AreEqual(expectedNum, actual.OriginalLineNumber, $"LineNum mismatch for '{expectedText}'");
         Assert.AreEqual(expectedText, actual.Text, "Text mismatch");

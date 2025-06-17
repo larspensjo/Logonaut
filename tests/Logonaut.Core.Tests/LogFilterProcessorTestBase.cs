@@ -106,7 +106,7 @@ namespace Logonaut.Core.Tests;
     /// <summary>
     /// Helper to extract only the text content from a list of FilteredLogLine.
     /// </summary>
-    protected List<string> GetLinesText(FilteredUpdateBase update)
+    protected static List<string> GetLinesText(FilteredUpdateBase update)
     {
         return update.Lines.Select(l => l.Text).ToList();
     }
