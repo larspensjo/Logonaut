@@ -1,0 +1,177 @@
+<UserControl x:Class="Logonaut.UI.Views.TabView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:avalonEdit="http://icsharpcode.net/sharpdevelop/avalonedit"
+             xmlns:helpers="clr-namespace:Logonaut.UI.Helpers"
+             xmlns:vm="clr-namespace:Logonaut.UI.ViewModels"
+             xmlns:converters="clr-namespace:Logonaut.UI.Converters"
+             xmlns:controls="clr-namespace:Logonaut.UI.Controls"
+             xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
+             xmlns:System="clr-namespace:System;assembly=mscorlib"
+             mc:Ignorable="d" 
+             d:DataContext="{d:DesignInstance Type=vm:TabViewModel, IsDesignTimeCreatable=False}"
+             d:DesignHeight="450" d:DesignWidth="800">
+    
+    <!-- Local resources for this specific view -->
+    <UserControl.Resources>
+        <!-- NOTE: Most resources like converters are in App.xaml or Converters.xaml -->
+        <!-- The style for TextEditor is defined here because it contains the complex template -->
+        <!-- with the OverviewRuler, which is specific to this view's layout. -->
+        <Geometry x:Key="AnchorIconGeometry">M 100 12 A 8 8 0 1 1 99.9 12 M 93 28 H 107 V 129 H 92 Z M 50 40 H 150 V 53 H 50 Z M 100 125 C 73 119 57 104 50 87 M 100 125 C 126 121 142 105 150 87 M 44 80 L 57 86 L 48 95 Z M 143 86 L 157 80 L 151 96 Z</Geometry>
+
+        <Style x:Key="AnchorToggleButtonStyle" TargetType="ToggleButton">
+            <Setter Property="Width" Value="20"/>
+            <Setter Property="Height" Value="20"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Background" Value="{DynamicResource AnchorButton.Static.Background}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AnchorButton.Static.Border}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="ToolTip" Value="Auto-scroll disabled. Click to enable."/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="BackgroundBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="2"
+                                SnapsToDevicePixels="True">
+                            <Viewbox Stretch="Uniform"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Margin="2">
+                                <Viewbox.RenderTransform>
+                                    <TranslateTransform X="-2" />
+                                </Viewbox.RenderTransform>
+                                <Path x:Name="anchorPath"
+                                    Data="{StaticResource AnchorIconGeometry}"
+                                    Fill="{DynamicResource SecondaryTextBrush}"/>
+                            </Viewbox>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="anchorPath" Property="Fill" Value="{DynamicResource AccentBrush}"/>
+                            <Setter TargetName="BackgroundBorder" Property="Background" Value="{DynamicResource AnchorButton.Checked.Background}"/>
+                            <Setter Property="ToolTip" Value="Auto-scroll enabled. Click to disable."/>
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="BackgroundBorder" Property="Background" Value="{DynamicResource AnchorButton.MouseOver.Background}"/>
+                            <Setter TargetName="BackgroundBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5"/>
+                        </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="{x:Type avalonEdit:TextEditor}" x:Key="TextEditorWithOverviewRulerStyle">
+            <Setter Property="Foreground" Value="{DynamicResource EditorForegroundBrush}" />
+            <Setter Property="Background" Value="{DynamicResource EditorBackgroundBrush}" />
+            <Setter Property="FontFamily" Value="Consolas" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type avalonEdit:TextEditor}">
+                        <Grid Background="{TemplateBinding Background}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />      <!-- Column 0: ScrollViewer -->
+                                <ColumnDefinition Width="Auto" />   <!-- Column 1: Ruler + Button -->
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*" />      <!-- Row 0: Main Area (Ruler) -->
+                                <RowDefinition Height="Auto" />   <!-- Row 1: Button Area -->
+                            </Grid.RowDefinitions>
+
+                            <ScrollViewer x:Name="PART_ScrollViewer"
+                                          Grid.Column="0"
+                                          Grid.Row="0"
+                                          Grid.RowSpan="2"
+                                          Focusable="False"
+                                          CanContentScroll="True"
+                                          VerticalScrollBarVisibility="Hidden"
+                                          HorizontalScrollBarVisibility="{TemplateBinding HorizontalScrollBarVisibility}"
+                                          Content="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=TextArea}">
+                            </ScrollViewer>
+                            
+                            <!-- The Ruler must be named so the code-behind can find it -->
+                            <helpers:OverviewRulerMargin
+                                x:Name="OverviewRuler"
+                                Grid.Column="1" Grid.Row="0" Width="18"
+                                Background="{DynamicResource OverviewRuler.Background}"
+                                BorderBrush="{DynamicResource OverviewRuler.BorderBrush}"
+                                BorderThickness="1,0,0,0"
+                                VerticalOffset="{Binding Path=VerticalOffset, ElementName=PART_ScrollViewer, Mode=OneWay}"
+                                ViewportHeight="{Binding Path=ViewportHeight, ElementName=PART_ScrollViewer, Mode=OneWay}"
+                                ExtentHeight="{Binding Path=ExtentHeight, ElementName=PART_ScrollViewer, Mode=OneWay}"
+                                DocumentLength="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=Document.TextLength, Mode=OneWay, FallbackValue=0}"
+                                SearchMarkers="{Binding SearchMarkers, Mode=OneWay}"
+                                SearchMarkerBrush="{DynamicResource OverviewRuler.SearchMarkerBrush}"
+                                ThumbBrush="{DynamicResource OverviewRuler.ThumbBrush}"/>
+
+                            <ToggleButton Style="{StaticResource AnchorToggleButtonStyle}"
+                                          Grid.Column="1" Grid.Row="1"
+                                          IsChecked="{Binding IsAutoScrollEnabled, Mode=TwoWay}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          Margin="0,1,0,1" />
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <!-- Main layout grid for the TabView content -->
+    <Grid>
+        <Grid.RowDefinitions>
+            <!-- NOTE: The toolbar is removed from here. In a tabbed interface, it's better to have one global toolbar -->
+            <!-- that operates on the ActiveTab, rather than one toolbar per tab. This will be handled in MainWindow.xaml -->
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Log Display Area -->
+        <Grid Grid.Row="0">
+            <Border Style="{DynamicResource CardPanelStyle}" Padding="5">
+                <!-- The Editor must be named so the code-behind can find it. Bindings are to TabViewModel -->
+                <avalonEdit:TextEditor x:Name="LogOutputEditor"
+                                       FontFamily="Consolas" FontSize="12pt" IsReadOnly="True"
+                                       SyntaxHighlighting="{x:Null}" WordWrap="False"
+                                       VerticalScrollBarVisibility="Disabled" HorizontalScrollBarVisibility="Auto"
+                                       Padding="3,0,0,0" Style="{StaticResource TextEditorWithOverviewRulerStyle}"
+                                       helpers:AvalonEditHelper.FilterHighlightModels="{Binding FilterHighlightModels, Mode=OneWay}"
+                                       helpers:AvalonEditHelper.SearchTerm="{Binding SearchText, Mode=OneWay}"
+                                       helpers:AvalonEditHelper.SelectOffset="{Binding CurrentMatchOffset, Mode=OneWay}"
+                                       helpers:AvalonEditHelper.SelectLength="{Binding CurrentMatchLength, Mode=OneWay}"
+                                       ShowLineNumbers="False"/>
+            </Border>
+            <!-- Loading overlay specific to this tab -->
+            <Border x:Name="LoadingOverlayContainer" IsHitTestVisible="False" Width="{Binding ElementName=LogOutputEditor, Path=ActualWidth}" Height="{Binding ElementName=LogOutputEditor, Path=ActualHeight}" Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}">
+                <controls:LoadingScanlineOverlay/>
+            </Border>
+        </Grid>
+
+        <!-- Search Panel -->
+        <Border Grid.Row="1" Style="{DynamicResource CardPanelStyle}" Padding="5" Margin="5,0,5,5">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Button Content="Previous" Command="{Binding PreviousSearchCommand}" Margin="5,0"/>
+                <TextBox x:Name="SearchTextBox" Width="250" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" Margin="5,0">
+                    <TextBox.InputBindings>
+                        <!-- Note: Command binding needs to find the command on the DataContext (TabViewModel) -->
+                        <KeyBinding Key="Enter" Command="{Binding NextSearchCommand}" />
+                    </TextBox.InputBindings>
+                </TextBox>
+                <Button Content="Next" Command="{Binding NextSearchCommand}" Margin="5,0" />
+                <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,0"/>
+                <CheckBox Content="Case Sensitive" IsChecked="{Binding IsCaseSensitiveSearch}" VerticalAlignment="Center" Margin="5,0">
+                    <CheckBox.ToolTip><ToolTip>Match case when searching</ToolTip></CheckBox.ToolTip>
+                </CheckBox>
+                <TextBlock Text="{Binding SearchStatusText}" VerticalAlignment="Center" Margin="10,0,5,0" FontStyle="Italic" Foreground="{DynamicResource SecondaryTextBrush}"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

@@ -41,20 +41,38 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
     public event EventHandler? RequestGlobalScrollToEnd; // If needed for a global "tail" concept
     public event EventHandler<int>? RequestGlobalScrollToLineIndex; // If needed
 
-    // The single, implicit tab for Phase 0.1
-    private readonly TabViewModel _internalTabViewModel;
-
     public ThemeViewModel Theme { get; }
 
     private bool _settingsDirty = false; // Flag to track if settings need saving
 
     #endregion
 
+    #region Tab Management
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TotalLogLines))]
+    [NotifyPropertyChangedFor(nameof(FilteredLogLinesCount))]
+    [NotifyPropertyChangedFor(nameof(SearchText))]
+    [NotifyPropertyChangedFor(nameof(HighlightedOriginalLineNumber))]
+    [NotifyPropertyChangedFor(nameof(HighlightedFilteredLineIndex))]
+    [NotifyPropertyChangedFor(nameof(TargetOriginalLineNumberInput))]
+    [NotifyPropertyChangedFor(nameof(JumpStatusMessage))]
+    [NotifyPropertyChangedFor(nameof(IsJumpTargetInvalid))]
+    [NotifyPropertyChangedFor(nameof(FilterHighlightModels))]
+    [NotifyPropertyChangedFor(nameof(SearchMarkers))]
+    [NotifyPropertyChangedFor(nameof(CurrentMatchOffset))]
+    [NotifyPropertyChangedFor(nameof(CurrentMatchLength))]
+    [NotifyPropertyChangedFor(nameof(SearchStatusText))]
+    [NotifyPropertyChangedFor(nameof(IsLoading))]
+    private TabViewModel? _activeTabViewModel;
+
+    public ObservableCollection<TabViewModel> TabViewModels { get; } = new();
+    #endregion
+
     #region Stats Properties (Now Delegated or Global)
 
-    // These now delegate to the _internalTabViewModel for Phase 0.1
-    public long TotalLogLines => _internalTabViewModel.TotalLogLines;
-    public int FilteredLogLinesCount => _internalTabViewModel.FilteredLogLinesCount;
+    // These now delegate to the ActiveTabViewModel for Phase 1
+    public long TotalLogLines => ActiveTabViewModel?.TotalLogLines ?? 0;
+    public int FilteredLogLinesCount => ActiveTabViewModel?.FilteredLogLinesCount ?? 0;
 
     #endregion
 
@@ -84,51 +102,35 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
 
         Theme = new ThemeViewModel();
 
-        // STEP 1: Initialize _internalTabViewModel FIRST
-        // It needs a default AssociatedFilterProfileName. We can't get it from ActiveFilterProfile yet,
-        // so use a sensible default like "Default". It will be updated shortly by OnActiveFilterProfileChanged.
-        _internalTabViewModel = new TabViewModel(
-            initialHeader: "Main Log",
-            initialAssociatedProfileName: "Default",
+        // Load settings first to determine initial state, including active filter profile
+        LoadPersistedSettings();
+
+        // Create an initial, empty tab.
+        var initialTab = new TabViewModel(
+            initialHeader: "Welcome",
+            initialAssociatedProfileName: ActiveFilterProfile?.Name ?? "Default",
             initialSourceType: SourceType.Pasted,
-            initialSourceIdentifier: null,
+            initialSourceIdentifier: "welcome_tab", // A unique identifier
             _sourceProvider,
             this,
             _uiContext,
             _backgroundScheduler
         );
-        _disposables.Add(_internalTabViewModel);
+        AddTab(initialTab);
+        ActiveTabViewModel = initialTab;
 
-        _internalTabViewModel.RequestScrollToEnd += (s, e) => RequestGlobalScrollToEnd?.Invoke(s, e);
-        _internalTabViewModel.RequestScrollToLineIndex += (s, e) => RequestGlobalScrollToLineIndex?.Invoke(s, e);
-        _internalTabViewModel.PropertyChanged += InternalTabViewModel_PropertyChanged;
-        _internalTabViewModel.FilteredLinesUpdated += InternalTabViewModel_FilteredLinesUpdated;
-        _internalTabViewModel.SourceRestartDetected += HandleInternalTabSourceRestart;
-        _disposables.Add(Disposable.Create(() =>
-            {
-                _internalTabViewModel.PropertyChanged -= InternalTabViewModel_PropertyChanged;
-                _internalTabViewModel.FilteredLinesUpdated -= InternalTabViewModel_FilteredLinesUpdated;
-                _internalTabViewModel.SourceRestartDetected -= HandleInternalTabSourceRestart;
-            }));
-
-        // STEP 2: Now load settings, which will set ActiveFilterProfile and trigger its OnChanged ---
-        // OnActiveFilterProfileChanged will then correctly update _internalTabViewModel.AssociatedFilterProfileName
-        LoadPersistedSettings();
-
-        // STEP 3: "Activate" the internal tab
-        // Now that ActiveFilterProfile is set, _internalTabViewModel's AssociatedFilterProfileName
-        // should have been correctly updated by OnActiveFilterProfileChanged.
-        // Its ActivateAsync will use its (now correct) AssociatedFilterProfileName.
-        _ = _internalTabViewModel.ActivateAsync(
+        // "Activate" the initial tab
+        _ = initialTab.ActivateAsync(
             this.AvailableProfiles,
             this.ContextLines,
             this.HighlightTimestamps,
             this.ShowLineNumbers,
             this.IsAutoScrollEnabled,
-            null
-            ).ContinueWith(t => {
-                if (t.IsFaulted) Debug.WriteLine($"Error activating internal tab: {t.Exception}");
-            });
+            null // No specific restart handler for a welcome tab
+        ).ContinueWith(t => {
+            if (t.IsFaulted) Debug.WriteLine($"Error activating initial tab: {t.Exception}");
+        });
+
 
         PopulateFilterPalette(); // Remains in MainViewModel as palette is global
 
@@ -137,6 +139,107 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
     }
 
     #endregion
+
+    #region Tab Lifecycle
+    private void AddTab(TabViewModel tab)
+    {
+        TabViewModels.Add(tab);
+        tab.RequestCloseTab += OnTabRequestClose;
+        tab.PropertyChanged += OnTabPropertyChanged;
+        tab.SourceRestartDetected += HandleTabSourceRestart;
+        _disposables.Add(tab); // Ensure it gets disposed
+    }
+
+    private void CloseTab(TabViewModel tab)
+    {
+        if (tab == null) return;
+
+        tab.RequestCloseTab -= OnTabRequestClose;
+        tab.PropertyChanged -= OnTabPropertyChanged;
+        tab.SourceRestartDetected -= HandleTabSourceRestart;
+
+        int closingTabIndex = TabViewModels.IndexOf(tab);
+        TabViewModels.Remove(tab);
+        tab.Dispose(); // Release its resources
+
+        // If we closed the active tab, select a new one
+        if (ActiveTabViewModel == null || ActiveTabViewModel == tab)
+        {
+            if (TabViewModels.Count > 0)
+            {
+                // Select the previous tab, or the first one if the closed tab was the first
+                ActiveTabViewModel = TabViewModels[Math.Max(0, closingTabIndex - 1)];
+            }
+            else
+            {
+                // If the last tab is closed, create a new empty one
+                var newEmptyTab = new TabViewModel("New Tab", ActiveFilterProfile?.Name ?? "Default", SourceType.Pasted, $"empty_{Guid.NewGuid()}", _sourceProvider, this, _uiContext, _backgroundScheduler);
+                AddTab(newEmptyTab);
+                ActiveTabViewModel = newEmptyTab;
+                _ = newEmptyTab.ActivateAsync(AvailableProfiles, ContextLines, HighlightTimestamps, ShowLineNumbers, IsAutoScrollEnabled, null);
+            }
+        }
+    }
+
+    private void OnTabRequestClose(object? sender, EventArgs e)
+    {
+        if (sender is TabViewModel tab)
+        {
+            CloseTab(tab);
+        }
+    }
+    #endregion
+
+
+    partial void OnActiveTabViewModelChanged(TabViewModel? oldValue, TabViewModel? newValue)
+    {
+        Debug.WriteLine($"---> MainViewModel: Active tab changed from '{oldValue?.Header}' to '{newValue?.Header}'");
+
+        if (oldValue != null)
+        {
+            // Unsubscribe from events of the old tab
+            oldValue.RequestScrollToEnd -= ViewModel_RequestScrollToEnd;
+            oldValue.RequestScrollToLineIndex -= ViewModel_RequestScrollToLineIndex;
+            oldValue.FilteredLinesUpdated -= ActiveTabViewModel_FilteredLinesUpdated;
+
+            // Deactivate the old tab
+            // oldValue.DeactivateLogProcessing(); // Step 2.1
+        }
+
+        if (newValue != null)
+        {
+            // Subscribe to events of the new tab
+            newValue.RequestScrollToEnd += ViewModel_RequestScrollToEnd;
+            newValue.RequestScrollToLineIndex += ViewModel_RequestScrollToLineIndex;
+            newValue.FilteredLinesUpdated += ActiveTabViewModel_FilteredLinesUpdated;
+
+            // Apply global settings to the new active tab
+            ApplyGlobalSettingsToTab(newValue);
+
+            // Activate the new tab
+            // _ = newValue.ActivateAsync(...); // Step 2.1
+        }
+    }
+
+    private void OnTabPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        // If the property change is from the active tab, forward it to MainViewModel's listeners
+        if (sender == ActiveTabViewModel)
+        {
+            // This is a bit of a shotgun approach. A more targeted approach would be a switch statement.
+            // But for now, this ensures the UI (like the status bar) updates.
+            OnPropertyChanged(e.PropertyName);
+        }
+    }
+
+    private void HandleTabSourceRestart(TabViewModel snapshotTab, string restartedFilePath)
+    {
+        // This is the handler for Step 2.5
+        // For now, we'll just log it. The logic will be implemented later.
+        Debug.WriteLine($"---> MainViewModel: Received SourceRestartDetected from tab '{snapshotTab.Header}' for file '{restartedFilePath}'.");
+        // Future logic: Create and open a new tab for restartedFilePath.
+    }
+
 
     #region About command
     [ObservableProperty] private bool _isAboutOverlayVisible;
@@ -192,149 +295,83 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         OnPropertyChanged(nameof(IsGloballyLoading));
     }
 
-    private void InternalTabViewModel_FilteredLinesUpdated(object? sender, EventArgs e) // <<< NEW HANDLER
+    private void ActiveTabViewModel_FilteredLinesUpdated(object? sender, EventArgs e)
     {
-        if (sender == _internalTabViewModel)
+        if (sender == ActiveTabViewModel)
         {
-            Debug.WriteLine($"---> MainViewModel: Received FilteredLinesUpdated from Tab. Calling UpdateActiveFilterMatchingStatus.");
+            Debug.WriteLine($"---> MainViewModel: Received FilteredLinesUpdated from Active Tab. Calling UpdateActiveFilterMatchingStatus.");
             _uiContext.Post(_ => UpdateActiveFilterMatchingStatus(), null); // Ensure UI thread for safety
         }
     }
 
-    private void InternalTabViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (sender != _internalTabViewModel) return;
+    #region Delegated Properties and Commands for UI Binding
 
-        // Forward relevant property changes from TabViewModel to MainViewModel's listeners
-        switch (e.PropertyName)
-        {
-            case nameof(TabViewModel.IsLoading):
-                // The tab's loading state changed. This affects CanPerformActionWhileNotLoading.
-                // Re-evaluate CanExecute for commands that use it.
-                _uiContext.Post(_ =>
-                {
-                    (OpenLogFileCommand as IAsyncRelayCommand)?.NotifyCanExecuteChanged();
-                    ToggleSimulatorCommand.NotifyCanExecuteChanged();
-                    (RestartSimulatorCommand as IRelayCommand)?.NotifyCanExecuteChanged();
-                    (ClearLogCommand as IRelayCommand)?.NotifyCanExecuteChanged();
-                    // GenerateBurstCommand's CanExecute is different (CanGenerateBurst),
-                    // but if Simulator becomes active/inactive, IsSimulatorRunning changes,
-                    // which should trigger GenerateBurstCommand.NotifyCanExecuteChanged() via NotifySimulatorCommandsCanExecuteChanged().
-                    // However, to be safe, or if CanGenerateBurst also checks general loading:
-                    (GenerateBurstCommand as IAsyncRelayCommand)?.NotifyCanExecuteChanged();
-                }, null);
-                break;
-            case nameof(TabViewModel.TotalLogLines):
-                OnPropertyChanged(nameof(TotalLogLines));
-                break;
-            case nameof(TabViewModel.FilteredLogLinesCount):
-                OnPropertyChanged(nameof(FilteredLogLinesCount));
-                break;
-            case nameof(TabViewModel.SearchText):
-                OnPropertyChanged(nameof(SearchText));
-                break;
-            case nameof(TabViewModel.HighlightedOriginalLineNumber):
-                OnPropertyChanged(nameof(HighlightedOriginalLineNumber));
-                break;
-            case nameof(TabViewModel.HighlightedFilteredLineIndex):
-                OnPropertyChanged(nameof(HighlightedFilteredLineIndex));
-                break;
-            case nameof(TabViewModel.TargetOriginalLineNumberInput):
-                OnPropertyChanged(nameof(TargetOriginalLineNumberInput));
-                break;
-            case nameof(TabViewModel.JumpStatusMessage):
-                OnPropertyChanged(nameof(JumpStatusMessage));
-                break;
-            case nameof(TabViewModel.IsJumpTargetInvalid):
-                OnPropertyChanged(nameof(IsJumpTargetInvalid));
-                break;
-            case nameof(TabViewModel.FilterHighlightModels):
-                OnPropertyChanged(nameof(FilterHighlightModels));
-                break;
-                // Add other properties as needed
-        }
-    }
-    #region Delegated Properties and Commands for UI Binding (Phase 0.1)
-
-    // These properties allow existing UI bindings to MainViewModel to continue working by delegating to _internalTabViewModel.
-    // In Phase 1, UI bindings will change to MainViewModel.ActiveTab.Property.
-
-    public ObservableCollection<FilteredLogLine> FilteredLogLines => _internalTabViewModel.FilteredLogLines;
-    public ObservableCollection<IFilter> FilterHighlightModels => _internalTabViewModel.FilterHighlightModels; // For AvalonEdit
+    // These properties allow existing UI bindings to MainViewModel to continue working by delegating to ActiveTabViewModel.
+    public ObservableCollection<FilteredLogLine>? FilteredLogLines => ActiveTabViewModel?.FilteredLogLines;
+    public ObservableCollection<IFilter>? FilterHighlightModels => ActiveTabViewModel?.FilterHighlightModels;
 
     public int HighlightedFilteredLineIndex
     {
-        get => _internalTabViewModel.HighlightedFilteredLineIndex;
-        set => _internalTabViewModel.HighlightedFilteredLineIndex = value;
+        get => ActiveTabViewModel?.HighlightedFilteredLineIndex ?? -1;
+        set { if (ActiveTabViewModel != null) ActiveTabViewModel.HighlightedFilteredLineIndex = value; }
     }
     public int HighlightedOriginalLineNumber
     {
-        get => _internalTabViewModel.HighlightedOriginalLineNumber;
-        set => _internalTabViewModel.HighlightedOriginalLineNumber = value;
+        get => ActiveTabViewModel?.HighlightedOriginalLineNumber ?? -1;
+        set { if (ActiveTabViewModel != null) ActiveTabViewModel.HighlightedOriginalLineNumber = value; }
     }
 
     public string TargetOriginalLineNumberInput
     {
-        get => _internalTabViewModel.TargetOriginalLineNumberInput;
-        set => _internalTabViewModel.TargetOriginalLineNumberInput = value;
+        get => ActiveTabViewModel?.TargetOriginalLineNumberInput ?? string.Empty;
+        set { if (ActiveTabViewModel != null) ActiveTabViewModel.TargetOriginalLineNumberInput = value; }
     }
-    public string? JumpStatusMessage
-    {
-        get => _internalTabViewModel.JumpStatusMessage;
-        // set => _internalTabViewModel.JumpStatusMessage = value; // Usually read-only from VM side
-    }
-    public bool IsJumpTargetInvalid
-    {
-        get => _internalTabViewModel.IsJumpTargetInvalid;
-        // set => _internalTabViewModel.IsJumpTargetInvalid = value; // Usually read-only from VM side
-    }
-    public IRelayCommand JumpToLineCommand => _internalTabViewModel.JumpToLineCommand;
-
+    public string? JumpStatusMessage => ActiveTabViewModel?.JumpStatusMessage;
+    public bool IsJumpTargetInvalid => ActiveTabViewModel?.IsJumpTargetInvalid ?? false;
+    public IRelayCommand? JumpToLineCommand => ActiveTabViewModel?.JumpToLineCommand;
 
     public string SearchText
     {
-        get => _internalTabViewModel.SearchText;
-        set => _internalTabViewModel.SearchText = value;
+        get => ActiveTabViewModel?.SearchText ?? string.Empty;
+        set { if (ActiveTabViewModel != null) ActiveTabViewModel.SearchText = value; }
     }
-    public bool IsCaseSensitiveSearch // This UI setting is global, but applies to the tab's search
+    public bool IsCaseSensitiveSearch
     {
-        get => _internalTabViewModel.IsCaseSensitiveSearch;
+        get => ActiveTabViewModel?.IsCaseSensitiveSearch ?? false;
         set
         {
-            if (_internalTabViewModel.IsCaseSensitiveSearch != value)
+            if (ActiveTabViewModel != null && ActiveTabViewModel.IsCaseSensitiveSearch != value)
             {
-                _internalTabViewModel.IsCaseSensitiveSearch = value;
+                ActiveTabViewModel.IsCaseSensitiveSearch = value;
                 OnPropertyChanged(); // Notify UI if MainViewModel has direct binding
                 MarkSettingsAsDirty(); // Global setting change
             }
         }
     }
-    public ObservableCollection<SearchResult> SearchMarkers => _internalTabViewModel.SearchMarkers;
-    public int CurrentMatchOffset => _internalTabViewModel.CurrentMatchOffset;
-    public int CurrentMatchLength => _internalTabViewModel.CurrentMatchLength;
-    public string SearchStatusText => _internalTabViewModel.SearchStatusText;
-    public IRelayCommand PreviousSearchCommand => _internalTabViewModel.PreviousSearchCommand;
-    public IRelayCommand NextSearchCommand => _internalTabViewModel.NextSearchCommand;
-
+    public ObservableCollection<SearchResult>? SearchMarkers => ActiveTabViewModel?.SearchMarkers;
+    public int CurrentMatchOffset => ActiveTabViewModel?.CurrentMatchOffset ?? -1;
+    public int CurrentMatchLength => ActiveTabViewModel?.CurrentMatchLength ?? 0;
+    public string SearchStatusText => ActiveTabViewModel?.SearchStatusText ?? string.Empty;
+    public IRelayCommand? PreviousSearchCommand => ActiveTabViewModel?.PreviousSearchCommand;
+    public IRelayCommand? NextSearchCommand => ActiveTabViewModel?.NextSearchCommand;
+    
     // For BusyIndicator specific to the tab's loading/filtering
-    public ObservableCollection<object> CurrentBusyStates => _internalTabViewModel.CurrentBusyStates;
-    public bool IsLoading => _internalTabViewModel.IsLoading;
-
-
-    // Editor instance management
-    private TextEditor? _logEditorInstance; // MainViewModel still holds this, but passes to TabViewModel
-    public void SetLogEditorInstance(TextEditor editor)
-    {
-        _logEditorInstance = editor;
-        _internalTabViewModel.SetLogEditorInstance(editor);
-    }
+    public ObservableCollection<object>? CurrentBusyStates => ActiveTabViewModel?.CurrentBusyStates;
+    public bool IsLoading => ActiveTabViewModel?.IsLoading ?? false;
 
     // CurrentLogFilePath is a bit special. MainViewModel still shows it globally.
-    // TabViewModel.SourceIdentifier will hold the actual path for its source.
     [ObservableProperty] private string? _currentGlobalLogFilePathDisplay;
 
-
     #endregion
+
+    private void ViewModel_RequestScrollToEnd(object? sender, EventArgs e)
+    {
+        RequestGlobalScrollToEnd?.Invoke(sender, e);
+    }
+    private void ViewModel_RequestScrollToLineIndex(object? sender, int e)
+    {
+        RequestGlobalScrollToLineIndex?.Invoke(sender, e);
+    }
 
 
     private void LoadPersistedSettings()
@@ -345,13 +382,6 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         LogonautSettings settings = _settingsService.LoadSettings();
         Debug.WriteLine($"---> MainViewModel: Loaded settings from {settings.WindowWidth}");
         LoadFilterProfiles(settings); // This sets ActiveFilterProfile
-
-        // After profiles are loaded and ActiveFilterProfile is known,
-        // update the _internalTabViewModel's AssociatedFilterProfileName
-        if (ActiveFilterProfile != null)
-        {
-            _internalTabViewModel.AssociatedFilterProfileName = ActiveFilterProfile.Name;
-        }
 
         _lastOpenedFolderPath = settings.LastOpenedFolderPath;
         LoadUiSettings(settings); // Loads ContextLines, ShowLineNumbers etc.
@@ -391,9 +421,6 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         var settingsToSave = new LogonautSettings
         {
             LastOpenedFolderPath = this._lastOpenedFolderPath,
-            // Window geometry will be populated by MainWindow before this is called on exit,
-            // or we need properties in MainViewModel for MainWindow to update.
-            // For now, assuming MainWindow updates its part directly or via properties here.
         };
 
         // Populate window geometry from MainViewModel properties (which MainWindow will update)
@@ -414,7 +441,7 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
 
     private bool CanPerformActionWhileNotLoading()
     {
-        bool tabIsLoading = _internalTabViewModel.IsLoading; // Call the getter
+        bool tabIsLoading = ActiveTabViewModel?.IsLoading ?? false;
         bool mainIsLoading = IsGloballyLoading;
         bool canPerform = !mainIsLoading && !tabIsLoading;
         Debug.WriteLine($"---> MainViewModel.CanPerformActionWhileNotLoading: Result={canPerform}. MainLoading={mainIsLoading}, TabLoading={tabIsLoading}");
@@ -425,44 +452,48 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
 
     private void TriggerFilterUpdate()
     {
-        IFilter? filterToApply = ActiveFilterProfile?.Model?.RootFilter ?? new TrueFilter();
+        if (ActiveTabViewModel == null) return;
+        
+        // The active tab is responsible for applying its own filters.
+        // We just need to tell it that a global setting it depends on has changed.
+        ApplyGlobalSettingsToTab(ActiveTabViewModel);
+    }
 
-        // Update FilterHighlightModels on the internal tab
+    private void ApplyGlobalSettingsToTab(TabViewModel tab)
+    {
+        // This method will be used to push global settings (like ContextLines, which profile to use, etc.)
+        // to a tab, typically when it becomes active or when a global setting changes.
+        tab.AssociatedFilterProfileName = ActiveFilterProfile?.Name ?? "Default";
+        tab.ApplyFiltersFromProfile(this.AvailableProfiles, this.ContextLines);
+
+        // Update other global settings
+        // tab.ShowLineNumbers = this.ShowLineNumbers; // Future: Move these to TabViewModel
+        // tab.HighlightTimestamps = this.HighlightTimestamps;
+
+        // Update FilterHighlightModels on the active tab
         var newFilterModels = new ObservableCollection<IFilter>();
         if (ActiveFilterProfile?.RootFilterViewModel != null)
         {
             TraverseFilterTreeForHighlighting(ActiveFilterProfile.RootFilterViewModel, newFilterModels);
         }
-        _internalTabViewModel.FilterHighlightModels = newFilterModels; // Pass to tab
+        tab.FilterHighlightModels = newFilterModels;
 
-        // Tell the internal tab to update its filters (and thus its FilteredLogLines)
-        _internalTabViewModel.ApplyFiltersFromProfile(this.AvailableProfiles, this.ContextLines);
-
-        // UpdateActiveFilterMatchingStatus uses _internalTabViewModel.FilteredLogLines.
-        // This call might be slightly premature if ApplyFiltersFromProfile results in async updates to FilteredLogLines.
-        // However, ReactiveFilteredLogStream typically produces a ReplaceFilteredUpdate fairly quickly after settings change.
+        // Update matching status based on the now-active tab
         UpdateActiveFilterMatchingStatus();
     }
 
+
     // GetCurrentDocumentText for MainViewModel (e.g., for filter matching status)
-    // should now get it from the internal tab's perspective.
+    // should now get it from the active tab's perspective.
     private string GetCurrentDocumentText()
     {
-        // In Phase 0.1, the editor instance is still managed by MainWindow and passed down.
-        // TabViewModel will have its own GetCurrentDocumentTextForSearch.
-        // This one is for MainViewModel's direct needs if any, like UpdateActiveFilterMatchingStatus.
-        if (_internalTabViewModel.FilteredLogLines.Any())
+        // This is for MainViewModel's direct needs, like UpdateActiveFilterMatchingStatus.
+        if (ActiveTabViewModel?.FilteredLogLines != null && ActiveTabViewModel.FilteredLogLines.Any())
         {
-            // This mirrors TabViewModel's fallback if its editor isn't set.
-            return string.Join(Environment.NewLine, _internalTabViewModel.FilteredLogLines.Select(fll => fll.Text));
+            return string.Join(Environment.NewLine, ActiveTabViewModel.FilteredLogLines.Select(fll => fll.Text));
         }
         return string.Empty;
     }
-
-    // ApplyFilteredUpdate is now largely handled by TabViewModel.
-    // MainViewModel's role here diminishes significantly for Phase 0.1.
-    // The subscriptions in MainViewModel's constructor to _reactiveFilteredLogStream are removed.
-    // TabViewModel will have its own subscriptions.
 
     #endregion
 
@@ -473,7 +504,7 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         if (disposing)
         {
             _activeProfileNameSubscription?.Dispose();
-            _disposables.Dispose(); // Disposes _internalTabViewModel
+            _disposables.Dispose(); // Disposes all added IDisposables, including all tabs
         }
     }
     /*
@@ -493,12 +524,6 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
     #endregion
 
     #region Window Geometry Properties (for MainWindow to update)
-    // These properties will be updated by MainWindow when its geometry changes.
-    // MainViewModel will then use these values when SaveCurrentSettings is called.
-    // We don't use [ObservableProperty] if MainViewModel itself doesn't need to notify its own UI for these.
-    // However, if any UI *within MainViewModel's scope* (not MainWindow's directly bound elements)
-    // depended on these, then [ObservableProperty] would be needed. For now, assume not.
-    // Let's make them observable in case some debug UI or future feature in MainViewModel needs them.
     [ObservableProperty] private double _windowTop;
     [ObservableProperty] private double _windowLeft;
     [ObservableProperty] private double _windowHeight;

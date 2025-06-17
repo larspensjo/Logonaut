@@ -147,21 +147,26 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
 
             UpdateActiveTreeRootNodes(newValue); // Updates the TreeView for editing this profile
             SelectedFilterNode = null;
-
-            // Update the internal tab's associated profile and trigger its filter update
-            _internalTabViewModel.AssociatedFilterProfileName = newValue.Name;
-            _internalTabViewModel.ApplyFiltersFromProfile(this.AvailableProfiles, this.ContextLines);
-
-            // Update active filter matching status based on the internal tab's current filtered lines
-            UpdateActiveFilterMatchingStatus();
+            
+            // Apply the change to the currently active tab
+            if (ActiveTabViewModel != null)
+            {
+                ActiveTabViewModel.AssociatedFilterProfileName = newValue.Name;
+                ActiveTabViewModel.ApplyFiltersFromProfile(this.AvailableProfiles, this.ContextLines);
+                // Update active filter matching status based on the active tab's current filtered lines
+                UpdateActiveFilterMatchingStatus();
+            }
         }
         else
         {
             UpdateActiveTreeRootNodes(null);
             SelectedFilterNode = null;
-            _internalTabViewModel.AssociatedFilterProfileName = "Default"; // Or some sensible default
-            _internalTabViewModel.ApplyFiltersFromProfile(this.AvailableProfiles, this.ContextLines);
-            UpdateActiveFilterMatchingStatus();
+            if (ActiveTabViewModel != null)
+            {
+                ActiveTabViewModel.AssociatedFilterProfileName = "Default"; // Or some sensible default
+                ActiveTabViewModel.ApplyFiltersFromProfile(this.AvailableProfiles, this.ContextLines);
+                UpdateActiveFilterMatchingStatus();
+            }
         }
         MarkSettingsAsDirty();
     }
@@ -184,10 +189,10 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         }
         if (profileVM.Model.Name != newName) profileVM.Model.Name = newName;
 
-        // If the active profile's name changed, update the internal tab's association
-        if (_internalTabViewModel.AssociatedFilterProfileName != newName)
+        // If the active profile's name changed, update the active tab's association
+        if (ActiveTabViewModel != null && ActiveTabViewModel.AssociatedFilterProfileName != newName)
         {
-            _internalTabViewModel.AssociatedFilterProfileName = newName;
+            ActiveTabViewModel.AssociatedFilterProfileName = newName;
             // The tab doesn't need to re-filter immediately unless this was the *only* change.
             // TriggerFilterUpdate (which calls ApplyFiltersFromProfile on the tab) is usually
             // called after filter *content* changes. For just a name change, saving is enough.

@@ -234,12 +234,22 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
 
     private void UpdateActiveFilterMatchingStatus()
     {
-        if (ActiveFilterProfile?.RootFilterViewModel == null) return;
-        // Get matching texts from the _internalTabViewModel
-        var directMatchTexts = _internalTabViewModel.FilteredLogLines
+        if (ActiveFilterProfile?.RootFilterViewModel == null || ActiveTabViewModel?.FilteredLogLines == null)
+        {
+            // If there's no active profile or no lines in the active tab, clear all matching statuses.
+            if(ActiveFilterProfile?.RootFilterViewModel != null)
+            {
+                ClearActiveFilterMatchingStatusRecursive(ActiveFilterProfile.RootFilterViewModel);
+            }
+            return;
+        }
+
+        // Get matching texts from the ActiveTabViewModel
+        var directMatchTexts = ActiveTabViewModel.FilteredLogLines
             .Where(fl => !fl.IsContextLine)
             .Select(fl => fl.Text)
             .ToList();
+
         UpdateMatchingStatusInternal(ActiveFilterProfile.RootFilterViewModel, directMatchTexts);
     }
 
