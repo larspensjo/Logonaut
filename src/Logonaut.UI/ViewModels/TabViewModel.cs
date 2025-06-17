@@ -3,7 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using Logonaut.Common;
 using Logonaut.Core;
 using Logonaut.Filters;
-using Logonaut.UI.Commands; 
+using Logonaut.Core.Commands; 
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;

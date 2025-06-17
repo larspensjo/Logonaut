@@ -2,7 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.Input;
 using Logonaut.Common;
-using Logonaut.UI.Commands;
+using Logonaut.Core.Commands;
 using System.Reactive.Linq;
 using System.ComponentModel;
 using System.Diagnostics;

@@ -2,8 +2,9 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Logonaut.Filters;
-using Logonaut.UI.Commands;
+using Logonaut.Core.Commands;
 using System.Diagnostics;
+using Logonaut.UI.Commands;
 using System.Collections.Generic; // For List and KeyValuePair
 
 namespace Logonaut.UI.ViewModels;

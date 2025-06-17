@@ -1,10 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Logonaut.Core\Logonaut.Core.csproj" />
     <ProjectReference Include="..\..\src\Logonaut.UI\Logonaut.UI.csproj" />
-    <ProjectReference Include="..\..\src\Logonaut.Common\Logonaut.Common.csproj" />
-    <ProjectReference Include="..\..\src\Logonaut.Filters\Logonaut.Filters.csproj" />
+    <ProjectReference Include="..\Logonaut.TestUtils.Core\Logonaut.TestUtils.Core.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

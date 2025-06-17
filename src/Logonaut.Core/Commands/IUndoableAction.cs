@@ -1,4 +1,4 @@
-namespace Logonaut.UI.Commands;
+namespace Logonaut.Core.Commands;
 /// <summary>
 /// Defines the contract for an action that can be executed and undone.
 /// </summary>

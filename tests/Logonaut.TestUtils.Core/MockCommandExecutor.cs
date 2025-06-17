@@ -1,4 +1,4 @@
-using Logonaut.UI.Commands;
+using Logonaut.Core.Commands;
 using System.Collections.Generic;
 
 namespace Logonaut.TestUtils;

@@ -4,12 +4,11 @@ using System.Collections.Generic;
 using System.Reactive; // For Unit
 using System.Reactive.Subjects;
 using System.Reactive.Linq;
-using System.Diagnostics; // Added for Debug
 using Newtonsoft.Json; // Required for JsonConvert
+using System.Diagnostics;
 using Logonaut.Common;
 using Logonaut.Core;
 using Logonaut.Filters;
-using Logonaut.UI.Services;
 
 namespace Logonaut.TestUtils
 {

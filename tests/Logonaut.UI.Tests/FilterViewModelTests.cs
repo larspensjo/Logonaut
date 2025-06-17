@@ -4,9 +4,10 @@ using System.ComponentModel;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Logonaut.Filters;
 using Logonaut.UI.ViewModels;
-using Logonaut.UI.Commands; // Added
+using Logonaut.Core.Commands; // Added
 using Logonaut.TestUtils; // Added
 using System.Linq;
+using Logonaut.UI.Commands;
 
 namespace Logonaut.UI.Tests.ViewModels;
 

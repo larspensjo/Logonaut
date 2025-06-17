@@ -2,6 +2,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Logonaut.Common;
 using Logonaut.UI.ViewModels;
 using System; // For StringComparison, Environment
+using Logonaut.TestUtils;
 
 namespace Logonaut.UI.Tests.ViewModels;
 

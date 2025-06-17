@@ -1,0 +1,8 @@
+root = true
+
+[*.cs]
+dotnet_diagnostic.IDE0011.severity = none      # Ignore missing bracers for if-statement
+dotnet_diagnostic.IDE0051.severity = warning   # Unused private member
+dotnet_diagnostic.CA1822.severity = warning    # Mark members as static
+csharp_style_var_for_built_in_types = true:suggestion
+csharp_prefer_braces = true:warning

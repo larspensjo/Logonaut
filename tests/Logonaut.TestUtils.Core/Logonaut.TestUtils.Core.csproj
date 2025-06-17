@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Logonaut.Common\Logonaut.Common.csproj" />
+    <ProjectReference Include="..\..\src\Logonaut.Core\Logonaut.Core.csproj" />
+    <ProjectReference Include="..\..\src\Logonaut.Filters\Logonaut.Filters.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Reactive.Testing" Version="6.0.1" />
+    <PackageReference Include="MSTest.TestFramework" Version="3.9.2" />
+  </ItemGroup>
+</Project>

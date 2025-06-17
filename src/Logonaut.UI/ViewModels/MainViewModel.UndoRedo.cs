@@ -1,6 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Logonaut.UI.Commands;
+using Logonaut.Core.Commands;
 
 namespace Logonaut.UI.ViewModels;
 

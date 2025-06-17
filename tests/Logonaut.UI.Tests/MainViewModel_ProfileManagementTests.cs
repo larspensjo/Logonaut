@@ -6,6 +6,7 @@ using Logonaut.UI.ViewModels;
 using System.Collections.ObjectModel;
 using System; // For TimeSpan
 using CommunityToolkit.Mvvm.Input;
+using Logonaut.TestUtils;
 
 namespace Logonaut.UI.Tests.ViewModels;
 

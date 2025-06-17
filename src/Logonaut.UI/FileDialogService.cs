@@ -1,3 +1,4 @@
+using Logonaut.Core;
 using Microsoft.Win32;
 
 namespace Logonaut.UI.Services

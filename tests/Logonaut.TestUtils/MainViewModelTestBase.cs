@@ -8,7 +8,7 @@ using Logonaut.Common;
 using Logonaut.Core;
 using Logonaut.Filters;
 using Logonaut.UI.ViewModels;
-using Logonaut.TestUtils;
+using Logonaut.TestUtils; // For shared mocks
 using System.Threading;
 using System;
 using System.Linq;
@@ -16,7 +16,7 @@ using System.Reactive.Concurrency;
 using Microsoft.Reactive.Testing; // Essential for TestScheduler
 using System.Reflection; // For accessing internal members for testing if necessary
 
-namespace Logonaut.UI.Tests.ViewModels;
+namespace Logonaut.TestUtils;
 
 /**
  * Base class for setting up common testing infrastructure for ViewModels,
@@ -63,7 +63,8 @@ namespace Logonaut.UI.Tests.ViewModels;
         _initEvent.WaitOne(); // Wait for dispatcher to be ready
     }
 
-    [ClassCleanup] public static void ClassCleanup()
+    [ClassCleanup(Microsoft.VisualStudio.TestTools.UnitTesting.InheritanceBehavior.BeforeEachDerivedClass)]
+    public static void ClassCleanup()
     {
         _dispatcher?.InvokeShutdown();
         _dispatcher = null;

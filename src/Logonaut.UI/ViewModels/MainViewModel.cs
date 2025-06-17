@@ -14,7 +14,7 @@ using Logonaut.Common;
 using Logonaut.Core;
 using Logonaut.Filters;
 using Logonaut.UI.Services;
-using Logonaut.UI.Commands;
+using Logonaut.Core.Commands;
 using ICSharpCode.AvalonEdit;
 
 namespace Logonaut.UI.ViewModels;

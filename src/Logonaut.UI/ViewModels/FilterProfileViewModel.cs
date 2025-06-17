@@ -2,7 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Logonaut.Common;
 using Logonaut.Filters;
-using Logonaut.UI.Commands;
+using Logonaut.Core.Commands;
 using System.Diagnostics;
 
 namespace Logonaut.UI.ViewModels;
