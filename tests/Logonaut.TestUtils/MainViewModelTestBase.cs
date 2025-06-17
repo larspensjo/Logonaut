@@ -127,15 +127,15 @@ namespace Logonaut.TestUtils;
      */
     protected static TabViewModel GetInternalTabViewModel(MainViewModel mainVm)
     {
-        var fieldInfo = typeof(MainViewModel).GetField("_internalTabViewModel", BindingFlags.NonPublic | BindingFlags.Instance);
+        var fieldInfo = typeof(MainViewModel).GetField("_activeTabViewModel", BindingFlags.NonPublic | BindingFlags.Instance);
         if (fieldInfo == null)
         {
-            throw new InvalidOperationException("_internalTabViewModel field not found in MainViewModel. Test setup might be outdated.");
+            throw new InvalidOperationException("_activeTabViewModel field not found in MainViewModel. Test setup might be outdated.");
         }
         var tabVm = fieldInfo.GetValue(mainVm) as TabViewModel;
         if (tabVm == null)
         {
-            throw new InvalidOperationException("_internalTabViewModel is null. MainViewModel might not have initialized it correctly.");
+            throw new InvalidOperationException("_activeTabViewModel is null. MainViewModel might not have initialized it correctly.");
         }
         return tabVm;
     }
