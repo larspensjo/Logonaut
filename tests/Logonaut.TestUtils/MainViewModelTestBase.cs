@@ -63,7 +63,8 @@ namespace Logonaut.TestUtils;
         _initEvent.WaitOne(); // Wait for dispatcher to be ready
     }
 
-    [ClassCleanup]
+    [ClassCleanup(Microsoft.VisualStudio.TestTools.UnitTesting.InheritanceBehavior.BeforeEachDerivedClass)]
+    public static void ClassCleanup()
     public static void ClassCleanup()
     {
         _dispatcher?.InvokeShutdown();
