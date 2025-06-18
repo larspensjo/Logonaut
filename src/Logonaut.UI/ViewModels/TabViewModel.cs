@@ -60,6 +60,10 @@ public partial class TabViewModel : ObservableObject, IDisposable
     [ObservableProperty] private ObservableCollection<FilteredLogLine> _filteredLogLines = new();
     [ObservableProperty] private long _totalLogLines; // Updated by LogDataProcessor's event
     [ObservableProperty] private string? _sourceIdentifier; // File path or pasted content temp path 
+    
+    public Visibility IsOriginalLineNumberMarginVisible => ShowLineNumbers ? Visibility.Visible : Visibility.Collapsed;
+    [NotifyPropertyChangedFor(nameof(IsOriginalLineNumberMarginVisible))]
+    [ObservableProperty] private bool _showLineNumbers;
     [ObservableProperty] private bool _isAutoScrollEnabled = true; // Default to true, will be updated by MainViewModel
 
     [ObservableProperty] private SourceType _sourceType; 
@@ -152,8 +156,8 @@ public partial class TabViewModel : ObservableObject, IDisposable
     * the reactive filtering stream via the LogDataProcessor. It ensures that the tab
     * begins receiving and filtering log lines according to its configuration.
     * 
-    * This method is typically called when a tab becomes the active tab in the UI,
-    * or when its underlying source (e.g., file path, simulator state) is defined or changes.
+    * This method is typically called when a tab becomes the active tab in the UI, or
+    * when its underlying source (e.g., file path, simulator state) is defined or changes.
     */
     public async Task ActivateAsync(IEnumerable<FilterProfileViewModel> availableProfiles, int globalContextLines, bool globalHighlightTimestamps, bool globalShowLineNumbers, bool globalAutoScrollEnabled, Action? onSourceResetDetectedHandler /* This parameter is now effectively unused by this method, but kept for compatibility if MainViewModel still passes it directly */)
     {
@@ -213,6 +217,7 @@ public partial class TabViewModel : ObservableObject, IDisposable
         }
         
         IsAutoScrollEnabled = globalAutoScrollEnabled; // Apply global auto-scroll setting
+        ShowLineNumbers = globalShowLineNumbers;
 
         // Note: LoadingToken is expected to be removed by the stream update from the processor
         // (ReplaceFilteredUpdate with IsInitialLoadProcessingComplete = true) or by HandleActivationError.

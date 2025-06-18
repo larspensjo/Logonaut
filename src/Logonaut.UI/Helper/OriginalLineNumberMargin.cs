@@ -1,44 +1,129 @@
+// ===== File: src\Logonaut.UI\Helpers\OriginalLineNumberMargin.cs =====
+using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Windows;
-using System.Windows.Controls; // Required for TextBlock
+using System.Windows.Controls;
 using System.Windows.Media;
+using ICSharpCode.AvalonEdit;
 using ICSharpCode.AvalonEdit.Editing;
 using ICSharpCode.AvalonEdit.Rendering;
-using Logonaut.Common; // For FilteredLogLine
-using System.Diagnostics; // For Debug
+using Logonaut.Common;
 
 namespace Logonaut.UI.Helpers;
 
-// Custom AvalonEdit margin to display original line numbers from FilteredLogLine data.
+/*
+ * A custom margin for the AvalonEdit editor that displays the original line number
+ * for each log entry, as specified by the FilteredLogLine.OriginalLineNumber property.
+ * This is crucial for maintaining context when logs are filtered.
+ */
 public class OriginalLineNumberMargin : AbstractMargin
 {
-    // DependencyProperty to bind the list of FilteredLogLine objects
-    public static readonly DependencyProperty FilteredLinesSourceProperty =
-        DependencyProperty.Register(nameof(FilteredLinesSource), typeof(IEnumerable<FilteredLogLine>),
-            typeof(OriginalLineNumberMargin), new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.AffectsRender, OnFilteredLinesSourceChanged));
+    #region Dependency Properties
 
-    public IEnumerable<FilteredLogLine> FilteredLinesSource
+    public static readonly DependencyProperty ItemsSourceProperty =
+        DependencyProperty.Register(nameof(ItemsSource), typeof(IEnumerable<FilteredLogLine>),
+            typeof(OriginalLineNumberMargin), new FrameworkPropertyMetadata(null, OnVisualPropertyChanged));
+
+    public IEnumerable<FilteredLogLine> ItemsSource
     {
-        get => (IEnumerable<FilteredLogLine>)GetValue(FilteredLinesSourceProperty);
-        set => SetValue(FilteredLinesSourceProperty, value);
+        get => (IEnumerable<FilteredLogLine>)GetValue(ItemsSourceProperty);
+        set => SetValue(ItemsSourceProperty, value);
     }
 
-    private static void OnFilteredLinesSourceChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    // DependencyProperty for binding the TextEditor instance.
+    public static readonly DependencyProperty TextEditorProperty =
+        DependencyProperty.Register(
+            nameof(TextEditor),
+            typeof(TextEditor),
+            typeof(OriginalLineNumberMargin),
+            new FrameworkPropertyMetadata(null, OnTextEditorChanged));
+
+    public TextEditor TextEditor
     {
-        // Invalidation is handled by AffectsMeasure/AffectsRender flags now
-        (d as OriginalLineNumberMargin)?.UpdateCache(); // Update cache if source changes
+        get => (TextEditor)GetValue(TextEditorProperty);
+        set => SetValue(TextEditorProperty, value);
     }
 
-    private double _emSize;
-    private Typeface _typeface = new Typeface("Consolas"); // Default typeface
-    private double _lineNumberWidth;
-    private IReadOnlyList<FilteredLogLine>? _currentLinesCache; // Cache the list for performance
-    private int _maxDigits = 3; // Minimum number of digits to reserve space for
+    public static readonly DependencyProperty ForegroundProperty =
+        Control.ForegroundProperty.AddOwner(typeof(OriginalLineNumberMargin), new FrameworkPropertyMetadata(OnVisualPropertyChanged));
 
-    // Updates the internal cache of lines - Call when FilteredLinesSource changes or needs refresh
+    public Brush Foreground
+    {
+        get => (Brush)GetValue(ForegroundProperty);
+        set => SetValue(ForegroundProperty, value);
+    }
+
+    public static readonly DependencyProperty FontFamilyProperty =
+        Control.FontFamilyProperty.AddOwner(typeof(OriginalLineNumberMargin), new FrameworkPropertyMetadata(OnVisualPropertyChanged));
+
+    public FontFamily FontFamily
+    {
+        get => (FontFamily)GetValue(FontFamilyProperty);
+        set => SetValue(FontFamilyProperty, value);
+    }
+
+    public static readonly DependencyProperty FontSizeProperty =
+        Control.FontSizeProperty.AddOwner(typeof(OriginalLineNumberMargin), new FrameworkPropertyMetadata(OnVisualPropertyChanged));
+
+    public double FontSize
+    {
+        get => (double)GetValue(FontSizeProperty);
+        set => SetValue(FontSizeProperty, value);
+    }
+
+    public static readonly DependencyProperty FontStyleProperty =
+        Control.FontStyleProperty.AddOwner(typeof(OriginalLineNumberMargin), new FrameworkPropertyMetadata(OnVisualPropertyChanged));
+
+    public FontStyle FontStyle
+    {
+        get => (FontStyle)GetValue(FontStyleProperty);
+        set => SetValue(FontStyleProperty, value);
+    }
+
+    public static readonly DependencyProperty FontWeightProperty =
+        Control.FontWeightProperty.AddOwner(typeof(OriginalLineNumberMargin), new FrameworkPropertyMetadata(OnVisualPropertyChanged));
+
+    public FontWeight FontWeight
+    {
+        get => (FontWeight)GetValue(FontWeightProperty);
+        set => SetValue(FontWeightProperty, value);
+    }
+
+    public static readonly DependencyProperty FontStretchProperty =
+        Control.FontStretchProperty.AddOwner(typeof(OriginalLineNumberMargin), new FrameworkPropertyMetadata(OnVisualPropertyChanged));
+
+    public FontStretch FontStretch
+    {
+        get => (FontStretch)GetValue(FontStretchProperty);
+        set => SetValue(FontStretchProperty, value);
+    }
+
+    #endregion
+
+    private IReadOnlyList<FilteredLogLine>? _currentLinesCache;
+
+    private static void OnTextEditorChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        // When the TextEditor is bound, connect our margin to its TextView
+        var margin = (OriginalLineNumberMargin)d;
+        margin.TextView = (e.NewValue as TextEditor)?.TextArea.TextView;
+    }
+
+    private static void OnVisualPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        var margin = (OriginalLineNumberMargin)d;
+        if (e.Property == ItemsSourceProperty)
+        {
+            margin.UpdateCache();
+        }
+        margin.InvalidateMeasure();
+        margin.InvalidateVisual();
+    }
+
     private void UpdateCache()
     {
-        _currentLinesCache = FilteredLinesSource as IReadOnlyList<FilteredLogLine> ?? FilteredLinesSource?.ToList();
+        _currentLinesCache = ItemsSource as IReadOnlyList<FilteredLogLine> ?? ItemsSource?.ToList();
     }
 
     protected override void OnTextViewChanged(TextView oldTextView, TextView newTextView)
@@ -51,91 +136,36 @@ public class OriginalLineNumberMargin : AbstractMargin
         base.OnTextViewChanged(oldTextView, newTextView);
         if (newTextView != null)
         {
-            var fontFamily = newTextView.GetValue(TextBlock.FontFamilyProperty) as FontFamily ?? new FontFamily("Consolas");
-            var fontStyle = (FontStyle)newTextView.GetValue(TextBlock.FontStyleProperty);
-            var fontWeight = (FontWeight)newTextView.GetValue(TextBlock.FontWeightProperty);
-            var fontStretch = (FontStretch)newTextView.GetValue(TextBlock.FontStretchProperty); // Get FontStretch
-            _typeface = new Typeface(fontFamily, fontStyle, fontWeight, fontStretch); // Use FontStretch
-            _emSize = (double)newTextView.GetValue(TextBlock.FontSizeProperty);
-
             newTextView.VisualLinesChanged += TextViewVisualLinesChanged;
             newTextView.ScrollOffsetChanged += TextViewScrollOffsetChanged;
         }
-        else
-        {
-            // Reset to defaults if TextView is removed
-            _typeface = new Typeface("Consolas");
-            _emSize = 12;
-        }
-        InvalidateMeasure(); // Re-calculate width
-        InvalidateVisual();
-    }
-
-    /// <summary>
-    /// Public method to explicitly refresh font properties from the TextView and update the margin.
-    /// </summary>
-    public void RefreshFontProperties()
-    {
-        if (TextView != null)
-        {
-            var fontFamily = TextView.GetValue(TextBlock.FontFamilyProperty) as FontFamily ?? new FontFamily("Consolas");
-            var fontStyle = (FontStyle)TextView.GetValue(TextBlock.FontStyleProperty);
-            var fontWeight = (FontWeight)TextView.GetValue(TextBlock.FontWeightProperty);
-            var fontStretch = (FontStretch)TextView.GetValue(TextBlock.FontStretchProperty); // Get FontStretch
-            _typeface = new Typeface(fontFamily, fontStyle, fontWeight, fontStretch); // Use FontStretch
-            _emSize = (double)TextView.GetValue(TextBlock.FontSizeProperty);
-
-            InvalidateMeasure();
-            InvalidateVisual(); // Good practice to invalidate visual too
-            Debug.WriteLine($"OriginalLineNumberMargin: Refreshed font properties. New Size: {_emSize}, Family: {fontFamily.Source}");
-        }
-        else
-        {
-            Debug.WriteLine("OriginalLineNumberMargin: RefreshFontProperties called, but TextView is null.");
-        }
-    }
-
-
-    private void TextViewScrollOffsetChanged(object? sender, EventArgs e)
-    {
-        InvalidateVisual(); // Redraw on scroll
-    }
-
-    private void TextViewVisualLinesChanged(object? sender, EventArgs e)
-    {
         InvalidateMeasure();
         InvalidateVisual();
     }
 
+    private void TextViewScrollOffsetChanged(object? sender, EventArgs e) => InvalidateVisual();
+    private void TextViewVisualLinesChanged(object? sender, EventArgs e) => InvalidateVisual();
+
     protected override Size MeasureOverride(Size availableSize)
     {
-        UpdateCache();
+        var typeface = new Typeface(this.FontFamily, this.FontStyle, this.FontWeight, this.FontStretch);
+        double emSize = this.FontSize;
 
         int maxLineNumber = 1;
         if (_currentLinesCache != null && _currentLinesCache.Any())
         {
             maxLineNumber = _currentLinesCache.Max(line => line.OriginalLineNumber);
         }
-        else if (TextView?.Document != null && TextView.Document.LineCount > 0)
-        {
-            maxLineNumber = TextView.Document.LineCount;
-        }
 
-        _maxDigits = Math.Max(3, (int)Math.Log10(maxLineNumber) + 1);
-        var widestNumberString = new string('9', _maxDigits);
+        int maxDigits = Math.Max(3, (int)Math.Log10(maxLineNumber) + 1);
+        var widestNumberString = new string('9', maxDigits);
 
         var formattedNumber = new FormattedText(
-            widestNumberString,
-            CultureInfo.CurrentCulture,
-            FlowDirection.LeftToRight,
-            _typeface,
-            _emSize,
-            Brushes.Black,
-            VisualTreeHelper.GetDpi(this).PixelsPerDip
+            widestNumberString, CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
+            typeface, emSize, Brushes.Black, VisualTreeHelper.GetDpi(this).PixelsPerDip
         );
 
-        _lineNumberWidth = formattedNumber.WidthIncludingTrailingWhitespace;
-        return new Size(_lineNumberWidth + 5, 0);
+        return new Size(formattedNumber.Width + 8, 0);
     }
 
     protected override void OnRender(DrawingContext drawingContext)
@@ -145,7 +175,9 @@ public class OriginalLineNumberMargin : AbstractMargin
 
         if (textView == null || !textView.VisualLinesValid || _currentLinesCache == null) return;
 
-        var foreground = (Brush)textView.GetValue(Control.ForegroundProperty) ?? Brushes.Gray;
+        var typeface = new Typeface(this.FontFamily, this.FontStyle, this.FontWeight, this.FontStretch);
+        double emSize = this.FontSize;
+        var foreground = this.Foreground;
 
         foreach (var visualLine in textView.VisualLines)
         {
@@ -155,32 +187,21 @@ public class OriginalLineNumberMargin : AbstractMargin
             if (lineIndex >= 0 && lineIndex < _currentLinesCache.Count)
             {
                 var filteredLine = _currentLinesCache[lineIndex];
-                int originalNumber = filteredLine.OriginalLineNumber;
-                string numberString = originalNumber.ToString(CultureInfo.CurrentCulture);
+                string numberString = filteredLine.OriginalLineNumber.ToString(CultureInfo.CurrentCulture);
 
                 var formattedText = new FormattedText(
-                    numberString,
-                    CultureInfo.CurrentCulture,
-                    FlowDirection.LeftToRight,
-                    _typeface,
-                    _emSize,
-                    foreground,
-                    VisualTreeHelper.GetDpi(this).PixelsPerDip
+                    numberString, CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
+                    typeface, emSize, foreground, VisualTreeHelper.GetDpi(this).PixelsPerDip
                 );
 
-                double xPos = renderSize.Width - formattedText.WidthIncludingTrailingWhitespace - 2;
+                double xPos = renderSize.Width - formattedText.Width - 4;
                 double yPos = visualLine.GetTextLineVisualYPosition(visualLine.TextLines[0], VisualYPosition.TextTop) - textView.VerticalOffset;
 
-                if (yPos >= 0 && yPos < renderSize.Height)
+                if (yPos > -formattedText.Height && yPos < renderSize.Height)
                 {
                     drawingContext.DrawText(formattedText, new Point(xPos, yPos));
                 }
             }
         }
-    }
-
-    protected override void OnMouseLeftButtonDown(System.Windows.Input.MouseButtonEventArgs e)
-    {
-        base.OnMouseLeftButtonDown(e);
     }
 }

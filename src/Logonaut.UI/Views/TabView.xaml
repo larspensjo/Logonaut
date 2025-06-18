@@ -14,11 +14,7 @@
              d:DataContext="{d:DesignInstance Type=vm:TabViewModel, IsDesignTimeCreatable=False}"
              d:DesignHeight="450" d:DesignWidth="800">
     
-    <!-- Local resources for this specific view -->
     <UserControl.Resources>
-        <!-- NOTE: Most resources like converters are in App.xaml or Converters.xaml -->
-        <!-- The style for TextEditor is defined here because it contains the complex template -->
-        <!-- with the OverviewRuler, which is specific to this view's layout. -->
         <Geometry x:Key="AnchorIconGeometry">M 100 12 A 8 8 0 1 1 99.9 12 M 93 28 H 107 V 129 H 92 Z M 50 40 H 150 V 53 H 50 Z M 100 125 C 73 119 57 104 50 87 M 100 125 C 126 121 142 105 150 87 M 44 80 L 57 86 L 48 95 Z M 143 86 L 157 80 L 151 96 Z</Geometry>
 
         <Style x:Key="AnchorToggleButtonStyle" TargetType="ToggleButton">
@@ -72,23 +68,39 @@
         <Style TargetType="{x:Type avalonEdit:TextEditor}" x:Key="TextEditorWithOverviewRulerStyle">
             <Setter Property="Foreground" Value="{DynamicResource EditorForegroundBrush}" />
             <Setter Property="Background" Value="{DynamicResource EditorBackgroundBrush}" />
-            <Setter Property="FontFamily" Value="Consolas" />
-            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontFamily" Value="{Binding DataContext.EditorFontFamilyName, RelativeSource={RelativeSource AncestorType=Window}}"/>
+            <Setter Property="FontSize" Value="{Binding DataContext.EditorFontSize, RelativeSource={RelativeSource AncestorType=Window}}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="{x:Type avalonEdit:TextEditor}">
                         <Grid Background="{TemplateBinding Background}">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />      <!-- Column 0: ScrollViewer -->
-                                <ColumnDefinition Width="Auto" />   <!-- Column 1: Ruler + Button -->
+                                <ColumnDefinition Width="Auto" />      <!-- Col 0: OriginalLineNumberMargin -->
+                                <ColumnDefinition Width="1" />         <!-- Col 1: Vertical Separator Line -->
+                                <ColumnDefinition Width="*" />         <!-- Col 2: Editor ScrollViewer -->
+                                <ColumnDefinition Width="Auto" />      <!-- Col 3: Overview Ruler -->
                             </Grid.ColumnDefinitions>
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="*" />      <!-- Row 0: Main Area (Ruler) -->
-                                <RowDefinition Height="Auto" />   <!-- Row 1: Button Area -->
+                                <RowDefinition Height="*" />      
+                                <RowDefinition Height="Auto" />   
                             </Grid.RowDefinitions>
+                            
+                            <helpers:OriginalLineNumberMargin
+                                Grid.Column="0" Grid.Row="0" Grid.RowSpan="2"
+                                TextEditor="{Binding RelativeSource={RelativeSource TemplatedParent}}"
+                                ItemsSource="{Binding FilteredLogLines}"
+                                Visibility="{Binding IsOriginalLineNumberMarginVisible}"
+                                Foreground="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"
+                                FontFamily="{Binding FontFamily, RelativeSource={RelativeSource TemplatedParent}}"
+                                FontSize="{Binding FontSize, RelativeSource={RelativeSource TemplatedParent}}"/>
 
+                            <!-- This Border acts as the vertical separator line -->
+                            <Border Grid.Column="1" Grid.Row="0" Grid.RowSpan="2"
+                                    Background="{DynamicResource DividerBrush}"
+                                    Visibility="{Binding IsOriginalLineNumberMarginVisible}" />
+                            
                             <ScrollViewer x:Name="PART_ScrollViewer"
-                                          Grid.Column="0"
+                                          Grid.Column="2"
                                           Grid.Row="0"
                                           Grid.RowSpan="2"
                                           Focusable="False"
@@ -98,10 +110,9 @@
                                           Content="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=TextArea}">
                             </ScrollViewer>
                             
-                            <!-- The Ruler must be named so the code-behind can find it -->
                             <helpers:OverviewRulerMargin
                                 x:Name="OverviewRuler"
-                                Grid.Column="1" Grid.Row="0" Width="18"
+                                Grid.Column="3" Grid.Row="0" Width="18"
                                 Background="{DynamicResource OverviewRuler.Background}"
                                 BorderBrush="{DynamicResource OverviewRuler.BorderBrush}"
                                 BorderThickness="1,0,0,0"
@@ -114,7 +125,7 @@
                                 ThumbBrush="{DynamicResource OverviewRuler.ThumbBrush}"/>
 
                             <ToggleButton Style="{StaticResource AnchorToggleButtonStyle}"
-                                          Grid.Column="1" Grid.Row="1"
+                                          Grid.Column="3" Grid.Row="1"
                                           IsChecked="{Binding IsAutoScrollEnabled, Mode=TwoWay}"
                                           HorizontalAlignment="Center" VerticalAlignment="Center"
                                           Margin="0,1,0,1" />
@@ -128,8 +139,6 @@
     <!-- Main layout grid for the TabView content -->
     <Grid>
         <Grid.RowDefinitions>
-            <!-- NOTE: The toolbar is removed from here. In a tabbed interface, it's better to have one global toolbar -->
-            <!-- that operates on the ActiveTab, rather than one toolbar per tab. This will be handled in MainWindow.xaml -->
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
@@ -137,9 +146,8 @@
         <!-- Log Display Area -->
         <Grid Grid.Row="0">
             <Border Style="{DynamicResource CardPanelStyle}" Padding="5">
-                <!-- The Editor must be named so the code-behind can find it. Bindings are to TabViewModel -->
                 <avalonEdit:TextEditor x:Name="LogOutputEditor"
-                                       FontFamily="Consolas" FontSize="12pt" IsReadOnly="True"
+                                       IsReadOnly="True"
                                        SyntaxHighlighting="{x:Null}" WordWrap="False"
                                        VerticalScrollBarVisibility="Disabled" HorizontalScrollBarVisibility="Auto"
                                        Padding="3,0,0,0" Style="{StaticResource TextEditorWithOverviewRulerStyle}"
@@ -149,7 +157,6 @@
                                        helpers:AvalonEditHelper.SelectLength="{Binding CurrentMatchLength, Mode=OneWay}"
                                        ShowLineNumbers="False"/>
             </Border>
-            <!-- Loading overlay specific to this tab -->
             <Border x:Name="LoadingOverlayContainer" IsHitTestVisible="False" Width="{Binding ElementName=LogOutputEditor, Path=ActualWidth}" Height="{Binding ElementName=LogOutputEditor, Path=ActualHeight}" Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}">
                 <controls:LoadingScanlineOverlay/>
             </Border>
@@ -161,7 +168,6 @@
                 <Button Content="Previous" Command="{Binding PreviousSearchCommand}" Margin="5,0"/>
                 <TextBox x:Name="SearchTextBox" Width="250" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" Margin="5,0">
                     <TextBox.InputBindings>
-                        <!-- Note: Command binding needs to find the command on the DataContext (TabViewModel) -->
                         <KeyBinding Key="Enter" Command="{Binding NextSearchCommand}" />
                     </TextBox.InputBindings>
                 </TextBox>
