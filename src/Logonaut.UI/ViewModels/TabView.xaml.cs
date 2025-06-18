@@ -41,11 +41,32 @@ public partial class TabView : UserControl, IDisposable
         Unloaded += TabView_Unloaded;
     }
 
+    // Remove some AvalonEdit's default command bindings
+    // This allows the command to bubble up to the MainWindow, where we have a global handler.
+    // The bindings are on the internal TextArea, not the top-level TextEditor control.
+    private void RemoveAvalonCommandBindings()
+    {
+        if (_logOutputEditor is null)
+            return; // Will not happen, but just to satisfy the compiler.
+        var pasteBinding = _logOutputEditor.TextArea.CommandBindings
+            .OfType<CommandBinding>()
+            .FirstOrDefault(cb => cb.Command == ApplicationCommands.Paste);
+
+        if (pasteBinding != null)
+        {
+            _logOutputEditor.TextArea.CommandBindings.Remove(pasteBinding);
+            Debug.WriteLine("--> TabView: Successfully removed default Paste command binding from AvalonEdit.TextArea.");
+        }
+        else
+        {
+            Debug.WriteLine("--> TabView: Could not find the default Paste command binding on AvalonEdit.TextArea to remove it.");
+        }        
+    }
+
     /*
      * Handles the setup logic when the TabView is loaded and added to the visual tree.
      * This is the primary point where the View connects with its ViewModel (TabViewModel). It finds the
      * necessary controls within its template (like the TextEditor), passes the editor instance to the
-
      * ViewModel, and subscribes to ViewModel events for UI updates like scrolling.
      */
     private void TabView_Loaded(object sender, RoutedEventArgs e)
@@ -56,17 +77,25 @@ public partial class TabView : UserControl, IDisposable
             return;
         }
 
-        _viewModel = vm;
-        _logOutputEditor = FindName("LogOutputEditor") as TextEditor;
-        _overviewRuler = FindName("OverviewRuler") as OverviewRulerMargin;
+        // --- Get Control References ---
+        // The editor is available directly via its x:Name.
+        _logOutputEditor = this.LogOutputEditor;
+
+        // The OverviewRuler is inside the editor's template, so we must find it there.
+        // First, ensure the template is applied so we can access its children.
+        _logOutputEditor.ApplyTemplate();
+        _overviewRuler = _logOutputEditor.Template.FindName("OverviewRuler", _logOutputEditor) as OverviewRulerMargin;
 
         if (_logOutputEditor is null || _overviewRuler is null)
         {
-            Debug.WriteLine("!!! TabView_Loaded: Could not find LogOutputEditor or OverviewRuler in the template. Aborting setup.");
+            Debug.WriteLine("!!! TabView_Loaded: Could not find LogOutputEditor or OverviewRuler. Aborting setup.");
             return;
         }
 
+        RemoveAvalonCommandBindings();
+
         // --- Connect View and ViewModel ---
+        _viewModel = vm;
         _viewModel.SetLogEditorInstance(_logOutputEditor);
         _viewModel.RequestScrollToEnd += ViewModel_RequestScrollToEnd;
         _viewModel.RequestScrollToLineIndex += ViewModel_RequestScrollToLineIndex;
@@ -83,6 +112,7 @@ public partial class TabView : UserControl, IDisposable
         textView.SetResourceReference(TextView.TagProperty, "PersistedHighlightBrush");
         _selectedIndexTransformer.HighlightBrush = textView.Tag as Brush;
         _selectedIndexTransformer.FilteredLinesSource = _viewModel.FilteredLogLines;
+        // The transformer is an IBackgroundRenderer, so it must be added to the BackgroundRenderers collection.
         textView.BackgroundRenderers.Add(_selectedIndexTransformer);
 
         // Setup ChunkSeparatorRenderer
@@ -132,10 +162,6 @@ public partial class TabView : UserControl, IDisposable
     {
         if (_chunkSeparator != null && _viewModel != null)
         {
-            // We need to know the 'ContextLines' setting, which is global and lives in MainViewModel.
-            // For now, we assume the TabViewModel can't access it. This part will need revisiting when we refactor MainViewModel.
-            // Let's assume a default or that this logic will be refined.
-            // For now, let's just pass 0, as we don't have access to the global setting here yet.
             // TODO: Get ContextLines from a shared settings service or pass it down.
             _chunkSeparator.UpdateChunks(_viewModel.FilteredLogLines, 0);
         }

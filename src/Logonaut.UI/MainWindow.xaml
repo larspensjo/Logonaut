@@ -16,6 +16,7 @@
 
     <Window.InputBindings>
         <KeyBinding Modifiers="Ctrl" Key="G" Command="{x:Static local:MainWindow.GoToLineBoxFocusCommand}"/>
+        <!-- Ctrl+V is now handled by a CommandBinding for ApplicationCommands.Paste -->
         <!-- Ctrl+F binding for search is removed. This is now handled within TabView if needed. -->
         <KeyBinding Key="F3" Command="{Binding NextSearchCommand}" />
         <KeyBinding Key="F3" Modifiers="Shift" Command="{Binding PreviousSearchCommand}" />
@@ -34,8 +35,11 @@
         <CommandBinding Command="{x:Static local:MainWindow.GoToLineBoxFocusCommand}"
                         Executed="GoToLineBoxFocus_Executed"
                         CanExecute="GoToLineBoxFocus_CanExecute"/>
+        <CommandBinding Command="ApplicationCommands.Paste"
+                        Executed="Paste_Executed"
+                        CanExecute="Paste_CanExecute"/>
          <!-- CommandBinding for FocusSearchCommand is removed. -->
-         <CommandBinding Command="{x:Static local:MainWindow.ToggleSimulatorConfigCommand}"
+        <CommandBinding Command="{x:Static local:MainWindow.ToggleSimulatorConfigCommand}"
                         Executed="ToggleSimulatorConfig_Executed"
                         CanExecute="ToggleSimulatorConfig_CanExecute"/>
     </Window.CommandBindings>

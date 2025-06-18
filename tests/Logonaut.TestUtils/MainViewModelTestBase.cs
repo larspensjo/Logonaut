@@ -124,6 +124,7 @@ namespace Logonaut.TestUtils;
     /**
      * Retrieves the internal TabViewModel instance from a MainViewModel using reflection.
      * This is intended for testing purposes to access an internal component.
+     * TODO: Isn't this available in `mainVm.ActiveTabViewModel`?
      */
     protected static TabViewModel GetInternalTabViewModel(MainViewModel mainVm)
     {

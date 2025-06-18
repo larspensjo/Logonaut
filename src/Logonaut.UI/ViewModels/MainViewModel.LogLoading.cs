@@ -33,13 +33,9 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
             Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} MainViewModel.OpenLogFileAsync: File selection cancelled by user.");
             return;
         }
-        
+
         await LoadLogFileCoreAsync(selectedFile);
     }
-
-    // NOTE: HandleInternalTabSourceRestart and OnLogfileRestart have been removed.
-    // The new architecture (Step 2.5) uses MainViewModel.HandleTabSourceRestart, which is subscribed to each tab,
-    // to create a *new* tab for the restarted file, rather than reloading an internal one.
 
     /*
      * Core logic for loading a log file from a given path.
@@ -56,12 +52,8 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
 
         if (ActiveTabViewModel.LogSourceExposeDeprecated is ISimulatorLogSource sim && sim.IsRunning)
         {
-            // Stop the simulator on the active tab before loading a file into it.
             if (ActiveTabViewModel.SourceType == SourceType.Simulator)
             {
-                // We need a way to stop the simulator on a specific tab.
-                // This logic will be fully implemented in the Simulator part of the refactoring.
-                // For now, we assume a simple stop is possible.
                 (ActiveTabViewModel.LogSourceExposeDeprecated as ISimulatorLogSource)?.Stop();
             }
         }
@@ -91,7 +83,7 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
                 this.HighlightTimestamps,
                 this.ShowLineNumbers,
                 this.IsAutoScrollEnabled,
-                null // The restart handler is now set inside TabViewModel's activation for file types
+                null
             );
 
             Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} LoadLogFileCoreAsync: Active tab activated for '{filePath}'.");
@@ -114,32 +106,32 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
     }
 
     /*
-     * Loads log content directly from a text string into the active tab.
-     * It configures the active TabViewModel to handle this pasted data.
+     * Loads log content directly from a text string by creating a new tab.
+     * This follows the plan for Step 2.3.
      */
     public void LoadLogFromText(string text)
     {
-        if (ActiveTabViewModel == null)
-        {
-            Debug.WriteLine("LoadLogFromText: No active tab to paste into. Aborting.");
-            return;
-        }
-        
-        if (ActiveTabViewModel.LogSourceExposeDeprecated is ISimulatorLogSource sim && sim.IsRunning)
-        {
-            (ActiveTabViewModel.LogSourceExposeDeprecated as ISimulatorLogSource)?.Stop();
-        }
+        // 1. Create a new TabViewModel instance for the pasted content.
+        var newTab = new TabViewModel(
+            initialHeader: "[Pasted Content]",
+            initialAssociatedProfileName: ActiveFilterProfile?.Name ?? "Default", // Use current profile
+            initialSourceType: SourceType.Pasted,
+            initialSourceIdentifier: $"pasted_{Guid.NewGuid()}",
+            _sourceProvider,
+            this, // ICommandExecutor
+            _uiContext,
+            _backgroundScheduler
+        );
 
-        ActiveTabViewModel.DeactivateLogProcessing();
-        ActiveTabViewModel.SourceType = SourceType.Pasted;
-        ActiveTabViewModel.SourceIdentifier = $"pasted_{Guid.NewGuid()}";
-        ActiveTabViewModel.Header = "[Pasted Content]";
-        CurrentGlobalLogFilePathDisplay = ActiveTabViewModel.Header;
+        // 2. Add the new tab to the collection and make it active.
+        AddTab(newTab);
+        ActiveTabViewModel = newTab;
 
-        ActiveTabViewModel.LoadPastedContent(text);
+        // 3. Load the pasted text into the new tab's processor.
+        newTab.LoadPastedContent(text);
 
-        // Activate the tab to process the pasted content with filters
-        _ = ActiveTabViewModel.ActivateAsync(
+        // 4. Explicitly activate the new tab to apply filters.
+        _ = newTab.ActivateAsync(
            this.AvailableProfiles,
            this.ContextLines,
            this.HighlightTimestamps,
@@ -148,8 +140,13 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
            null
        ).ContinueWith(t =>
        {
-           if (t.IsFaulted && t.Exception != null) Debug.WriteLine($"Error activating tab after paste: {t.Exception.Flatten().Message}");
+           if (t.IsFaulted && t.Exception != null)
+           {
+               Debug.WriteLine($"Error activating new pasted tab: {t.Exception.Flatten().Message}");
+           }
        });
+
+        CurrentGlobalLogFilePathDisplay = newTab.Header;
     }
 
     /*
@@ -158,9 +155,9 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
     private void ResetCurrentlyActiveTabData()
     {
         if (ActiveTabViewModel == null) return;
-        
+
         ActiveTabViewModel.DeactivateLogProcessing();
-        
+
         if (ActiveTabViewModel.SourceType == SourceType.Pasted)
         {
             ActiveTabViewModel.LoadPastedContent(string.Empty);

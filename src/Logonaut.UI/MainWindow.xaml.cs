@@ -43,7 +43,7 @@ public partial class MainWindow : Window, IDisposable
 
     public MainWindow(MainViewModel viewModel)
     {
-        InitializeComponent(); // This call is essential and was missing.
+        InitializeComponent();
         DataContext = viewModel;
         _viewModel = viewModel;
 
@@ -224,11 +224,23 @@ public partial class MainWindow : Window, IDisposable
         JumpToLineTextBox.Focus();
         JumpToLineTextBox.SelectAll();
     }
-    
-    // This handler is no longer needed since the control is in TabView. The RoutedCommand can be removed from MainWindow.xaml as well.
-    private void FocusSearch_CanExecute(object sender, CanExecuteRoutedEventArgs e) => e.CanExecute = false; // Disable
-    private void FocusSearch_Executed(object sender, ExecutedRoutedEventArgs e) { /* Do nothing */ }
 
+    private void Paste_CanExecute(object sender, CanExecuteRoutedEventArgs e)
+    {
+        if (_viewModel?.PasteCommand != null)
+        {
+            e.CanExecute = _viewModel.PasteCommand.CanExecute(null);
+        }
+        else
+        {
+            e.CanExecute = false;
+        }
+    }
+
+    private void Paste_Executed(object sender, ExecutedRoutedEventArgs e)
+    {
+        _viewModel?.PasteCommand?.Execute(null);
+    }
 
     private void ExitMenuItem_Click(object sender, RoutedEventArgs e) => this.Close();
 

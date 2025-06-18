@@ -240,6 +240,22 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         // Future logic: Create and open a new tab for restartedFilePath.
     }
 
+    /*
+    * Handles a paste command from the UI. It checks the clipboard for text content
+    * and, if found, initiates the process of loading that text into a tab.
+    * This is typically bound to a global hotkey like Ctrl+V.
+    */
+    [RelayCommand(CanExecute = nameof(CanPerformActionWhileNotLoading))]
+    private void Paste()
+    {
+        Debug.WriteLine("Pasting text from clipboard...");
+        if (Clipboard.ContainsText())
+        {
+            string text = Clipboard.GetText();
+            // The LoadLogFromText method will handle creating a new tab
+            LoadLogFromText(text);
+        }
+    }
 
     #region About command
     [ObservableProperty] private bool _isAboutOverlayVisible;
