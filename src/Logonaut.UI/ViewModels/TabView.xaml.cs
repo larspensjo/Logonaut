@@ -215,15 +215,23 @@ public partial class TabView : UserControl, IDisposable
 
     private void LogOutputEditor_SelectionChanged(object? sender, EventArgs e)
     {
-        if (_logOutputEditor != null && _viewModel != null)
+        if (_logOutputEditor == null || _viewModel == null)
+            return;
+
+        if (!_logOutputEditor.TextArea.Selection.IsEmpty)
         {
-            if (!_logOutputEditor.TextArea.Selection.IsEmpty)
+            // Update the ViewModel with the selected text
+            _viewModel.SelectedText = _logOutputEditor.SelectedText;
+
+            if (_viewModel.IsAutoScrollEnabled)
             {
-                if (_viewModel.IsAutoScrollEnabled)
-                {
-                    _viewModel.IsAutoScrollEnabled = false;
-                }
+                _viewModel.IsAutoScrollEnabled = false;
             }
+        }
+        else
+        {
+            // When selection is cleared, update the ViewModel
+            _viewModel.SelectedText = null;
         }
     }
 

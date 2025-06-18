@@ -74,6 +74,9 @@ public partial class TabViewModel : ObservableObject, IDisposable
     [ObservableProperty] private int _highlightedFilteredLineIndex = -1;
     [ObservableProperty] private int _highlightedOriginalLineNumber = -1;
 
+    // This property is updated by the View when the user selects text in the editor.
+    [ObservableProperty] private string? _selectedText;
+
     [NotifyCanExecuteChangedFor(nameof(JumpToLineCommand))]
     [ObservableProperty] private string _targetOriginalLineNumberInput = string.Empty;
 

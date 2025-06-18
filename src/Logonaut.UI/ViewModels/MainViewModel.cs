@@ -221,14 +221,23 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         }
     }
 
-    private void OnTabPropertyChanged(object? sender, PropertyChangedEventArgs e)
+   private void OnTabPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         // If the property change is from the active tab, forward it to MainViewModel's listeners
-        if (sender == ActiveTabViewModel)
+        if (sender is TabViewModel activeTab && activeTab == ActiveTabViewModel)
         {
-            // This is a bit of a shotgun approach. A more targeted approach would be a switch statement.
-            // But for now, this ensures the UI (like the status bar) updates.
-            OnPropertyChanged(e.PropertyName);
+            // Specific handling for properties that MainViewModel cares about
+            if (e.PropertyName == nameof(TabViewModel.SelectedText))
+            {
+                // Update the property that the Filter Palette is bound to.
+                this.SelectedLogTextForFilter = activeTab.SelectedText;
+            }
+            else
+            {
+                // For other properties (like IsLoading, SearchStatusText, etc.),
+                // use the shotgun approach to notify the status bar and other global UI elements.
+                OnPropertyChanged(e.PropertyName);
+            }
         }
     }
 
