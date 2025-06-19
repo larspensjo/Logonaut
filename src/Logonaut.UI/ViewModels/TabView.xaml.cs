@@ -76,6 +76,7 @@ public partial class TabView : UserControl, IDisposable
             Debug.WriteLine("!!! TabView_Loaded: DataContext is not a TabViewModel. Aborting setup.");
             return;
         }
+        Debug.WriteLine($"--> TabView_Loaded: Fired for tab '{vm.Header}'.");
 
         // --- Get Control References ---
         // The editor is available directly via its x:Name.
@@ -92,6 +93,7 @@ public partial class TabView : UserControl, IDisposable
             return;
         }
 
+        Debug.WriteLine("TabView_Loaded: Successfully found LogOutputEditor and OverviewRuler.");
         RemoveAvalonCommandBindings();
 
         // --- Connect View and ViewModel ---
@@ -101,6 +103,8 @@ public partial class TabView : UserControl, IDisposable
         _viewModel.RequestScrollToLineIndex += ViewModel_RequestScrollToLineIndex;
         _viewModel.PropertyChanged += ViewModel_PropertyChanged;
         _overviewRuler.RequestScrollOffset += OverviewRuler_RequestScrollOffset;
+
+        Debug.WriteLine($"--> TabView_Loaded: Called SetLogEditorInstance for tab '{vm.Header}'.");
 
         // --- Setup Editor Features ---
         TextView textView = _logOutputEditor.TextArea.TextView;

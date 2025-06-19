@@ -514,7 +514,17 @@ public partial class TabViewModel : ObservableObject, IDisposable
         _uiContext.Post(state =>
         {
             var lines = (List<FilteredLogLine>)state!;
-            if (_logEditorInstance?.Document != null) ReplaceLogTextInternal(lines);
+            
+            if (_logEditorInstance == null)
+            {
+                Debug.WriteLine($"--> ScheduleLogTextUpdate for '{Header}': SKIPPING text update because _logEditorInstance is NULL.");
+            }
+            else
+            {
+                Debug.WriteLine($"--> ScheduleLogTextUpdate for '{Header}': Found _logEditorInstance. Calling ReplaceLogTextInternal.");
+                ReplaceLogTextInternal(lines);
+            }
+
             UpdateSearchMatches(); // Search matches need to be updated after text changes
         }, linesSnapshot);
     }
