@@ -169,7 +169,7 @@
                                     ItemsSource="{Binding TabViewModels}"
                                     SelectedItem="{Binding ActiveTabViewModel, Mode=TwoWay}"
                                     Margin="5,0,5,5"
-                                    Background="Transparent">
+                                    Style="{DynamicResource ThemeAwareTabControlStyle}">
                             <TabControl.ItemTemplate>
                                 <DataTemplate DataType="{x:Type vm:TabViewModel}">
                                     <TextBlock Text="{Binding DisplayHeader}"/>

@@ -713,6 +713,139 @@
         </Style.Triggers>
     </Style>
 
+    <!-- CLINICAL NEON: TabControl and TabItem Styles -->
+    <Style x:Key="ThemeAwareTabItemStyle" TargetType="TabItem">
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource PanelBackgroundBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Margin" Value="-2,-2,-2,0"/>
+        <Setter Property="Padding" Value="6,2,6,2"/>
+        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TabItem">
+                    <Grid x:Name="templateRoot" SnapsToDevicePixels="true">
+                        <Border x:Name="mainBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Margin="0"
+                                CornerRadius="4,4,0,0"/>
+                        <StackPanel Orientation="Horizontal" Margin="{TemplateBinding Padding}">
+                            <ContentPresenter x:Name="contentPresenter"
+                                              ContentSource="Header"
+                                              Focusable="False"
+                                              HorizontalAlignment="{Binding HorizontalContentAlignment, RelativeSource={RelativeSource AncestorType={x:Type ItemsControl}}}"
+                                              VerticalAlignment="{Binding VerticalContentAlignment, RelativeSource={RelativeSource AncestorType={x:Type ItemsControl}}}"
+                                              SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"
+                                              Margin="0,0,5,0" />
+                            <!-- Close Button -->
+                            <Button x:Name="CloseButton" Command="{Binding CloseTabCommand}" ToolTip="Close Tab">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Background" Value="Transparent"/>
+                                        <Setter Property="BorderThickness" Value="0"/>
+                                        <Setter Property="Width" Value="16"/>
+                                        <Setter Property="Height" Value="16"/>
+                                        <Setter Property="VerticalAlignment" Value="Center"/>
+                                        <Setter Property="Focusable" Value="False"/>
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border Background="Transparent" CornerRadius="8">
+                                                        <TextBlock Text="✕"
+                                                                   HorizontalAlignment="Center"
+                                                                   VerticalAlignment="Center"
+                                                                   Margin="0,-1,0,0"
+                                                                   Foreground="{DynamicResource SecondaryTextBrush}"/>
+                                                    </Border>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                        <Style.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="Background" Value="{DynamicResource ButtonHoverBackgroundBrush}"/>
+                                                <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+                                            </Trigger>
+                                            <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=TabItem}, Path=IsSelected}" Value="True">
+                                                <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <!-- Hover on Inactive Tab -->
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsSelected" Value="False"/>
+                                <Condition Property="IsMouseOver" Value="True"/>
+                            </MultiTrigger.Conditions>
+                            <Setter Property="Background" Value="{DynamicResource ButtonHoverBackgroundBrush}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource TextForegroundBrush}"/>
+                            <Setter TargetName="mainBorder" Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+                        </MultiTrigger>
+                        <!-- Selected Tab -->
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter Property="Panel.ZIndex" Value="1"/>
+                            <Setter Property="Foreground" Value="{DynamicResource TextForegroundBrush}"/>
+                            <Setter TargetName="mainBorder" Property="Background" Value="{DynamicResource WindowBackgroundBrush}"/>
+                            <Setter TargetName="mainBorder" Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+                            <Setter TargetName="mainBorder" Property="BorderThickness" Value="1,1,1,0"/>
+                        </Trigger>
+                        <!-- Disabled Tab -->
+                         <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="ThemeAwareTabControlStyle" TargetType="TabControl">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="ItemContainerStyle" Value="{StaticResource ThemeAwareTabItemStyle}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TabControl">
+                    <Grid KeyboardNavigation.TabNavigation="Local">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <TabPanel x:Name="HeaderPanel"
+                                  Grid.Row="0"
+                                  Panel.ZIndex="1"
+                                  Margin="2,2,2,0"
+                                  IsItemsHost="true"
+                                  KeyboardNavigation.TabIndex="1"
+                                  Background="Transparent" />
+                        <Border x:Name="ContentPanel"
+                                Grid.Row="1"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                KeyboardNavigation.DirectionalNavigation="Contained"
+                                KeyboardNavigation.TabIndex="2"
+                                KeyboardNavigation.TabNavigation="Local">
+                            <ContentPresenter x:Name="PART_SelectedContentHost"
+                                              ContentSource="SelectedContent"
+                                              Margin="{TemplateBinding Padding}"
+                                              SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                        </Border>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- NEON: TreeView Styles -->
     <Style TargetType="TreeView">
         <Setter Property="Background" Value="{DynamicResource PanelBackgroundBrush}"/>
