@@ -119,6 +119,11 @@ This plan outlines the incremental steps to transition Logonaut from a single-vi
         *   It will add this new tab to the `TabViewModels` collection and set it as the `ActiveTabViewModel`.
         *   The original tab (`snapshotTab`) remains in the collection as an inactive snapshot of the pre-reset content.
 
+### Step 2.6: Unique filters for each tab
+
+*   Each tab shall have its own filter profile.
+*   When switching TABs, you also switch filter profile.
+*   Starting a new TAB will use the same profile as the last TAB.
 ---
 
 ## Phase 3: Persistence

@@ -29,6 +29,7 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
 {
     #region Fields
 
+    private const string WelcomeTabIdentifier = "welcome_tab";
     private readonly IScheduler? _backgroundScheduler;
     private readonly ILogSourceProvider _sourceProvider;
     // Global Busy States - For operations not tied to a single tab (e.g., initial app load, global settings save)
@@ -110,7 +111,7 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
             initialHeader: "Welcome",
             initialAssociatedProfileName: ActiveFilterProfile?.Name ?? "Default",
             initialSourceType: SourceType.Pasted,
-            initialSourceIdentifier: "welcome_tab", // A unique identifier
+            initialSourceIdentifier: WelcomeTabIdentifier, // A unique identifier
             _sourceProvider,
             this,
             _uiContext,
@@ -148,6 +149,32 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         tab.PropertyChanged += OnTabPropertyChanged;
         tab.SourceRestartDetected += HandleTabSourceRestart;
         _disposables.Add(tab); // Ensure it gets disposed
+    }
+
+    /*
+     * Checks if the only tab present is the "Welcome" tab and, if so, removes it.
+     * This is called before creating the first user-initiated tab (e.g., from opening a file or pasting text)
+     * to provide a seamless transition from the welcome screen to the user's content.
+     */
+    private void HandleWelcomeTabReplacement()
+    {
+        // Check if the only tab present is the "Welcome" tab.
+        if (TabViewModels.Count == 1 && TabViewModels[0].SourceIdentifier == WelcomeTabIdentifier)
+        {
+            var welcomeTab = TabViewModels[0];
+            Debug.WriteLine("---> MainViewModel: Replacing the initial 'Welcome' tab.");
+    
+            // Unsubscribe from events to prevent memory leaks.
+            welcomeTab.RequestCloseTab -= OnTabRequestClose;
+            welcomeTab.PropertyChanged -= OnTabPropertyChanged;
+            welcomeTab.SourceRestartDetected -= HandleTabSourceRestart;
+    
+            // Directly remove it from the collection.
+            TabViewModels.Remove(welcomeTab);
+    
+            // Dispose it to release its resources (processor, subscriptions, etc.).
+            welcomeTab.Dispose();
+        }
     }
 
     private void CloseTab(TabViewModel tab)

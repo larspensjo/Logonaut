@@ -59,6 +59,9 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
             return;
         }
 
+        // Before creating a new tab, check if we should replace the initial "Welcome" tab.
+        HandleWelcomeTabReplacement();
+
         // Step 1.2: If not, create a new tab.
         Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} MainViewModel.LoadLogFileCoreAsync: Creating new tab for '{filePath}'.");
 
@@ -114,6 +117,9 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
      */
     public void LoadLogFromText(string text)
     {
+        // A new tab is always created for pasted text, so check for replacement first.
+        HandleWelcomeTabReplacement();
+
         // 1. Create a new TabViewModel instance for the pasted content.
         var newTab = new TabViewModel(
             initialHeader: "[Pasted Content]",
