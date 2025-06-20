@@ -7,7 +7,7 @@
         xmlns:converters="clr-namespace:Logonaut.UI.Converters"
         xmlns:local="clr-namespace:Logonaut.UI"
         xmlns:controls="clr-namespace:Logonaut.UI.Controls"
-        xmlns:views="clr-namespace:Logonaut.UI.Views" 
+        xmlns:views="clr-namespace:Logonaut.UI.Views"
         xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
         xmlns:System="clr-namespace:System;assembly=mscorlib"
         Title="Logonaut" Height="600" Width="900"
@@ -17,7 +17,6 @@
     <Window.InputBindings>
         <KeyBinding Modifiers="Ctrl" Key="G" Command="{x:Static local:MainWindow.GoToLineBoxFocusCommand}"/>
         <!-- Ctrl+V is now handled by a CommandBinding for ApplicationCommands.Paste -->
-        <!-- Ctrl+F binding for search is removed. This is now handled within TabView if needed. -->
         <KeyBinding Key="F3" Command="{Binding NextSearchCommand}" />
         <KeyBinding Key="F3" Modifiers="Shift" Command="{Binding PreviousSearchCommand}" />
         <KeyBinding Key="F12" Command="{x:Static local:MainWindow.ToggleSimulatorConfigCommand}"/>
@@ -44,7 +43,7 @@
                         CanExecute="ToggleSimulatorConfig_CanExecute"/>
     </Window.CommandBindings>
 
-    <Grid> 
+    <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/> <!-- Menu -->
             <RowDefinition Height="*"/>    <!-- Main Content Area -->
@@ -93,62 +92,94 @@
                               ResizeBehavior="PreviousAndNext"/>
 
                 <Grid Grid.Column="2">
-                     <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
-                    
-                    <Border Grid.Row="0" Style="{DynamicResource CardPanelStyle}" Padding="5" Margin="5,5,5,0">
-                        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <CheckBox Content="Line Numbers" IsChecked="{Binding ShowLineNumbers}" VerticalAlignment="Center" ToolTip="Show or hide original line numbers" Margin="3"/>
-                            <CheckBox Content="Highlight Timestamps" IsChecked="{Binding HighlightTimestamps}" VerticalAlignment="Center" ToolTip="Highlight timestamp patterns in log entries" Margin="3"/>
-                            <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,2"/>
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <TextBlock Text="Context Lines:" VerticalAlignment="Center" Margin="5,0,2,0"/>
-                                <TextBox Text="{Binding ContextLines, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource StringToIntConverter}}" Width="35" VerticalAlignment="Center" VerticalContentAlignment="Center" Margin="0,0,2,0">
-                                    <TextBox.ToolTip><ToolTip>Enter the number of lines to show before and after a matched line (0 = none).</ToolTip></TextBox.ToolTip>
-                                </TextBox>
-                                <StackPanel Orientation="Vertical" VerticalAlignment="Center">
-                                    <Button Content="▲" Command="{Binding IncrementContextLinesCommand}" Padding="3,0" Margin="0,0,0,1" FontSize="8" MinHeight="10" ToolTip="Increase Context Lines"/>
-                                    <Button Content="▼" Command="{Binding DecrementContextLinesCommand}" Padding="3,0" Margin="0,1,0,0" FontSize="8" MinHeight="10" ToolTip="Decrease Context Lines"/>
-                                </StackPanel>
-                            </StackPanel>
-                            <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,2"/>
-                            <TextBlock Text="Font:" VerticalAlignment="Center" Margin="5,0,2,0"/>
-                            <ComboBox ItemsSource="{Binding AvailableFontFamilies}"
-                                      SelectedItem="{Binding EditorFontFamilyName, Mode=TwoWay}"
-                                      Width="110" Margin="0,0,2,0" VerticalAlignment="Center"
-                                      ToolTip="Select editor font family"/>
-                            <ComboBox ItemsSource="{Binding AvailableFontSizes}"
-                                      SelectedItem="{Binding EditorFontSize, Mode=TwoWay}"
-                                      Width="55" VerticalAlignment="Center"
-                                      ToolTip="Select editor font size"/>
-                            <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,2"/>
-                            <controls:BusyIndicator Width="16" Height="16" VerticalAlignment="Center" Margin="10,0,5,0" ActiveStates="{Binding CurrentBusyStates}" ToolTip="Applying filters or loading data..."/>
-                        </WrapPanel>
-                    </Border>
-                    
-                    <TabControl Grid.Row="1" Margin="5,0,5,5"
-                                ItemsSource="{Binding TabViewModels}"
-                                SelectedItem="{Binding ActiveTabViewModel, Mode=TwoWay}">
-                        
-                        <TabControl.ItemTemplate>
-                            <DataTemplate DataType="{x:Type vm:TabViewModel}">
-                                <TextBlock Text="{Binding DisplayHeader}" Padding="5,2"/>
-                            </DataTemplate>
-                        </TabControl.ItemTemplate>
-                        
-                        <TabControl.ContentTemplate>
-                            <DataTemplate DataType="{x:Type vm:TabViewModel}">
-                                <views:TabView/>
-                            </DataTemplate>
-                        </TabControl.ContentTemplate>
-                        
-                    </TabControl>
 
+                    <!-- This ItemsControl holds the persistent content for all tabs.
+                         Each TabView is created once and then its visibility is toggled. -->
+                    <ItemsControl ItemsSource="{Binding TabViewModels}" Grid.IsSharedSizeScope="True">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <!-- All TabViews will live in this Grid, stacked on top of each other -->
+                                <Grid/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type vm:TabViewModel}">
+                                <!-- This creates one TabView per TabViewModel -->
+                                <views:TabView>
+                                    <views:TabView.Style>
+                                        <Style TargetType="views:TabView">
+                                            <!-- Default to collapsed -->
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Style.Triggers>
+                                                <!-- When this TabViewModel's IsActive property is true,
+                                                     make its corresponding TabView visible. -->
+                                                <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </views:TabView.Style>
+                                </views:TabView>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- This Grid contains the toolbar and the TabControl for headers -->
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        
+                        <!-- Top Toolbar remains the same -->
+                        <Border Grid.Row="0" Style="{DynamicResource CardPanelStyle}" Padding="5" Margin="5,5,5,0">
+                            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <CheckBox Content="Line Numbers" IsChecked="{Binding ShowLineNumbers}" VerticalAlignment="Center" ToolTip="Show or hide original line numbers" Margin="3"/>
+                                <CheckBox Content="Highlight Timestamps" IsChecked="{Binding HighlightTimestamps}" VerticalAlignment="Center" ToolTip="Highlight timestamp patterns in log entries" Margin="3"/>
+                                <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,2"/>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="Context Lines:" VerticalAlignment="Center" Margin="5,0,2,0"/>
+                                    <TextBox Text="{Binding ContextLines, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource StringToIntConverter}}" Width="35" VerticalAlignment="Center" VerticalContentAlignment="Center" Margin="0,0,2,0">
+                                        <TextBox.ToolTip><ToolTip>Enter the number of lines to show before and after a matched line (0 = none).</ToolTip></TextBox.ToolTip>
+                                    </TextBox>
+                                    <StackPanel Orientation="Vertical" VerticalAlignment="Center">
+                                        <Button Content="▲" Command="{Binding IncrementContextLinesCommand}" Padding="3,0" Margin="0,0,0,1" FontSize="8" MinHeight="10" ToolTip="Increase Context Lines"/>
+                                        <Button Content="▼" Command="{Binding DecrementContextLinesCommand}" Padding="3,0" Margin="0,1,0,0" FontSize="8" MinHeight="10" ToolTip="Decrease Context Lines"/>
+                                    </StackPanel>
+                                </StackPanel>
+                                <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,2"/>
+                                <TextBlock Text="Font:" VerticalAlignment="Center" Margin="5,0,2,0"/>
+                                <ComboBox ItemsSource="{Binding AvailableFontFamilies}"
+                                          SelectedItem="{Binding EditorFontFamilyName, Mode=TwoWay}"
+                                          Width="110" Margin="0,0,2,0" VerticalAlignment="Center"
+                                          ToolTip="Select editor font family"/>
+                                <ComboBox ItemsSource="{Binding AvailableFontSizes}"
+                                          SelectedItem="{Binding EditorFontSize, Mode=TwoWay}"
+                                          Width="55" VerticalAlignment="Center"
+                                          ToolTip="Select editor font size"/>
+                                <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,2"/>
+                                <controls:BusyIndicator Width="16" Height="16" VerticalAlignment="Center" Margin="10,0,5,0" ActiveStates="{Binding CurrentBusyStates}" ToolTip="Applying filters or loading data..."/>
+                            </WrapPanel>
+                        </Border>
+
+                        <!-- This TabControl is now ONLY for displaying and selecting headers.
+                             The content area is effectively ignored by making its background transparent. -->
+                        <TabControl Grid.Row="1"
+                                    ItemsSource="{Binding TabViewModels}"
+                                    SelectedItem="{Binding ActiveTabViewModel, Mode=TwoWay}"
+                                    Margin="5,0,5,5"
+                                    Background="Transparent">
+                            <TabControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type vm:TabViewModel}">
+                                    <TextBlock Text="{Binding DisplayHeader}"/>
+                                </DataTemplate>
+                            </TabControl.ItemTemplate>
+                        </TabControl>
+                    </Grid>
                 </Grid>
 
-            </Grid> 
+            </Grid>
 
             <Border x:Name="AboutOverlay"
                     Panel.ZIndex="20"
@@ -157,11 +188,11 @@
                     BorderThickness="1" CornerRadius="5"
                     Padding="15" Margin="20"
                     Visibility="{Binding IsAboutOverlayVisible, Converter={StaticResource BoolToVis}}">
-                
+
                 <views:AboutView />
             </Border>
 
-        </Grid> 
+        </Grid>
 
         <Border Grid.Row="2" Style="{DynamicResource CardPanelStyle}">
              <StackPanel Orientation="Horizontal" VerticalAlignment="Center">

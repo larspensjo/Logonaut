@@ -38,46 +38,49 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
     }
 
     /*
-     * Core logic for loading a log file from a given path.
-     * In Step 1.1, this method reconfigures the *active* TabViewModel to handle the file.
-     * In Step 1.2, this will be updated to create a new tab instead.
+     * Core logic for loading a log file. It checks if a tab for the file already exists.
+     * If so, it activates that tab. If not, it creates a new tab for the file,
+     * adds it to the tab collection, and activates it.
      */
     public async Task LoadLogFileCoreAsync(string filePath)
     {
-        if (ActiveTabViewModel == null)
-        {
-            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} MainViewModel.LoadLogFileCoreAsync: No active tab to load into. Aborting.");
-            return;
-        }
-
-        if (ActiveTabViewModel.LogSourceExposeDeprecated is ISimulatorLogSource sim && sim.IsRunning)
-        {
-            if (ActiveTabViewModel.SourceType == SourceType.Simulator)
-            {
-                (ActiveTabViewModel.LogSourceExposeDeprecated as ISimulatorLogSource)?.Stop();
-            }
-        }
-
         if (string.IsNullOrEmpty(filePath))
         {
             Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} MainViewModel.LoadLogFileCoreAsync: Called with null or empty filePath. Aborting.");
             return;
         }
 
-        Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} MainViewModel.LoadLogFileCoreAsync: Loading '{filePath}' into active tab '{ActiveTabViewModel.Header}'");
-        _uiContext.Post(_ => ActiveTabViewModel.CurrentBusyStates.Add(TabViewModel.LoadingToken), null);
-        CurrentGlobalLogFilePathDisplay = filePath;
+        // Step 1.2: Check if a tab for this file already exists.
+        var existingTab = TabViewModels.FirstOrDefault(t => t.SourceType == SourceType.File && t.SourceIdentifier == filePath);
+        if (existingTab != null)
+        {
+            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} MainViewModel.LoadLogFileCoreAsync: Found existing tab for '{filePath}'. Activating it.");
+            ActiveTabViewModel = existingTab;
+            return;
+        }
+
+        // Step 1.2: If not, create a new tab.
+        Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} MainViewModel.LoadLogFileCoreAsync: Creating new tab for '{filePath}'.");
+
+        var newTab = new TabViewModel(
+            initialHeader: Path.GetFileName(filePath),
+            initialAssociatedProfileName: ActiveFilterProfile?.Name ?? "Default", // Use current profile
+            initialSourceType: SourceType.File,
+            initialSourceIdentifier: filePath,
+            _sourceProvider,
+            this, // ICommandExecutor
+            _uiContext,
+            _backgroundScheduler
+        );
+
+        // This method handles adding to collection and subscribing to events
+        AddTab(newTab);
+        ActiveTabViewModel = newTab; // Set as active
 
         try
         {
-            ActiveTabViewModel.DeactivateLogProcessing();
-
-            // Reconfigure the active tab for the new file
-            ActiveTabViewModel.Header = Path.GetFileName(filePath);
-            ActiveTabViewModel.SourceType = SourceType.File;
-            ActiveTabViewModel.SourceIdentifier = filePath;
-
-            await ActiveTabViewModel.ActivateAsync(
+            // ActivateAsync will handle displaying the busy indicator on the tab itself
+            await newTab.ActivateAsync(
                 this.AvailableProfiles,
                 this.ContextLines,
                 this.HighlightTimestamps,
@@ -86,21 +89,21 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
                 null
             );
 
-            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} LoadLogFileCoreAsync: Active tab activated for '{filePath}'.");
+            Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} LoadLogFileCoreAsync: New tab activated for '{filePath}'.");
 
             _lastOpenedFolderPath = Path.GetDirectoryName(filePath);
             MarkSettingsAsDirty(); // LastOpenedFolderPath changed
+            CurrentGlobalLogFilePathDisplay = filePath;
         }
         catch (Exception ex)
         {
+            // If activation fails, we should close the newly created tab and show an error.
             _uiContext.Post(_ =>
             {
-                ActiveTabViewModel?.CurrentBusyStates.Remove(TabViewModel.LoadingToken);
-                ActiveTabViewModel?.CurrentBusyStates.Remove(TabViewModel.FilteringToken);
-
                 Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} MainViewModel.LoadLogFileCoreAsync: Error opening file '{filePath}': {ex.Message}");
                 MessageBox.Show($"Error opening or reading log file '{filePath}':\n{ex.Message}", "File Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                CurrentGlobalLogFilePathDisplay = null;
+                CurrentGlobalLogFilePathDisplay = null; // Clear display path
+                CloseTab(newTab); // Clean up the failed tab
             }, null);
         }
     }

@@ -36,9 +36,11 @@ public partial class TabView : UserControl, IDisposable
 
     public TabView()
     {
+        Debug.WriteLine("--> TabView: Initializing TabView.");
         InitializeComponent();
         Loaded += TabView_Loaded;
         Unloaded += TabView_Unloaded;
+        Debug.WriteLine("--> TabView: Initialized TabView.");
     }
 
     // Remove some AvalonEdit's default command bindings

@@ -123,6 +123,7 @@ public partial class TabViewModel : ObservableObject, IDisposable
         SynchronizationContext uiContext,
         IScheduler? backgroundScheduler = null) 
     {
+        Debug.WriteLine("TabViewModel ctor for {initialHeader}");
         _header = initialHeader;
         _displayHeader = initialHeader;
         _associatedFilterProfileName = initialAssociatedProfileName;
@@ -470,6 +471,7 @@ public partial class TabViewModel : ObservableObject, IDisposable
 
     public void SetLogEditorInstance(ICSharpCode.AvalonEdit.TextEditor editor)
     {
+        Debug.WriteLine($"SetLogEditorInstance for tab '{Header}'");
         _logEditorInstance = editor;
         if (IsActive && FilteredLogLines.Any()) 
         {
