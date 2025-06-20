@@ -217,34 +217,37 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
     }
     #endregion
 
-
     partial void OnActiveTabViewModelChanged(TabViewModel? oldValue, TabViewModel? newValue)
     {
         Debug.WriteLine($"---> MainViewModel: Active tab changed from '{oldValue?.Header}' to '{newValue?.Header}'");
 
         if (oldValue != null)
         {
+            // Deactivate the old tab's view
+            oldValue.IsActive = false;
+
             // Unsubscribe from events of the old tab
             oldValue.RequestScrollToEnd -= ViewModel_RequestScrollToEnd;
             oldValue.RequestScrollToLineIndex -= ViewModel_RequestScrollToLineIndex;
             oldValue.FilteredLinesUpdated -= ActiveTabViewModel_FilteredLinesUpdated;
 
-            // Deactivate the old tab
-            // oldValue.DeactivateLogProcessing(); // Step 2.1
+            // Note: The more complete DeactivateLogProcessing() is part of Phase 2.1
+            // and would stop the background processing. For now, we only handle UI visibility.
         }
 
         if (newValue != null)
         {
+            // Activate the new tab's view *before* applying settings
+            newValue.IsActive = true;
+            Debug.WriteLine($"---> MainViewModel: Active tab changed from '{oldValue?.Header}' to '{newValue.Header}'. View set to active.");
+
             // Subscribe to events of the new tab
             newValue.RequestScrollToEnd += ViewModel_RequestScrollToEnd;
             newValue.RequestScrollToLineIndex += ViewModel_RequestScrollToLineIndex;
             newValue.FilteredLinesUpdated += ActiveTabViewModel_FilteredLinesUpdated;
 
-            // Apply global settings to the new active tab
+            // Apply global settings to the now-active tab, which will trigger a re-filter.
             ApplyGlobalSettingsToTab(newValue);
-
-            // Activate the new tab
-            // _ = newValue.ActivateAsync(...); // Step 2.1
         }
     }
 
