@@ -13,75 +13,14 @@ It is a Work-in-progress.
 
 **Goal:** Establish the foundation for Undo/Redo by refactoring existing state-changing actions into Command objects. This is crucial *before* implementing DnD actions.
 
-**Tasks:**
-
-1.  **Define Command Interface:** Create an interface like `IUndoableAction` with `void Execute()` and `void Undo()` methods.
-2.  **Implement Concrete Commands:**
-    *   Create classes implementing `IUndoableAction` for *existing* filter actions:
-        *   `AddFilterAction(parentVM, newFilterModel, targetIndex)`
-        *   `RemoveFilterAction(parentVM, removedFilterVM, originalIndex)`
-        *   `ChangeFilterValueAction(filterVM, oldValue, newValue)`
-        *   `ToggleFilterEnabledAction(filterVM, oldState)`
-        *   *(Initially, Move is not needed, as it's not button-based)*
-    *   These commands encapsulate the logic currently in `MainViewModel` or `FilterViewModel` command handlers (e.g., manipulating `Model.SubFilters` and `ViewModel.Children`). Store necessary state for `Undo()`.
-3.  **ViewModel Undo/Redo Logic:**
-    *   Add `UndoStack` (e.g., `Stack<IUndoableAction>`) and `RedoStack` to `MainViewModel`.
-    *   Implement `UndoCommand` and `RedoCommand` in `MainViewModel`:
-        *   `Undo`: Pop from `UndoStack`, call `Undo()`, push onto `RedoStack`. Update `CanExecute`.
-        *   `Redo`: Pop from `RedoStack`, call `Execute()`, push onto `UndoStack`. Update `CanExecute`.
-4.  **Refactor Existing Actions:**
-    *   Modify the *current* button command handlers (`AddFilter`, `RemoveFilterNode`, `ToggleEditNode`, `FilterViewModel.EndEdit`, `FilterViewModel.Enabled` setter) to:
-        *   Create the corresponding `IUndoableAction` object.
-        *   Call its `Execute()` method.
-        *   Push the action onto the `UndoStack`.
-        *   Clear the `RedoStack`.
-        *   Update `UndoCommand`/`RedoCommand` `CanExecute`.
-5.  **UI:** Add "Undo" and "Redo" buttons/menu items bound to the new commands in `MainViewModel`.
-6.  **Testing:** Thoroughly test existing Add/Remove/Edit/Toggle functionality AND the new Undo/Redo feature.
-
-**Result:** Application functions as before, but filter tree modifications are now undoable/redoable. The Command pattern is ready for DnD actions.
+*   **Status:** **[COMPLETED]**
 
 ---
 
 ## Step 1: Implement Filter Palette & Add via DnD
 
 **Goal:** Allow users to add *new* filter nodes by dragging from a palette onto composite nodes in the tree. The old "Add" buttons can be removed.
-
-**Tasks:**
-
-1.  **ViewModel:**
-    *   Define a simple collection in `MainViewModel` representing the available filter *types* (e.g., a list of strings or simple descriptor objects: "Substring", "Regex", "AND", "OR", "NOR").
-2.  **View (XAML):**
-    *   Replace the existing "Add" buttons in `MainWindow.xaml` with an `ItemsControl` (e.g., inside a styled `Border` acting as the palette).
-    *   Bind its `ItemsSource` to the new collection in `MainViewModel`.
-    *   Create a `DataTemplate` for the palette items (e.g., a `Border` with `Icon` + `TextBlock`).
-    *   Style these items to look draggable ("chips").
-3.  **Drag Source (Palette Items):**
-    *   In the code-behind for `MainWindow.xaml` (or using attached behaviors), handle `PreviewMouseLeftButtonDown` on the palette items.
-    *   Inside the handler, call `DragDrop.DoDragDrop`.
-        *   `dragSource`: The palette item itself.
-        *   `data`: Pass the *filter type identifier* (e.g., the string "SubstringType") using `DataFormats.String` or a custom format.
-        *   `allowedEffects`: `DragDropEffects.Copy` (since we're creating a new instance).
-4.  **Drop Target (TreeView):**
-    *   Set `AllowDrop="True"` on the `FilterTreeView`.
-    *   Handle `TreeView.DragEnter` and `TreeView.DragOver`:
-        *   Check if `e.Data.GetDataPresent(DataFormats.String)` is true (or your custom format).
-        *   Hit-test to find the `TreeViewItem` under the cursor.
-        *   Check if the `DataContext` of the target item is a `FilterViewModel` representing a *composite* filter.
-        *   If valid target: Set `e.Effects = DragDropEffects.Copy`. Add visual feedback (target highlight, insertion line - see Step 4 for refinement). Mark `e.Handled = true`.
-        *   If invalid target: Set `e.Effects = DragDropEffects.None`. Mark `e.Handled = true`.
-    *   Handle `TreeView.DragLeave`: Remove visual feedback.
-    *   Handle `TreeView.Drop`:
-        *   Perform the same validation as `DragOver`.
-        *   If valid:
-            *   Get the filter type string from `e.Data.GetData()`.
-            *   Get the target `FilterViewModel` (the composite node).
-            *   Create a new `IFilter` model instance based on the type.
-            *   Determine the drop index (optional, for specific positioning).
-            *   **Crucially:** Create and execute an `AddFilterAction` (from Step 0), passing the target parent VM, the new filter model, and index.
-            *   Remove visual feedback.
-            *   Mark `e.Handled = true`.
-5.  **Testing:** Verify dragging each type from the palette to valid composite nodes adds the correct filter. Test dropping on invalid targets. Test Undo/Redo for adds.
+*   **Status:** **[COMPLETED]**
 
 **Result:** Users can add new filters via DnD from the palette. The old Add buttons are gone. Move/Delete still use original buttons (if any remain) or require context menus/new buttons later.
 

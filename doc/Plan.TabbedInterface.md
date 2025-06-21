@@ -28,28 +28,10 @@ This plan outlines the incremental steps to transition Logonaut from a single-vi
 **Goal:** Introduce the `TabControl` UI and allow opening multiple file-based tabs.
 
 ### Step 1.1: Create `TabView` UserControl and Integrate `TabControl`
-
-*   **Action:** Create a `Logonaut.UI/Views/TabView.xaml` UserControl. Modify `MainWindow.xaml` to replace the direct log display area with a `TabControl`.
-*   **Details:**
-    *   **`TabView.xaml`:** This new UserControl will contain the layout for a single tab's content (the `LogOutputEditor`, its toolbar, search panel, overview ruler, loading overlay, etc.). Its `DataContext` will be a `TabViewModel`. Bindings within this view will be to properties of the `TabViewModel`.
-    *   **`MainWindow.xaml`:** The right-hand panel (where `LogOutputEditor` currently is) will be replaced by a `TabControl`.
-    *   **`MainViewModel.cs`:** Replace the single `_internalTabViewModel` field with an `ObservableCollection<TabViewModel> TabViewModels`. Also, add an `ActiveTabViewModel` property.
-    *   **Binding:**
-        *   Bind `TabControl.ItemsSource` to `TabViewModels`.
-        *   Bind `TabControl.SelectedItem` (TwoWay) to `ActiveTabViewModel`.
-        *   Create a `DataTemplate` for `TabItem.Header` to display `TabViewModel.DisplayHeader` and a close button.
-        *   Create a `TabControl.ContentTemplate` that contains an instance of the new `<views:TabView />`.
+*   **Status:** **[COMPLETED]**
 
 ### Step 1.2: Opening New File-Based Tabs
-
-*   **Action:** Modify "Open Log File" logic in `MainViewModel` to create a new `TabViewModel` for each new file, rather than reusing the single internal one.
-*   **Details:**
-    *   In `MainViewModel.OpenLogFileAsync`:
-        *   **Check for existing tab:** Iterate `TabViewModels`. If a tab with the same `SourceIdentifier` (file path) and `SourceType.File` exists, set it as `ActiveTabViewModel` and return.
-        *   **Create new tab:** If the file is not already open, create a new `TabViewModel` instance, populating its initial properties (header, profile name, source type, identifier).
-        *   Subscribe to its `SourceRestartDetected` event.
-        *   Add the new `TabViewModel` to the `TabViewModels` collection.
-        *   Set the new `TabViewModel` as the `ActiveTabViewModel`.
+*   **Status:** **[COMPLETED]**
 
 ### Step 1.3: Tab Renaming/Notes
 
