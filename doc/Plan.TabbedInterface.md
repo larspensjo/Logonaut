@@ -36,11 +36,7 @@ This plan outlines the incremental steps to transition Logonaut from a single-vi
 ### Step 1.3: Tab Renaming/Notes
 
 *   **Action:** Allow users to rename tab headers for better organization.
-*   **Details:**
-    *   Add an `IsEditingHeader` property to `TabViewModel`.
-    *   Modify the `TabItem.Header` `DataTemplate` to include both a `TextBlock` (for display) and a `TextBox` (for editing), with their visibility bound to `IsEditingHeader`.
-    *   Implement a "Rename" command or a double-click behavior on the tab header to toggle `IsEditingHeader`.
-    *   `TabViewModel.Header`'s setter will update the underlying model and the `DisplayHeader`.
+*   **Status:** **[COMPLETED]**
 
 ---
 

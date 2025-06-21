@@ -98,6 +98,15 @@ public partial class TabViewModel : ObservableObject, IDisposable
     [ObservableProperty] private int _currentMatchLength = 0;
     public string SearchStatusText => GenerateSearchStatusText();
 
+    // --- Header Editing State ---
+    [ObservableProperty] private bool _isEditingHeader;
+    [ObservableProperty] private string _editingHeaderName = string.Empty;
+
+    // --- Header Editing Commands ---
+    public IRelayCommand BeginEditHeaderCommand { get; }
+    public IRelayCommand EndEditHeaderCommand { get; }
+    public IRelayCommand CancelEditHeaderCommand { get; }
+
 
     // Editor instance for this tab (set by the View)
     private ICSharpCode.AvalonEdit.TextEditor? _logEditorInstance;
@@ -141,6 +150,10 @@ public partial class TabViewModel : ObservableObject, IDisposable
         PreviousSearchCommand = new RelayCommand(ExecutePreviousSearch, CanExecuteSearch);
         NextSearchCommand = new RelayCommand(ExecuteNextSearch, CanExecuteSearch);
         JumpToLineCommand = new AsyncRelayCommand(ExecuteJumpToLine, CanExecuteJumpToLine);
+
+        BeginEditHeaderCommand = new RelayCommand(ExecuteBeginEditHeader);
+        EndEditHeaderCommand = new RelayCommand(ExecuteEndEditHeader);
+        CancelEditHeaderCommand = new RelayCommand(ExecuteCancelEditHeader);
 
         CurrentBusyStates.CollectionChanged += (_, _) => OnPropertyChanged(nameof(IsLoading));
     }
@@ -545,7 +558,12 @@ public partial class TabViewModel : ObservableObject, IDisposable
         _logEditorInstance.Document.Text = sb.ToString();
     }
 
-    partial void OnHeaderChanged(string value) => UpdateDisplayHeader();
+    partial void OnHeaderChanged(string value)
+    {
+        UpdateDisplayHeader();
+        IsModified = true; // Mark tab as modified for persistence
+    }
+
     partial void OnLastActivityTimestampChanged(DateTime? value) => UpdateDisplayHeader();
     partial void OnIsActiveChanged(bool value) => UpdateDisplayHeader();
 
@@ -553,6 +571,30 @@ public partial class TabViewModel : ObservableObject, IDisposable
     {
         if (IsActive || LastActivityTimestamp == null) DisplayHeader = Header;
         else DisplayHeader = $"{Header} (Paused @ {LastActivityTimestamp:HH:mm:ss})";
+    }
+
+    private void ExecuteBeginEditHeader()
+    {
+        Debug.WriteLine($"--> BeginEditHeader for '{Header}'");
+        EditingHeaderName = Header;
+        IsEditingHeader = true;
+    }
+
+    private void ExecuteEndEditHeader()
+    {
+        if (IsEditingHeader) // Only commit if we are in editing mode
+        {
+            if (!string.IsNullOrWhiteSpace(EditingHeaderName) && Header != EditingHeaderName)
+            {
+                Header = EditingHeaderName; // This will trigger OnHeaderChanged
+            }
+            IsEditingHeader = false;
+        }
+    }
+
+    private void ExecuteCancelEditHeader()
+    {
+        IsEditingHeader = false;
     }
 
     public void ApplyFiltersFromProfile(IEnumerable<FilterProfileViewModel> availableProfiles, int globalContextLines)

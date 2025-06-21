@@ -537,7 +537,6 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         UpdateActiveFilterMatchingStatus();
     }
 
-
     // GetCurrentDocumentText for MainViewModel (e.g., for filter matching status)
     // should now get it from the active tab's perspective.
     private string GetCurrentDocumentText()

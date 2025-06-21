@@ -27,6 +27,7 @@
 
     <Window.Resources>
         <converters:BoolToVisibilityConverter x:Key="BoolToVis"/>
+        <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVis"/>
         <converters:StringToIntConverter x:Key="StringToIntConverter" />
     </Window.Resources>
 
@@ -138,7 +139,31 @@
                                 Style="{DynamicResource ThemeAwareTabControlStyle}">
                         <TabControl.ItemTemplate>
                             <DataTemplate DataType="{x:Type vm:TabViewModel}">
-                                <TextBlock Text="{Binding DisplayHeader}"/>
+                                <Grid Background="Transparent">
+                                    <Grid.InputBindings>
+                                        <MouseBinding MouseAction="LeftDoubleClick"
+                                                      Command="{Binding BeginEditHeaderCommand}" />
+                                    </Grid.InputBindings>
+                                    
+                                    <TextBlock Text="{Binding DisplayHeader}" VerticalAlignment="Center"
+                                               Visibility="{Binding IsEditingHeader, Converter={StaticResource InverseBoolToVis}}"/>
+
+                                    <TextBox Text="{Binding EditingHeaderName, UpdateSourceTrigger=PropertyChanged}"
+                                             VerticalAlignment="Center"
+                                             Visibility="{Binding IsEditingHeader, Converter={StaticResource BoolToVis}}"
+                                             BorderThickness="0"
+                                             helpers:FocusHelper.IsFocused="{Binding IsEditingHeader}">
+                                        <i:Interaction.Triggers>
+                                            <i:EventTrigger EventName="LostFocus">
+                                                <i:InvokeCommandAction Command="{Binding EndEditHeaderCommand}" />
+                                            </i:EventTrigger>
+                                        </i:Interaction.Triggers>
+                                        <TextBox.InputBindings>
+                                            <KeyBinding Key="Enter" Command="{Binding EndEditHeaderCommand}" />
+                                            <KeyBinding Key="Escape" Command="{Binding CancelEditHeaderCommand}" />
+                                        </TextBox.InputBindings>
+                                    </TextBox>
+                                </Grid>
                             </DataTemplate>
                         </TabControl.ItemTemplate>
                         <!-- This empty template prevents the TabControl from rendering its own content area -->
