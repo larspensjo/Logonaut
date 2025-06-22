@@ -11,9 +11,7 @@ public class SimulatorLogSource : ISimulatorLogSource
 {
     private readonly Subject<string> _logLinesSubject = new Subject<string>();
     private Timer? _timer;
-    private bool _isRunning = false;
-    private bool _isDisposed = false;
-    private long _lineCounter = 0;
+    private bool _isRunning = false;    private long _lineCounter = 0;
     private int _errorFrequency = 100; // Default: 1 error every 100 lines
     private readonly string[] _logLevels = { "INFO", "WARN", "DEBUG", "TRACE" };
     private readonly Random _random = new();
@@ -36,7 +34,6 @@ public class SimulatorLogSource : ISimulatorLogSource
     {
         lock(_lock)
         {
-            if (_isDisposed) throw new ObjectDisposedException(nameof(SimulatorLogSource));
             Debug.WriteLine($"---> SimulatorLogSource: Prepare called (Identifier: '{sourceIdentifier}').");
             StopInternal(); // Ensure stopped before prepare
             _lineCounter = 0;
@@ -54,7 +51,6 @@ public class SimulatorLogSource : ISimulatorLogSource
     {
          lock (_lock)
          {
-            if (_isDisposed) throw new ObjectDisposedException(nameof(SimulatorLogSource));
             if (_isRunning) return; // Already running
 
             Debug.WriteLine($"---> SimulatorLogSource: Starting (Rate: {LinesPerSecond} LPS).");
@@ -95,7 +91,6 @@ public class SimulatorLogSource : ISimulatorLogSource
     {
         lock (_lock)
         {
-            if (_isDisposed) return;
             int newRate = Math.Max(0, newLinesPerSecond);
             if (newRate == _linesPerSecond) return; // No change needed
 
@@ -125,7 +120,6 @@ public class SimulatorLogSource : ISimulatorLogSource
 
     public Task GenerateBurstAsync(int lineCount)
     {
-        if (_isDisposed) throw new ObjectDisposedException(nameof(SimulatorLogSource));
         if (lineCount <= 0) return Task.CompletedTask;
 
         Debug.WriteLine($"---> SimulatorLogSource: Starting burst of {lineCount} lines.");
@@ -140,9 +134,6 @@ public class SimulatorLogSource : ISimulatorLogSource
                 // Use a local counter for the burst itself for clarity in messages
                 for (int i = 0; i < lineCount; i++)
                 {
-                    // Check for disposal periodically if very large bursts are expected
-                    if (_isDisposed) break;
-
                     long globalLineNum = Interlocked.Increment(ref _lineCounter); // Still use global counter
                     string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
                     string level = _logLevels[_random.Next(_logLevels.Length)];
@@ -192,7 +183,7 @@ public class SimulatorLogSource : ISimulatorLogSource
 
     private void GenerateLogLineCallback(object? state)
     {
-        if (!_isRunning || _isDisposed || _timer == null) return;
+        if (!_isRunning || _timer == null) return;
 
         long currentLine = Interlocked.Increment(ref _lineCounter);
         string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
@@ -247,9 +238,7 @@ public class SimulatorLogSource : ISimulatorLogSource
     {
          lock (_lock)
          {
-            if (_isDisposed) return;
             Debug.WriteLine($"---> SimulatorLogSource: Dispose called.");
-            _isDisposed = true;
             StopInternal();
             _logLinesSubject?.OnCompleted();
             _logLinesSubject?.Dispose();

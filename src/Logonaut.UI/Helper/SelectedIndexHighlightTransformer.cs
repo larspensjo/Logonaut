@@ -38,9 +38,6 @@ public class SelectedIndexHighlightTransformer : IBackgroundRenderer
             return;
         }
 
-        // The IsDisposed check was removed as it's not a valid property on TextView.
-        // The try-catch and null checks are sufficient.
-
         // AvalonEdit lines are 1-based, SelectedIndex is 0-based
         var line = textView.Document.GetLineByNumber(SelectedIndex + 1);
         if (line == null || line.IsDeleted)
