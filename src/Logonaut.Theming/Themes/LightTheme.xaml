@@ -630,7 +630,18 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="TabItem">
-                    <Grid x:Name="templateRoot" SnapsToDevicePixels="true">
+                    <Grid x:Name="templateRoot" SnapsToDevicePixels="true" ToolTip="Double-click to rename">
+                        <Grid.Style>
+                            <Style TargetType="Grid">
+                                <Style.Triggers>
+                                    <!-- Hide the tooltip when renaming is active -->
+                                    <DataTrigger Binding="{Binding IsEditingHeader}" Value="True">
+                                        <Setter Property="ToolTip" Value="{x:Null}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Grid.Style>
+
                         <Border x:Name="mainBorder"
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
