@@ -1,18 +1,23 @@
 using Logonaut.TestUtils;
 using Logonaut.UI.ViewModels;
 using Logonaut.Common;
-using System.Threading.Tasks; // Added for Task
+using System.Threading.Tasks;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Logonaut.UI.Tests.ViewModels;
 
 [TestClass] public class TabViewModel_JumpToLineTests : MainViewModelTestBase
 {
+    private TabViewModel _tabViewModel = null!;
+
     [TestInitialize] public override void TestInitialize()
     {
         // Arrange
         base.TestInitialize();
-        base.SetupMainAndTabViewModel();
+        base.SetupMainViewModel();
+        var activeTab = _viewModel.ActiveTabViewModel;
+        Assert.IsNotNull(activeTab, "ActiveTabViewModel should not be null after setup.");
+        _tabViewModel = activeTab;
 
         _tabViewModel.FilteredLogLines.Clear();
         _tabViewModel.FilteredLogLines.Add(new FilteredLogLine(10, "Line Ten"));
@@ -25,6 +30,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         _tabViewModel.HighlightedFilteredLineIndex = -1;
     }
 
+    // Verifies: [ReqJumpToLineFeatureV1]
     [TestMethod] public async Task JumpToLineCommand_ValidInputLineFound_SetsHighlightIndex()
     {
         // Arrange
@@ -84,22 +90,24 @@ namespace Logonaut.UI.Tests.ViewModels;
         // Act
         await _tabViewModel.JumpToLineCommand.ExecuteAsync(null);
 
-        // Assert: After the command and its internal delay are fully complete.
+        // Assert
         Assert.IsFalse(_tabViewModel.IsJumpTargetInvalid, "Invalid feedback should be false after command completion.");
         Assert.IsTrue(string.IsNullOrEmpty(_tabViewModel.JumpStatusMessage), "Status message should be clear after command completion.");
     }
 
+    // Verifies: [ReqJumpToLineFeatureV1]
     [TestMethod] public void HighlightedFilteredLineIndex_Set_UpdatesTargetInput()
     {
-        // Arrange - done in TestInitialize
+        // Arrange
+        // (Done in TestInitialize)
 
-        // Act: Select line index 2 (Original Line 50)
+        // Act
         _tabViewModel.HighlightedFilteredLineIndex = 2;
 
         // Assert
         Assert.AreEqual("50", _tabViewModel.TargetOriginalLineNumberInput, "Target input not updated for index 2.");
 
-        // Act: Deselect line
+        // Act
         _tabViewModel.HighlightedFilteredLineIndex = -1;
 
         // Assert

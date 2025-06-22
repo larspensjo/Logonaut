@@ -17,62 +17,53 @@ namespace Logonaut.UI.Tests.ViewModels;
  */
 [TestClass] public class MainViewModel_FilterNodeTests : MainViewModelTestBase
 {
-
     [TestInitialize] public override void TestInitialize()
     {
+        // Arrange
         base.TestInitialize();
-        base.SetupMainAndTabViewModel(); // Sets up _viewModel and _tabViewModel
+        base.SetupMainViewModel();
 
-        // Ensure the active profile is "Default" and has an AndFilter root for these tests.
         var defaultProfileVM = _viewModel.AvailableProfiles.FirstOrDefault(p => p.Name == "Default");
         Assert.IsNotNull(defaultProfileVM, "Default profile VM not found after base initialization.");
 
-        // Set RootFilter to AndFilter if it's not already or if it's null
         if (defaultProfileVM.Model.RootFilter is not AndFilter)
         {
-            defaultProfileVM.SetModelRootFilter(new AndFilter()); // This also refreshes RootFilterViewModel
+            defaultProfileVM.SetModelRootFilter(new AndFilter());
         }
-        // Ensure it's the active profile
         if (_viewModel.ActiveFilterProfile != defaultProfileVM)
         {
             _viewModel.ActiveFilterProfile = defaultProfileVM;
         }
-        _mockSettings?.Reset(); // Reset after ensuring profile state
+        _mockSettings?.Reset();
     }
 
+    // Verifies: [ReqFilterAddNodev1]
     [TestMethod] public void AddFilterCommand_EmptyProfile_SetsRoot_Selects_UpdatesAndSaves()
     {
-        // Arrange: Ensure profile is empty first
+        // Arrange
         var emptyProfileModel = new FilterProfile("Empty", null);
         var emptyProfileVM = new FilterProfileViewModel(emptyProfileModel, _viewModel);
         _viewModel.AvailableProfiles.Clear();
         _viewModel.AvailableProfiles.Add(emptyProfileVM);
         _viewModel.ActiveFilterProfile = emptyProfileVM;
-
         Assert.IsNull(_viewModel.ActiveFilterProfile?.RootFilterViewModel, "Pre-condition: Root VM should be null.");
         _mockSettings.Reset();
 
         // Act
         _viewModel.AddFilterCommand.Execute("SubstringType");
+        var activeTab = _viewModel.ActiveTabViewModel;
+        Assert.IsNotNull(activeTab, "Active tab should not be null.");
 
-        // Assert ViewModel State
+        // Assert
         Assert.IsNotNull(_viewModel.ActiveFilterProfile?.RootFilterViewModel, "Root VM should be created.");
         var rootVM = _viewModel.ActiveFilterProfile.RootFilterViewModel;
         Assert.IsInstanceOfType(rootVM.Filter, typeof(SubstringFilter), "Root filter type mismatch.");
         Assert.AreEqual(1, _viewModel.ActiveTreeRootNodes.Count, "ActiveTreeRootNodes count mismatch.");
         Assert.AreSame(rootVM, _viewModel.ActiveTreeRootNodes[0], "ActiveTreeRootNodes content mismatch.");
         Assert.AreSame(rootVM, _viewModel.SelectedFilterNode, "New root should be selected.");
-
-        // Assert Observable Effects (FilteredLogLines is now managed by TabViewModel)
-        // After a filter change, TriggerFilterUpdate is called, which leads to LogDataProcessor emitting updates.
-        // For an empty document and any filter, the result is 0 filtered lines.
-        Assert.AreEqual(0, _viewModel.FilteredLogLines.Count, "FilteredLogLines (delegated) should be empty after update on empty doc.");
-        Assert.AreEqual(0, _tabViewModel.FilteredLogLinesCount, "TabViewModel.FilteredLogLinesCount should be 0.");
-
-        // Simulate saving before checking persistence
+        Assert.AreEqual(0, activeTab.FilteredLogLines.Count, "FilteredLogLines should be empty after update on empty doc.");
+        Assert.AreEqual(0, activeTab.FilteredLogLinesCount, "TabViewModel.FilteredLogLinesCount should be 0.");
         _viewModel.SaveCurrentSettings();
-
-        // Assert Persistence 
         Assert.IsTrue(_mockSettings.SaveCalledCount > 0, "Settings were not saved.");
         Assert.IsNotNull(_mockSettings.SavedSettings, "Saved settings is null.");
         Assert.AreEqual("Empty", _mockSettings.SavedSettings?.LastActiveProfileName);
@@ -81,6 +72,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         Assert.IsFalse(_viewModel.UndoCommand.CanExecute(null), "Undo should NOT be enabled for direct root set.");
     }
 
+    // Verifies: [ReqFilterAddSubNodev1]
     [TestMethod] public void AddFilterCommand_CompositeSelected_ExecutesAddAction_UpdatesAndSaves()
     {
         // Arrange
@@ -92,29 +84,24 @@ namespace Logonaut.UI.Tests.ViewModels;
 
         // Act
         _viewModel.AddFilterCommand.Execute("RegexType");
+        var activeTab = _viewModel.ActiveTabViewModel;
+        Assert.IsNotNull(activeTab, "Active tab should not be null.");
 
-        // Assert ViewModel State
+
+        // Assert
         Assert.AreEqual(1, root.Children.Count, "Child count mismatch.");
         var child = root.Children[0];
         Assert.IsInstanceOfType(child.Filter, typeof(RegexFilter), "Child filter type mismatch.");
         Assert.AreSame(child, _viewModel.SelectedFilterNode, "New child should be selected.");
-
-        // Assert Observable Effects
-        Assert.AreEqual(0, _viewModel.FilteredLogLines.Count, "FilteredLogLines (delegated) should be empty after update on empty doc.");
-        Assert.AreEqual(0, _tabViewModel.FilteredLogLinesCount, "TabViewModel.FilteredLogLinesCount should be 0.");
-
-        // Simulate saving before checking persistence
+        Assert.AreEqual(0, activeTab.FilteredLogLines.Count, "FilteredLogLines should be empty after update on empty doc.");
+        Assert.AreEqual(0, activeTab.FilteredLogLinesCount, "TabViewModel.FilteredLogLinesCount should be 0.");
         _viewModel.SaveCurrentSettings();
-
-        // Assert Persistence 
         Assert.IsTrue(_mockSettings.SaveCalledCount > 0, "Settings were not saved.");
         Assert.IsNotNull(_mockSettings.SavedSettings, "Saved settings object is null.");
-
         var savedProfile = _mockSettings.SavedSettings?.FilterProfiles.FirstOrDefault(p => p.Name == "Default");
         Assert.IsNotNull(savedProfile, "Saved profile 'Default' not found.");
         Assert.IsNotNull(savedProfile.RootFilter, "Saved profile 'Default' has a null RootFilter.");
         Assert.IsInstanceOfType(savedProfile.RootFilter, typeof(AndFilter), $"Saved profile 'Default' RootFilter is type {savedProfile.RootFilter?.GetType().Name}, expected AndFilter.");
-
         var savedRoot = savedProfile?.RootFilter as AndFilter;
         Assert.IsNotNull(savedRoot, "Saved root filter is null or not AndFilter.");
         Assert.AreEqual(1, savedRoot.SubFilters.Count, "Saved child count mismatch.");
@@ -122,6 +109,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         Assert.IsTrue(_viewModel.UndoCommand.CanExecute(null), "Undo should be enabled.");
     }
 
+    // Verifies: [ReqFilterRemoveNodev1]
     [TestMethod] public void RemoveFilterNodeCommand_RootSelected_ClearsTree_UpdatesAndSaves()
     {
         // Arrange
@@ -132,51 +120,44 @@ namespace Logonaut.UI.Tests.ViewModels;
 
         // Act
         _viewModel.RemoveFilterNodeCommand.Execute(null);
+        var activeTab = _viewModel.ActiveTabViewModel;
+        Assert.IsNotNull(activeTab, "Active tab should not be null.");
 
-        // Assert ViewModel State
+        // Assert
         Assert.IsNull(_viewModel.ActiveFilterProfile?.RootFilterViewModel, "Root VM should be null after removal.");
         Assert.AreEqual(0, _viewModel.ActiveTreeRootNodes.Count, "ActiveTreeRootNodes should be empty.");
         Assert.IsNull(_viewModel.SelectedFilterNode, "Selected node should be null.");
-
-        // Assert Observable Effects
-        Assert.AreEqual(0, _viewModel.FilteredLogLines.Count, "FilteredLogLines (delegated) should be empty after update on empty doc.");
-        Assert.AreEqual(0, _tabViewModel.FilteredLogLinesCount, "TabViewModel.FilteredLogLinesCount should be 0.");
-
-        // Simulate saving before checking persistence
+        Assert.AreEqual(0, activeTab.FilteredLogLines.Count, "FilteredLogLines should be empty after update on empty doc.");
+        Assert.AreEqual(0, activeTab.FilteredLogLinesCount, "TabViewModel.FilteredLogLinesCount should be 0.");
         _viewModel.SaveCurrentSettings();
-
-        // Assert Persistence
         Assert.IsTrue(_mockSettings.SaveCalledCount > 0, "Settings were not saved.");
         Assert.IsNotNull(_mockSettings.SavedSettings);
         Assert.IsNull(_mockSettings.SavedSettings?.FilterProfiles.FirstOrDefault(p => p.Name == "Default")?.RootFilter, "Saved root filter should be null.");
         Assert.IsFalse(_viewModel.UndoCommand.CanExecute(null), "Undo should NOT be enabled for direct root removal.");
     }
 
+    // Verifies: [ReqFilterRemoveNodev1]
     [TestMethod] public void RemoveFilterNodeCommand_ChildSelected_ExecutesRemoveAction_UpdatesAndSaves()
     {
         // Arrange
         var root = _viewModel.ActiveFilterProfile?.RootFilterViewModel; Assert.IsNotNull(root);
         _viewModel.SelectedFilterNode = root;
-        _viewModel.AddFilterCommand.Execute("SubstringType"); // Adds a child
+        _viewModel.AddFilterCommand.Execute("SubstringType");
         var child = root.Children[0];
         _viewModel.SelectedFilterNode = child;
         _mockSettings.Reset();
 
         // Act
         _viewModel.RemoveFilterNodeCommand.Execute(null);
+        var activeTab = _viewModel.ActiveTabViewModel;
+        Assert.IsNotNull(activeTab, "Active tab should not be null.");
 
-        // Assert ViewModel State
+        // Assert
         Assert.AreEqual(0, root.Children.Count, "Child should be removed from parent VM.");
         Assert.AreSame(root, _viewModel.SelectedFilterNode, "Parent node should be selected.");
-
-        // Assert Observable Effects
-        Assert.AreEqual(0, _viewModel.FilteredLogLines.Count, "FilteredLogLines (delegated) should be empty after update on empty doc.");
-        Assert.AreEqual(0, _tabViewModel.FilteredLogLinesCount, "TabViewModel.FilteredLogLinesCount should be 0.");
-
-        // Simulate saving before checking persistence
+        Assert.AreEqual(0, activeTab.FilteredLogLines.Count, "FilteredLogLines should be empty after update on empty doc.");
+        Assert.AreEqual(0, activeTab.FilteredLogLinesCount, "TabViewModel.FilteredLogLinesCount should be 0.");
         _viewModel.SaveCurrentSettings();
-
-        // Assert Persistence
         Assert.IsTrue(_mockSettings.SaveCalledCount > 0, "Settings were saved.");
         var savedRoot = _mockSettings.SavedSettings?.FilterProfiles.FirstOrDefault(p => p.Name == "Default")?.RootFilter as AndFilter;
         Assert.IsNotNull(savedRoot, "Saved root filter is null or not AndFilter.");
@@ -184,15 +165,15 @@ namespace Logonaut.UI.Tests.ViewModels;
         Assert.IsTrue(_viewModel.UndoCommand.CanExecute(null), "Undo should be enabled.");
     }
 
+    // Verifies: [ReqFilterRuleEditingv1]
     [TestMethod] public void FilterViewModel_EndEdit_ExecutesChangeAction_UpdatesAndSaves()
     {
         // Arrange
-        var editProfileModel = new FilterProfile("EditProfile", null); // Use a distinct profile name
+        var editProfileModel = new FilterProfile("EditProfile", null);
         var editProfileVM = new FilterProfileViewModel(editProfileModel, _viewModel);
         _viewModel.AvailableProfiles.Clear();
         _viewModel.AvailableProfiles.Add(editProfileVM);
         _viewModel.ActiveFilterProfile = editProfileVM;
-
         _viewModel.AddFilterCommand.Execute("SubstringType");
         var node = _viewModel.ActiveFilterProfile?.RootFilterViewModel; Assert.IsNotNull(node);
         _viewModel.SelectedFilterNode = node;
@@ -203,19 +184,15 @@ namespace Logonaut.UI.Tests.ViewModels;
         // Act
         node.FilterText = updatedValue;
         node.EndEditCommand.Execute(null);
+        var activeTab = _viewModel.ActiveTabViewModel;
+        Assert.IsNotNull(activeTab, "Active tab should not be null.");
 
-        // Assert ViewModel State
+        // Assert
         Assert.IsFalse(node.IsEditing, "Node should not be in editing state.");
         Assert.AreEqual(updatedValue, node.Filter.Value, "Model value mismatch after edit.");
-
-        // Assert Observable Effects
-        Assert.AreEqual(0, _viewModel.FilteredLogLines.Count, "FilteredLogLines (delegated) should be empty after update on empty doc.");
-        Assert.AreEqual(0, _tabViewModel.FilteredLogLinesCount, "TabViewModel.FilteredLogLinesCount should be 0.");
-
-        // Simulate saving before checking persistence
+        Assert.AreEqual(0, activeTab.FilteredLogLines.Count, "FilteredLogLines should be empty after update on empty doc.");
+        Assert.AreEqual(0, activeTab.FilteredLogLinesCount, "TabViewModel.FilteredLogLinesCount should be 0.");
         _viewModel.SaveCurrentSettings();
-
-        // Assert Persistence 
         Assert.IsTrue(_mockSettings.SaveCalledCount > 0, "Settings were saved.");
         var savedRoot = _mockSettings.SavedSettings?.FilterProfiles.FirstOrDefault(p => p.Name == "EditProfile")?.RootFilter as SubstringFilter;
         Assert.IsNotNull(savedRoot, "Saved root filter is null or not SubstringFilter.");
@@ -223,15 +200,15 @@ namespace Logonaut.UI.Tests.ViewModels;
         Assert.IsTrue(_viewModel.UndoCommand.CanExecute(null), "Undo should be enabled.");
     }
 
+    // Verifies: [ReqFilterEnableDisablev1]
     [TestMethod] public void FilterViewModel_EnabledChanged_ExecutesToggleAction_UpdatesAndSaves()
     {
         // Arrange
-        var toggleProfileModel = new FilterProfile("ToggleProfile", null); // Use a distinct profile name
+        var toggleProfileModel = new FilterProfile("ToggleProfile", null);
         var toggleProfileVM = new FilterProfileViewModel(toggleProfileModel, _viewModel);
         _viewModel.AvailableProfiles.Clear();
         _viewModel.AvailableProfiles.Add(toggleProfileVM);
         _viewModel.ActiveFilterProfile = toggleProfileVM;
-
         _viewModel.AddFilterCommand.Execute("SubstringType");
         var node = _viewModel.ActiveFilterProfile?.RootFilterViewModel; Assert.IsNotNull(node);
         _viewModel.SelectedFilterNode = node;
@@ -239,19 +216,15 @@ namespace Logonaut.UI.Tests.ViewModels;
         _mockSettings.Reset();
 
         // Act
-        node.Enabled = false; // This triggers the command executor
+        node.Enabled = false;
+        var activeTab = _viewModel.ActiveTabViewModel;
+        Assert.IsNotNull(activeTab, "Active tab should not be null.");
 
-        // Assert Model State
+        // Assert
         Assert.IsFalse(node.Filter.Enabled, "Model enabled state mismatch.");
-
-        // Assert Observable Effects
-        Assert.AreEqual(0, _viewModel.FilteredLogLines.Count, "FilteredLogLines (delegated) should be empty after update on empty doc.");
-        Assert.AreEqual(0, _tabViewModel.FilteredLogLinesCount, "TabViewModel.FilteredLogLinesCount should be 0.");
-
-        // Simulate saving before checking persistence
+        Assert.AreEqual(0, activeTab.FilteredLogLines.Count, "FilteredLogLines should be empty after update on empty doc.");
+        Assert.AreEqual(0, activeTab.FilteredLogLinesCount, "TabViewModel.FilteredLogLinesCount should be 0.");
         _viewModel.SaveCurrentSettings();
-
-        // Assert Persistence 
         Assert.IsTrue(_mockSettings.SaveCalledCount > 0, "Settings should be saved on Enabled change via Execute.");
         Assert.IsNotNull(_mockSettings.SavedSettings);
         var savedRoot = _mockSettings.SavedSettings?.FilterProfiles.FirstOrDefault(p => p.Name == "ToggleProfile")?.RootFilter as SubstringFilter;
@@ -260,6 +233,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         Assert.IsTrue(_viewModel.UndoCommand.CanExecute(null), "Undo should be enabled.");
     }
 
+    // Verifies: [ReqUndoRedoSupportv1]
     [TestMethod] public void Execute_SingleAction_ShouldEnableUndoAndDisableRedo()
     {
         // Arrange
@@ -275,6 +249,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         Assert.IsFalse(_viewModel.RedoCommand.CanExecute(null), "Redo should remain disabled after execute.");
     }
 
+    // Verifies: [ReqUndoRedoSupportv1]
     [TestMethod] public void Undo_AfterSingleAction_ShouldDisableUndoEnableRedoAndRestoreState()
     {
         // Arrange
@@ -295,6 +270,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         Assert.AreEqual(initialChildCount, ((AndFilter)rootVm.Filter).SubFilters.Count, "Model child count should be restored after undo.");
     }
 
+    // Verifies: [ReqUndoRedoSupportv1]
     [TestMethod] public void Redo_AfterUndo_ShouldEnableUndoDisableRedoAndRestoreState()
     {
         // Arrange
@@ -317,6 +293,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         Assert.IsTrue(((AndFilter)rootVm.Filter).SubFilters.Contains(addedFilterModel), "Redone child model should exist.");
     }
 
+    // Verifies: [ReqUndoRedoSupportv1]
     [TestMethod] public void Execute_AfterUndo_ShouldClearRedoStack()
     {
         // Arrange
@@ -337,6 +314,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         Assert.IsInstanceOfType(rootVm.Children[1].Filter, typeof(AndFilter));
     }
 
+    // Verifies: [ReqUndoRedoSupportv1]
     [TestMethod] public void Undo_ChangeFilterValue_ShouldRestorePreviousValue()
     {
         // Arrange
@@ -352,9 +330,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         subVm.BeginEditCommand.Execute(null);
         subVm.FilterText = newValue;
         subVm.EndEditCommand.Execute(null);
-
         Assert.AreEqual(newValue, subVm.FilterText, "Value should be new value after edit.");
-
         _viewModel.UndoCommand.Execute(null);
 
         // Assert
@@ -363,6 +339,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         Assert.IsTrue(_viewModel.RedoCommand.CanExecute(null));
     }
 
+    // Verifies: [ReqUndoRedoSupportv1]
     [TestMethod] public void Undo_ToggleEnabled_ShouldRestorePreviousState()
     {
         // Arrange
@@ -375,7 +352,6 @@ namespace Logonaut.UI.Tests.ViewModels;
         // Act
         subVm.Enabled = newState;
         Assert.AreEqual(newState, subVm.Enabled, "Enabled state should be changed after toggle.");
-
         _viewModel.UndoCommand.Execute(null);
 
         // Assert
@@ -384,6 +360,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         Assert.IsTrue(_viewModel.RedoCommand.CanExecute(null));
     }
 
+    // Verifies: [ReqUndoRedoSupportv1]
     [TestMethod] public void UndoRedo_MultipleActions_ShouldMaintainCorrectState()
     {
         // Arrange
@@ -394,26 +371,39 @@ namespace Logonaut.UI.Tests.ViewModels;
         _viewModel.AddFilterCommand.Execute("RegexType");
         _viewModel.AddFilterCommand.Execute("AndType");
 
+        // Assert
         Assert.AreEqual(3, rootVm.Children.Count);
         Assert.IsTrue(_viewModel.UndoCommand.CanExecute(null));
         Assert.IsFalse(_viewModel.RedoCommand.CanExecute(null));
 
+        // Act
         _viewModel.UndoCommand.Execute(null);
+
+        // Assert
         Assert.AreEqual(2, rootVm.Children.Count);
         Assert.IsInstanceOfType(rootVm.Children.Last().Filter, typeof(RegexFilter));
         Assert.IsTrue(_viewModel.RedoCommand.CanExecute(null));
 
+        // Act
         _viewModel.UndoCommand.Execute(null);
+
+        // Assert
         Assert.AreEqual(1, rootVm.Children.Count);
         Assert.IsInstanceOfType(rootVm.Children.Last().Filter, typeof(SubstringFilter));
         Assert.IsTrue(_viewModel.RedoCommand.CanExecute(null));
 
+        // Act
         _viewModel.RedoCommand.Execute(null);
+
+        // Assert
         Assert.AreEqual(2, rootVm.Children.Count);
         Assert.IsInstanceOfType(rootVm.Children.Last().Filter, typeof(RegexFilter));
         Assert.IsTrue(_viewModel.RedoCommand.CanExecute(null));
 
+        // Act
         _viewModel.RedoCommand.Execute(null);
+
+        // Assert
         Assert.AreEqual(3, rootVm.Children.Count);
         Assert.IsInstanceOfType(rootVm.Children.Last().Filter, typeof(AndFilter));
         Assert.IsFalse(_viewModel.RedoCommand.CanExecute(null));

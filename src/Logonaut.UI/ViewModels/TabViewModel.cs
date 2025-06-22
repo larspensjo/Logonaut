@@ -684,9 +684,9 @@ public partial class TabViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(SearchStatusText)); // Update status text
     }
 
-    partial void OnSearchTextChanged(string value) => UpdateSearchMatches();
-    partial void OnIsCaseSensitiveSearchChanged(bool value) => UpdateSearchMatches();
-
+    partial void OnSearchTextChanged(string value) => _uiContext.Post(_ => UpdateSearchMatches(), null);
+    partial void OnIsCaseSensitiveSearchChanged(bool value) => _uiContext.Post(_ => UpdateSearchMatches(), null);
+    
     private string GetCurrentDocumentTextForSearch()
     {
         // Prefer editor's live text if available, otherwise reconstruct from FilteredLogLines
@@ -698,9 +698,9 @@ public partial class TabViewModel : ObservableObject, IDisposable
 
     private void UpdateSearchMatches()
     {
-        string currentSearchTerm = SearchText; 
+        string currentSearchTerm = SearchText;
         string textToSearch = GetCurrentDocumentTextForSearch();
-        ResetSearchState(); 
+        ResetSearchState();
 
         if (string.IsNullOrEmpty(currentSearchTerm) || string.IsNullOrEmpty(textToSearch))
         {
@@ -726,12 +726,12 @@ public partial class TabViewModel : ObservableObject, IDisposable
         
         if (_searchMatches.Any()) _currentSearchIndex = 0; // Select first match if any
         SelectAndScrollToCurrentMatch(); // This also updates SearchStatusText via OnPropertyChanged
-    }
+     }
     
     private void ResetSearchState()
     {
         _searchMatches.Clear();
-        SearchMarkers.Clear(); 
+        SearchMarkers.Clear();
         _currentSearchIndex = -1;
         // CurrentMatchOffset and CurrentMatchLength are reset by SelectAndScrollToCurrentMatch
         // when no match is selected after reset.

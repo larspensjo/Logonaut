@@ -1,60 +1,58 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using System.Windows; // For DispatcherPriority, Size, Rect
-using System.Windows.Controls; // For TreeView
+using System.Windows;
+using System.Windows.Controls;
 using Logonaut.UI.ViewModels;
 using Logonaut.Filters;
-using System.Windows.Threading; // For Dispatcher
+using System.Windows.Threading;
 
 namespace Logonaut.UI.Tests.ViewModels;
 
 #if false
 // Tests requiring STA thread and actual WPF controls
-[TestClass] public class MainViewModel_WpfInteractionTests : MainViewModelTestBase // Inherits STA setup
+[TestClass] public class MainViewModel_WpfInteractionTests : MainViewModelTestBase
 {
     [TestInitialize] public override void TestInitialize()
     {
+        // Arrange
         base.TestInitialize();
         base.SetupMainAndTabViewModel();
     }
 
-    // Helper to yield execution to the dispatcher
     private void DispatcherYield(DispatcherPriority priority = DispatcherPriority.Background)
     {
-        // Sending an empty action to the dispatcher effectively yields control,
-        // allowing pending operations at the specified priority (or higher) to execute.
+        // Act
         Dispatcher.CurrentDispatcher.Invoke(() => { }, priority);
     }
 
-    // Verifies: [ReqFilterRuleTreeStructurev1] (UI Update)
+    // Verifies: [ReqFilterRuleTreeStructurev1]
     [TestMethod] public void AddFilter_WhenActiveProfileIsEmpty_ShouldUpdateTreeViewItems_STA()
     {
-        TreeView? filterTreeView = null; // Capture for assertion outside Action
+        // Arrange
+        TreeView? filterTreeView = null;
 
-        RunOnSta(() => // Use helper method from base class
+        RunOnSta(() =>
         {
             MainWindow? window = null;
             try
             {
+                // Arrange
                 window = new MainWindow(_viewModel);
-                window.Show(); // Show the window to ensure it's fully initialized and in the visual tree
-
+                window.Show();
                 var windowContentElement = window.Content as UIElement;
                 Assert.IsNotNull(windowContentElement, "Window Content is null.");
                 filterTreeView = FindVisualChild<TreeView>(windowContentElement, "FilterTreeViewNameForTesting");
                 Assert.IsNotNull(filterTreeView, "FilterTreeView not found.");
-
                 Assert.IsNotNull(_viewModel.ActiveFilterProfile, "Pre-condition: Active profile is null.");
                 _viewModel.ActiveFilterProfile.SetModelRootFilter(null);
                 _viewModel.ActiveTreeRootNodes.Clear();
                 Assert.AreEqual(0, filterTreeView.Items.Count, "Pre-condition: TreeView should be empty.");
 
+                // Act
                 _viewModel.AddFilterCommand.Execute("Substring");
+                DispatcherYield();
+                window.UpdateLayout();
 
-                // --- Added Dispatcher Yield ---
-                DispatcherYield(); // Allow data binding to update TreeView ItemsSource
-                window.UpdateLayout(); // Force layout after yield
-
-                 // Assert TreeView state inside STA *after* yielding
+                // Assert
                 Assert.AreEqual(1, filterTreeView.Items.Count, "TreeView Items collection should have one item.");
                 Assert.IsInstanceOfType(filterTreeView.Items[0], typeof(FilterViewModel), "Item is not FilterViewModel");
                 var itemViewModel = (FilterViewModel)filterTreeView.Items[0];
@@ -62,51 +60,45 @@ namespace Logonaut.UI.Tests.ViewModels;
             }
             finally
             {
-                window?.Close(); // Ensure window is closed even on failure
+                window?.Close();
             }
         });
-        // No assertions needed outside RunOnSta for this test
     }
 
-    // Verifies: [ReqFilterRuleTreeStructurev1] (UI Update)
+    // Verifies: [ReqFilterRuleTreeStructurev1]
     [TestMethod] public void RemoveFilter_ShouldUpdateTreeViewItems_STA()
     {
-        TreeView? filterTreeView = null; // Capture for assertion
+        // Arrange
+        TreeView? filterTreeView = null;
 
         RunOnSta(() =>
         {
             MainWindow? window = null;
             try
             {
+                // Arrange
                 window = new MainWindow(_viewModel);
-                window.Show(); // Show the window
-
+                window.Show();
                 var windowContentElement = window.Content as UIElement;
                 Assert.IsNotNull(windowContentElement);
                 filterTreeView = FindVisualChild<TreeView>(windowContentElement, "FilterTreeViewNameForTesting");
                 Assert.IsNotNull(filterTreeView);
-
-                // Arrange: Add a filter first
                 Assert.IsNotNull(_viewModel.ActiveFilterProfile);
                 _viewModel.ActiveFilterProfile.SetModelRootFilter(null);
                 _viewModel.ActiveTreeRootNodes.Clear();
                 _viewModel.AddFilterCommand.Execute("Substring");
-
-                // --- Added Dispatcher Yield ---
-                DispatcherYield(); // Allow binding after Add
+                DispatcherYield();
                 window.UpdateLayout();
                 Assert.AreEqual(1, filterTreeView.Items.Count, "Pre-Remove: TreeView should have 1 item.");
-                _viewModel.SelectedFilterNode = _viewModel.ActiveFilterProfile.RootFilterViewModel; // Select node
+                _viewModel.SelectedFilterNode = _viewModel.ActiveFilterProfile.RootFilterViewModel;
                 Assert.IsNotNull(_viewModel.SelectedFilterNode, "Pre-Remove: Node not selected.");
 
                 // Act
                 _viewModel.RemoveFilterNodeCommand.Execute(null);
-
-                // --- Added Dispatcher Yield ---
-                DispatcherYield(); // Allow binding after Remove
+                DispatcherYield();
                 window.UpdateLayout();
 
-                // Assert TreeView state inside STA *after* yielding
+                // Assert
                 Assert.AreEqual(0, filterTreeView.Items.Count, "Post-Remove: TreeView Items collection should be empty.");
             }
             finally
@@ -115,7 +107,7 @@ namespace Logonaut.UI.Tests.ViewModels;
             }
         });
 
-        // Assert ViewModel state (can be done outside Invoke)
+        // Assert
         Assert.AreEqual(0, _viewModel.ActiveTreeRootNodes.Count, "Post-Remove: ViewModel's ActiveTreeRootNodes should be empty.");
         Assert.IsNull(_viewModel.SelectedFilterNode, "Post-Remove: SelectedFilterNode should be null.");
         Assert.IsNull(_viewModel.ActiveFilterProfile?.RootFilterViewModel, "Post-Remove: Profile's RootFilterViewModel should be null.");

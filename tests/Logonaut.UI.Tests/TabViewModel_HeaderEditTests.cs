@@ -15,12 +15,14 @@ namespace Logonaut.UI.Tests.ViewModels;
 
     [TestInitialize] public void TestInitialize()
     {
+        // Arrange
         _executor = new MockCommandExecutor();
         _provider = new MockLogSourceProvider();
         _context = new ImmediateSynchronizationContext();
         _viewModel = new TabViewModel("Tab1", "Default", SourceType.Pasted, "id", _provider, _executor, _context);
     }
 
+    // Verifies: [ReqTabRenamingv1]
     [TestMethod] public void EndEditHeaderCommand_ShouldExecuteChangeAction_WhenNameChanged()
     {
         // Arrange
@@ -37,6 +39,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         Assert.AreEqual("NewName", _viewModel.Header);
     }
 
+    // Verifies: [ReqTabRenamingv1]
     [TestMethod] public void EndEditHeaderCommand_ShouldNotExecuteAction_WhenNameUnchanged()
     {
         // Arrange

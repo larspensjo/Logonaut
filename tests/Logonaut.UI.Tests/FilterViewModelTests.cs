@@ -4,8 +4,8 @@ using System.ComponentModel;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Logonaut.Filters;
 using Logonaut.UI.ViewModels;
-using Logonaut.Core.Commands; // Added
-using Logonaut.TestUtils; // Added
+using Logonaut.Core.Commands;
+using Logonaut.TestUtils;
 using System.Linq;
 using Logonaut.UI.Commands;
 
@@ -17,68 +17,91 @@ namespace Logonaut.UI.Tests.ViewModels;
 
     [TestInitialize] public void TestInitialize()
     {
-        // Create a fresh mock executor for each test
+        // Arrange
         _mockExecutor = new MockCommandExecutor();
     }
 
     // Helper to create VM with mock executor
     private FilterViewModel CreateViewModel(IFilter filter, FilterViewModel? parent = null)
     {
-        // Pass the mock executor instance
+        // Act
         return new FilterViewModel(filter, _mockExecutor, parent);
     }
 
     // === DisplayText Tests ===
-    // These tests remain unchanged as they only read properties
 
+    // Verifies: [ReqFilterRuleTreeStructurev1]
     [TestMethod] public void DisplayText_ShouldReturnCorrectFormat_ForSubstringFilter()
     {
+        // Arrange
         var filter = new SubstringFilter("test");
-        var viewModel = CreateViewModel(filter); // Use helper
+        var viewModel = CreateViewModel(filter);
+        
+        // Act & Assert
         Assert.AreEqual("\"test\"", viewModel.DisplayText);
     }
 
+    // Verifies: [ReqFilterRuleTreeStructurev1]
     [TestMethod] public void DisplayText_ShouldReturnCorrectFormat_ForRegexFilter()
     {
+        // Arrange
         var filter = new RegexFilter("pattern");
-        var viewModel = CreateViewModel(filter); // Use helper
+        var viewModel = CreateViewModel(filter);
+        
+        // Act & Assert
         Assert.AreEqual("/pattern/", viewModel.DisplayText);
     }
 
+    // Verifies: [ReqFilterRuleTreeStructurev1]
     [TestMethod] public void DisplayText_ShouldReturnCorrectSymbol_ForAndFilter()
     {
+        // Arrange
         var filter = new AndFilter();
-        var viewModel = CreateViewModel(filter); // Use helper
+        var viewModel = CreateViewModel(filter);
+        
+        // Act & Assert
         Assert.AreEqual("∧", viewModel.DisplayText);
     }
 
+    // Verifies: [ReqFilterRuleTreeStructurev1]
     [TestMethod] public void DisplayText_ShouldReturnCorrectSymbol_ForOrFilter()
     {
+        // Arrange
         var filter = new OrFilter();
-        var viewModel = CreateViewModel(filter); // Use helper
+        var viewModel = CreateViewModel(filter);
+        
+        // Act & Assert
         Assert.AreEqual("∨", viewModel.DisplayText);
     }
 
-     [TestMethod] public void DisplayText_ShouldReturnCorrectSymbol_ForNorFilter()
+    // Verifies: [ReqFilterRuleTreeStructurev1]
+    [TestMethod] public void DisplayText_ShouldReturnCorrectSymbol_ForNorFilter()
     {
+        // Arrange
         var filter = new NorFilter();
-        var viewModel = CreateViewModel(filter); // Use helper
+        var viewModel = CreateViewModel(filter);
+        
+        // Act & Assert
         Assert.AreEqual("¬∨", viewModel.DisplayText);
     }
 
+    // Verifies: [ReqFilterRuleTreeStructurev1]
     [TestMethod] public void DisplayText_ShouldReturnCorrectText_ForTrueFilter()
     {
+        // Arrange
         var filter = new TrueFilter();
-        var viewModel = CreateViewModel(filter); // Use helper
+        var viewModel = CreateViewModel(filter);
+        
+        // Act & Assert
         Assert.AreEqual("TRUE", viewModel.DisplayText);
     }
 
 
     // === FilterType Tests ===
-    // These tests remain unchanged
 
     [TestMethod] public void FilterType_ShouldReturnCorrectTypeString_ForVariousFilters()
     {
+        // Act & Assert
         Assert.AreEqual("SubstringType", CreateViewModel(new SubstringFilter("")).FilterType);
         Assert.AreEqual("RegexType", CreateViewModel(new RegexFilter("")).FilterType);
         Assert.AreEqual("AndType", CreateViewModel(new AndFilter()).FilterType);
@@ -88,16 +111,19 @@ namespace Logonaut.UI.Tests.ViewModels;
     }
 
     // === IsEditable Tests ===
-    // These tests remain unchanged
 
+    // Verifies: [ReqFilterRuleEditingv1]
     [TestMethod] public void IsEditable_ShouldBeTrue_ForSubstringAndRegexFilters()
     {
+        // Act & Assert
         Assert.IsTrue(CreateViewModel(new SubstringFilter("")).IsEditable);
         Assert.IsTrue(CreateViewModel(new RegexFilter("")).IsEditable);
     }
 
+    // Verifies: [ReqFilterRuleEditingv1]
     [TestMethod] public void IsEditable_ShouldBeFalse_ForCompositeAndTrueFilters()
     {
+        // Act & Assert
         Assert.IsFalse(CreateViewModel(new AndFilter()).IsEditable);
         Assert.IsFalse(CreateViewModel(new OrFilter()).IsEditable);
         Assert.IsFalse(CreateViewModel(new NorFilter()).IsEditable);
@@ -106,6 +132,7 @@ namespace Logonaut.UI.Tests.ViewModels;
 
     // Child Management Tests
 
+    // Verifies: [ReqFilterRuleTreeStructurev1]
     [TestMethod] public void Constructor_ShouldInitializeChildren_ForCompositeFilter()
     {
         // Arrange
@@ -116,18 +143,19 @@ namespace Logonaut.UI.Tests.ViewModels;
         compositeFilter.Add(child2);
 
         // Act
-        var parentVM = CreateViewModel(compositeFilter); // Use helper
+        var parentVM = CreateViewModel(compositeFilter);
 
         // Assert
         Assert.AreEqual(2, parentVM.Children.Count);
         Assert.AreEqual(child1, parentVM.Children[0].Filter);
         Assert.AreEqual(parentVM, parentVM.Children[0].Parent);
-        Assert.AreSame(_mockExecutor, parentVM.Children[0].CommandExecutor, "Child VM should receive same executor instance."); // Verify executor propagation
+        Assert.AreSame(_mockExecutor, parentVM.Children[0].CommandExecutor, "Child VM should receive same executor instance.");
         Assert.AreEqual(child2, parentVM.Children[1].Filter);
         Assert.AreEqual(parentVM, parentVM.Children[1].Parent);
         Assert.AreSame(_mockExecutor, parentVM.Children[1].CommandExecutor, "Child VM should receive same executor instance.");
     }
 
+    // Verifies: [ReqFilterAddSubNodev1], [ReqFilterRuleTreeStructurev1]
     [TestMethod] public void AddChildFilter_ShouldExecuteAddActionAndAddChild()
     {
         // Arrange
@@ -146,20 +174,20 @@ namespace Logonaut.UI.Tests.ViewModels;
         Assert.IsNotNull(addedChildVM, "Child VM with correct filter not found.");
         Assert.AreEqual(childFilter, addedChildVM.Filter, "ViewModel's model should match added filter.");
         Assert.AreEqual(parentVM, addedChildVM.Parent, "Child ViewModel should have correct parent reference.");
-        // Verify model was also updated because mock executor runs Execute()
         Assert.IsTrue(compositeFilter.SubFilters.Contains(childFilter), "Child filter model should be in parent model's SubFilters.");
     }
 
+    // Verifies: [ReqFilterRemoveNodev1], [ReqFilterRuleTreeStructurev1]
     [TestMethod] public void RemoveChild_ShouldExecuteRemoveActionAndRemoveChild()
     {
         // Arrange
         var compositeFilter = new AndFilter();
         var parentVM = CreateViewModel(compositeFilter);
         var childFilter = new SubstringFilter("child");
-        parentVM.AddChildFilter(childFilter); // Use the method to add, ensuring command pattern consistency
-        var childVM = parentVM.Children.First(vm => vm.Filter == childFilter); // Get the specific VM added
+        parentVM.AddChildFilter(childFilter);
+        var childVM = parentVM.Children.First(vm => vm.Filter == childFilter);
         int vmCountAfterAdd = parentVM.Children.Count;
-        _mockExecutor.Reset(); // Reset executor before the action under test
+        _mockExecutor.Reset();
 
         // Act
         parentVM.RemoveChild(childVM);
@@ -168,22 +196,22 @@ namespace Logonaut.UI.Tests.ViewModels;
         Assert.AreEqual(vmCountAfterAdd - 1, parentVM.Children.Count, "Child ViewModel count should decrease.");
         Assert.IsFalse(parentVM.Children.Contains(childVM), "Removed child VM should not be present.");
         Assert.IsInstanceOfType(_mockExecutor.LastExecutedAction, typeof(RemoveFilterAction), "Executor should have received RemoveFilterAction.");
-        // Verify model was also updated
         Assert.IsFalse(compositeFilter.SubFilters.Contains(childFilter), "Child filter model should be removed from parent model's SubFilters.");
     }
 
     // Enabled Property Tests
 
+    // Verifies: [ReqFilterEnableDisablev1]
     [TestMethod] public void Enabled_Setter_ShouldExecuteToggleAction()
     {
         // Arrange
-        var filter = new SubstringFilter("test") { Enabled = true }; // Start enabled
+        var filter = new SubstringFilter("test") { Enabled = true };
         var viewModel = CreateViewModel(filter);
         var receivedNotifications = new List<string>();
         viewModel.PropertyChanged += (s, e) => receivedNotifications.Add(e.PropertyName ?? string.Empty);
         _mockExecutor.Reset();
 
-        // Act: Set to false
+        // Act
         viewModel.Enabled = false;
 
         // Assert
@@ -194,7 +222,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         receivedNotifications.Clear();
         _mockExecutor.Reset();
 
-        // Act: Set back to true
+        // Act
         viewModel.Enabled = true;
 
         // Assert
@@ -204,6 +232,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         Assert.IsTrue(receivedNotifications.Contains("Enabled"), "PropertyChanged for Enabled not received on set true.");
     }
 
+    // Verifies: [ReqFilterEnableDisablev1]
     [TestMethod] public void Enabled_Getter_ShouldReflectModel()
     {
         // Arrange
@@ -213,12 +242,15 @@ namespace Logonaut.UI.Tests.ViewModels;
         // Act & Assert
         filter.Enabled = false;
         Assert.IsFalse(viewModel.Enabled, "ViewModel.Enabled should reflect model state false.");
+        
+        // Act & Assert
         filter.Enabled = true;
         Assert.IsTrue(viewModel.Enabled, "ViewModel.Enabled should reflect model state true.");
     }
 
     // FilterText Property Tests
 
+    // Verifies: [ReqFilterRuleEditingv1]
     [TestMethod] public void FilterText_GetSet_ShouldWork_ForEditableFilters_DuringEdit()
     {
         // Arrange
@@ -227,32 +259,41 @@ namespace Logonaut.UI.Tests.ViewModels;
         var substringVM = CreateViewModel(substringFilter);
         var regexVM = CreateViewModel(regexFilter);
 
-        // Act & Assert Substring (No BeginEdit needed for direct property access)
+        // Act & Assert
         Assert.AreEqual("initialSub", substringVM.FilterText);
-        substringVM.FilterText = "newSub"; // Directly sets model during edit typing
+        substringVM.FilterText = "newSub";
         Assert.AreEqual("newSub", substringFilter.Value);
         Assert.AreEqual("newSub", substringVM.FilterText);
 
-        // Act & Assert Regex
+        // Act & Assert
         Assert.AreEqual("initialRegex", regexVM.FilterText);
         regexVM.FilterText = "newRegex";
         Assert.AreEqual("newRegex", regexFilter.Value);
         Assert.AreEqual("newRegex", regexVM.FilterText);
     }
 
+    // Verifies: [ReqFilterRuleEditingv1]
     [TestMethod] public void FilterText_Get_ShouldReturnEmpty_ForNonEditableFilters()
     {
+        // Arrange
         var andVM = CreateViewModel(new AndFilter());
+
+        // Act & Assert
         Assert.AreEqual(string.Empty, andVM.FilterText);
     }
 
+    // Verifies: [ReqFilterRuleEditingv1]
     [ExpectedException(typeof(InvalidOperationException))]
     [TestMethod] public void FilterText_Set_ShouldThrow_ForNonEditableFilter()
     {
+        // Arrange
         var andVM = CreateViewModel(new AndFilter());
-        andVM.FilterText = "newValue"; // Should throw
+
+        // Act
+        andVM.FilterText = "newValue";
     }
 
+    // Verifies: [ReqFilterRuleEditingv1]
     [TestMethod] public void FilterText_Set_ShouldRaisePropertyChanged_DuringEdit()
     {
         // Arrange
@@ -262,7 +303,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         viewModel.PropertyChanged += (s, e) => receivedNotifications.Add(e.PropertyName ?? string.Empty);
 
         // Act
-        viewModel.FilterText = "new"; // Simulate typing
+        viewModel.FilterText = "new";
 
         // Assert
         CollectionAssert.Contains(receivedNotifications, "FilterText", "FilterText notification missing.");
@@ -271,40 +312,53 @@ namespace Logonaut.UI.Tests.ViewModels;
 
     // Editing Commands and State
 
+    // Verifies: [ReqFilterRuleEditingv1]
     [TestMethod] public void BeginEditCommand_ShouldSetEditingState_ForEditableFilter()
     {
+        // Arrange
         var filter = new SubstringFilter("edit me");
         var viewModel = CreateViewModel(filter);
 
+        // Act
         viewModel.BeginEditCommand.Execute(null);
 
+        // Assert
         Assert.IsTrue(viewModel.IsEditing);
         Assert.IsFalse(viewModel.IsNotEditing);
     }
 
+    // Verifies: [ReqFilterRuleEditingv1]
     [TestMethod] public void BeginEditCommand_ShouldDoNothing_ForNonEditableFilter()
     {
+        // Arrange
         var filter = new AndFilter();
         var viewModel = CreateViewModel(filter);
 
+        // Act
         viewModel.BeginEditCommand.Execute(null);
 
-        Assert.IsFalse(viewModel.IsEditing); // Should remain false
-        Assert.IsTrue(viewModel.IsNotEditing);
-    }
-
-    [TestMethod] public void EndEditCommand_ShouldResetEditingState()
-    {
-        var filter = new SubstringFilter("edit me");
-        var viewModel = CreateViewModel(filter);
-        viewModel.BeginEditCommand.Execute(null); // Enter editing
-
-        viewModel.EndEditCommand.Execute(null); // Act
-
+        // Assert
         Assert.IsFalse(viewModel.IsEditing);
         Assert.IsTrue(viewModel.IsNotEditing);
     }
 
+    // Verifies: [ReqFilterRuleEditingv1]
+    [TestMethod] public void EndEditCommand_ShouldResetEditingState()
+    {
+        // Arrange
+        var filter = new SubstringFilter("edit me");
+        var viewModel = CreateViewModel(filter);
+        viewModel.BeginEditCommand.Execute(null);
+
+        // Act
+        viewModel.EndEditCommand.Execute(null);
+
+        // Assert
+        Assert.IsFalse(viewModel.IsEditing);
+        Assert.IsTrue(viewModel.IsNotEditing);
+    }
+
+    // Verifies: [ReqFilterRuleEditingv1]
     [TestMethod] public void EndEditCommand_ShouldExecuteChangeAction_WhenValueChanged()
     {
         // Arrange
@@ -312,8 +366,8 @@ namespace Logonaut.UI.Tests.ViewModels;
         string newValue = "new value";
         var filter = new SubstringFilter(oldValue);
         var viewModel = CreateViewModel(filter);
-        viewModel.BeginEditCommand.Execute(null); // Enter editing
-        viewModel.FilterText = newValue; // Change the text
+        viewModel.BeginEditCommand.Execute(null);
+        viewModel.FilterText = newValue;
         _mockExecutor.Reset();
 
         // Act
@@ -324,19 +378,17 @@ namespace Logonaut.UI.Tests.ViewModels;
         Assert.IsTrue(viewModel.IsNotEditing);
         Assert.IsInstanceOfType(_mockExecutor.LastExecutedAction, typeof(ChangeFilterValueAction));
         var action = (ChangeFilterValueAction)_mockExecutor.LastExecutedAction!;
-        // Note: Action stores values *passed to it*, not necessarily current model state if Execute failed
-        // But since our mock runs Execute, the model should be updated.
         Assert.AreEqual(newValue, viewModel.Filter.Value);
     }
 
-     [TestMethod] public void EndEditCommand_ShouldNotExecuteAction_WhenValueUnchanged()
+    // Verifies: [ReqFilterRuleEditingv1]
+    [TestMethod] public void EndEditCommand_ShouldNotExecuteAction_WhenValueUnchanged()
     {
         // Arrange
         string value = "old value";
         var filter = new SubstringFilter(value);
         var viewModel = CreateViewModel(filter);
-        viewModel.BeginEditCommand.Execute(null); // Enter editing
-        // DO NOT change FilterText
+        viewModel.BeginEditCommand.Execute(null);
         _mockExecutor.Reset();
 
         // Act
@@ -346,11 +398,6 @@ namespace Logonaut.UI.Tests.ViewModels;
         Assert.IsFalse(viewModel.IsEditing);
         Assert.IsTrue(viewModel.IsNotEditing);
         Assert.IsNull(_mockExecutor.LastExecutedAction, "No action should have been executed.");
-        Assert.AreEqual(value, viewModel.Filter.Value); // Verify value didn't change
+        Assert.AreEqual(value, viewModel.Filter.Value);
     }
-
-    // === Callback/Notification Tests (REMOVED) ===
-    // Tests like Enabled_Set_ShouldInvokeCallback are removed because
-    // the notification/update logic is now centralized in ICommandExecutor.Execute.
-    // We now test that the correct *Action* is created and executed instead.
 }

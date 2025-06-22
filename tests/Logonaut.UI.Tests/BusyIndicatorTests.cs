@@ -1,4 +1,3 @@
-// tests/Logonaut.UI.Tests/BusyIndicatorTests.cs
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -81,26 +80,23 @@ namespace Logonaut.UI.Tests.Controls;
 
     // --- Tests ---
 
-    [TestMethod]
-    public void Constructor_InitialState_IsIdleAndHidden()
+    [TestMethod] public void Constructor_InitialState_IsIdleAndHidden()
     {
         RunOnStaThread(() =>
         {
             // Arrange & Act
             var indicator = new BusyIndicator();
 
-            // Assert using Debug flags
+            // Assert
             Assert.IsTrue(indicator.DebugIsIdle, "Initial state: Idle");
             Assert.IsFalse(indicator.DebugIsSpinning, "Initial state: Not Spinning");
             Assert.IsFalse(indicator.DebugIsFadingOut, "Initial state: Not FadingOut");
-            // Assert visual state set by constructor
             Assert.AreEqual(Visibility.Collapsed, indicator.Visibility, "Initial visibility");
             Assert.AreEqual(0.0, indicator.Opacity, "Initial opacity");
         });
     }
 
-    [TestMethod]
-    public void Idle_WhenActiveStatesNotEmpty_TransitionsToSpinning()
+    [TestMethod] public void Idle_WhenActiveStatesNotEmpty_TransitionsToSpinning()
     {
         RunOnStaThread(() =>
         {
@@ -110,77 +106,71 @@ namespace Logonaut.UI.Tests.Controls;
             indicator.SetValue(BusyIndicator.ActiveStatesProperty, activeStates);
             Assert.IsTrue(indicator.DebugIsIdle, "Precondition: Should start Idle.");
 
-            // Act: Add item and simulate collection change event
+            // Act
             activeStates.Add(new object());
             SimulateCollectionChange(indicator, NotifyCollectionChangedAction.Add);
 
-            // Assert using Debug flags
+            // Assert
             Assert.IsFalse(indicator.DebugIsIdle, "State check: Not Idle");
             Assert.IsTrue(indicator.DebugIsSpinning, "State check: Spinning");
             Assert.IsFalse(indicator.DebugIsFadingOut, "State check: Not FadingOut");
-            // Assert visual state
             Assert.AreEqual(Visibility.Visible, indicator.Visibility, "Visibility check");
             Assert.AreEqual(1.0, indicator.Opacity, "Opacity check");
         });
     }
 
-    [TestMethod]
-    public void Spinning_WhenActiveStatesBecomesEmpty_TransitionsToFadingOut()
+    [TestMethod] public void Spinning_WhenActiveStatesBecomesEmpty_TransitionsToFadingOut()
     {
         RunOnStaThread(() =>
         {
-            // Arrange: Force into Spinning state
+            // Arrange
             var indicator = new BusyIndicator();
             var activeStates = new ObservableCollection<object>() { new object() };
             indicator.SetValue(BusyIndicator.ActiveStatesProperty, activeStates);
             SimulateCollectionChange(indicator, NotifyCollectionChangedAction.Add); // Force Spinning
             Assert.IsTrue(indicator.DebugIsSpinning, "Precondition: Should be Spinning.");
 
-            // Act: Clear collection and simulate change event
+            // Act
             activeStates.Clear();
             SimulateCollectionChange(indicator, NotifyCollectionChangedAction.Reset);
 
-            // Assert using Debug flags
+            // Assert
             Assert.IsFalse(indicator.DebugIsIdle, "State check: Not Idle");
             Assert.IsFalse(indicator.DebugIsSpinning, "State check: Not Spinning");
             Assert.IsTrue(indicator.DebugIsFadingOut, "State check: FadingOut");
-            // Assert visual state (should remain visible for fade)
             Assert.AreEqual(Visibility.Visible, indicator.Visibility, "Visibility check");
         });
     }
 
-    [TestMethod]
-    public void Spinning_WhenHidden_TransitionsToIdleImmediately()
+    [TestMethod] public void Spinning_WhenHidden_TransitionsToIdleImmediately()
     {
         RunOnStaThread(() =>
         {
-            // Arrange: Force into Spinning state and ensure IsVisible is true
+            // Arrange
             var indicator = new BusyIndicator();
             var activeStates = new ObservableCollection<object>() { new object() };
             indicator.SetValue(BusyIndicator.ActiveStatesProperty, activeStates);
             SimulateCollectionChange(indicator, NotifyCollectionChangedAction.Add); // Force Spinning
             Assert.IsTrue(indicator.DebugIsSpinning, "Precondition: Should be Spinning.");
-            Assert.AreEqual(Visibility.Visible, indicator.Visibility, "Precondition: Visibility should be Visible"); // Ensure starting visible
+            Assert.AreEqual(Visibility.Visible, indicator.Visibility, "Precondition: Visibility should be Visible");
 
-            // Act: Simulate IsVisible becoming false by invoking the handler
+            // Act
             SimulateVisibilityChange(indicator, newIsVisibleValue: false, oldIsVisibleValue: true);
 
-            // Assert using Debug flags
+            // Assert
             Assert.IsTrue(indicator.DebugIsIdle, "State check: Idle");
             Assert.IsFalse(indicator.DebugIsSpinning, "State check: Not Spinning");
             Assert.IsFalse(indicator.DebugIsFadingOut, "State check: Not FadingOut");
-            // Assert visual state
             Assert.AreEqual(Visibility.Collapsed, indicator.Visibility, "Visibility check");
             Assert.AreEqual(0.0, indicator.Opacity, "Opacity check");
         });
     }
 
-    [TestMethod]
-    public void FadingOut_WhenActiveStatesNotEmpty_TransitionsBackToSpinning()
+    [TestMethod] public void FadingOut_WhenActiveStatesNotEmpty_TransitionsBackToSpinning()
     {
         RunOnStaThread(() =>
         {
-            // Arrange: Force into FadingOut state
+            // Arrange
             var indicator = new BusyIndicator();
             var activeStates = new ObservableCollection<object>() { new object() };
             indicator.SetValue(BusyIndicator.ActiveStatesProperty, activeStates);
@@ -189,26 +179,24 @@ namespace Logonaut.UI.Tests.Controls;
             SimulateCollectionChange(indicator, NotifyCollectionChangedAction.Reset); // -> FadingOut
             Assert.IsTrue(indicator.DebugIsFadingOut, "Precondition: Should be FadingOut.");
 
-            // Act: Add item back and simulate change event
+            // Act
             activeStates.Add(new object());
             SimulateCollectionChange(indicator, NotifyCollectionChangedAction.Add);
 
-            // Assert using Debug flags
+            // Assert
             Assert.IsFalse(indicator.DebugIsIdle, "State check: Not Idle");
             Assert.IsTrue(indicator.DebugIsSpinning, "State check: Spinning");
             Assert.IsFalse(indicator.DebugIsFadingOut, "State check: Not FadingOut");
-            // Assert visual state
             Assert.AreEqual(Visibility.Visible, indicator.Visibility, "Visibility check");
             Assert.AreEqual(1.0, indicator.Opacity, "Opacity check");
         });
     }
 
-    [TestMethod]
-    public void FadingOut_WhenHidden_TransitionsToIdleImmediately()
+    [TestMethod] public void FadingOut_WhenHidden_TransitionsToIdleImmediately()
     {
         RunOnStaThread(() =>
         {
-            // Arrange: Force into FadingOut state and ensure IsVisible is true
+            // Arrange
             var indicator = new BusyIndicator();
             var activeStates = new ObservableCollection<object>() { new object() };
             indicator.SetValue(BusyIndicator.ActiveStatesProperty, activeStates);
@@ -218,14 +206,13 @@ namespace Logonaut.UI.Tests.Controls;
             Assert.IsTrue(indicator.DebugIsFadingOut, "Precondition: Should be FadingOut.");
             Assert.AreEqual(Visibility.Visible, indicator.Visibility, "Precondition: Visibility should be Visible");
 
-            // Act: Simulate IsVisible becoming false by invoking the handler
+            // Act
             SimulateVisibilityChange(indicator, newIsVisibleValue: false, oldIsVisibleValue: true);
 
-            // Assert using Debug flags
+            // Assert
             Assert.IsTrue(indicator.DebugIsIdle, "State check: Idle");
             Assert.IsFalse(indicator.DebugIsSpinning, "State check: Not Spinning");
             Assert.IsFalse(indicator.DebugIsFadingOut, "State check: Not FadingOut");
-            // Assert visual state
             Assert.AreEqual(Visibility.Collapsed, indicator.Visibility, "Visibility check");
             Assert.AreEqual(0.0, indicator.Opacity, "Opacity check");
         });

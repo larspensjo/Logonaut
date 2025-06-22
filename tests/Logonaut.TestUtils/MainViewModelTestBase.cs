@@ -35,10 +35,6 @@ namespace Logonaut.TestUtils;
 
     // --- Specific to MainViewModel testing, can be ignored by other derived classes ---
     protected MainViewModel _viewModel = null!;
-    protected TabViewModel _tabViewModel = null!; // To hold the internal TabViewModel instance
-
-    // --- Test State ---
-    protected bool _requestScrollToEndEventFired = false;
 
     // --- WPF Control Testing Helper Fields ---
     private static Dispatcher? _dispatcher;
@@ -80,15 +76,13 @@ namespace Logonaut.TestUtils;
         _mockFileLogSource = _mockSourceProvider.MockFileSource;
         _mockSimulatorSource = _mockSourceProvider.MockSimulatorSource;
         _mockFileDialog = new MockFileDialogService();
-        _testContext = new ImmediateSynchronizationContext(); // No need for _testContext.Send
+        _testContext = new ImmediateSynchronizationContext();
         _backgroundScheduler = new TestScheduler();
 
         _mockSettings.SettingsToReturn = MockSettingsService.CreateDefaultTestSettings();
-
-        _requestScrollToEndEventFired = false;
     }
 
-    protected void SetupMainAndTabViewModel()
+    protected void SetupMainViewModel()
     {
         _viewModel = new MainViewModel(
             _mockSettings,
@@ -97,8 +91,7 @@ namespace Logonaut.TestUtils;
             _testContext,
             _backgroundScheduler
         );
-        _tabViewModel = GetInternalTabViewModel(_viewModel);
-        _tabViewModel.RequestScrollToEnd += ViewModel_RequestScrollToEndHandler;
+        // The concept of a single "_tabViewModel" is removed. Tests should access _viewModel.ActiveTabViewModel.
     }
 
     // --- Per-Test Teardown ---
@@ -106,40 +99,11 @@ namespace Logonaut.TestUtils;
     {
         RunOnSta(() =>
         {
-            if (_viewModel != null && _tabViewModel != null) // Check if _tabViewModel was initialized
-            {
-                _tabViewModel.RequestScrollToEnd -= ViewModel_RequestScrollToEndHandler;
-            }
             _viewModel?.Dispose();
         });
     }
 
-    private void ViewModel_RequestScrollToEndHandler(object? sender, EventArgs e)
-    {
-        _requestScrollToEndEventFired = true;
-    }
-
     #region Helper Methods
-
-    /**
-     * Retrieves the internal TabViewModel instance from a MainViewModel using reflection.
-     * This is intended for testing purposes to access an internal component.
-     * TODO: Isn't this available in `mainVm.ActiveTabViewModel`?
-     */
-    protected static TabViewModel GetInternalTabViewModel(MainViewModel mainVm)
-    {
-        var fieldInfo = typeof(MainViewModel).GetField("_activeTabViewModel", BindingFlags.NonPublic | BindingFlags.Instance);
-        if (fieldInfo == null)
-        {
-            throw new InvalidOperationException("_activeTabViewModel field not found in MainViewModel. Test setup might be outdated.");
-        }
-        var tabVm = fieldInfo.GetValue(mainVm) as TabViewModel;
-        if (tabVm == null)
-        {
-            throw new InvalidOperationException("_activeTabViewModel is null. MainViewModel might not have initialized it correctly.");
-        }
-        return tabVm;
-    }
 
     /**
      * Gets the currently active mock log source based on the MainViewModel's state.
@@ -147,24 +111,24 @@ namespace Logonaut.TestUtils;
      */
     protected MockLogSource GetActiveMockSource()
     {
-        if (_tabViewModel == null)
+        var activeTab = _viewModel.ActiveTabViewModel;
+        if (activeTab == null)
         {
-            // If _tabViewModel isn't set up (e.g., in tests not focusing on MainViewModel),
-            // we might need a different way to determine the active source, or this method shouldn't be called.
-            // For now, assume it's called in a context where _tabViewModel is valid.
-            throw new InvalidOperationException("_tabViewModel is not initialized. Cannot determine active mock source.");
+            throw new InvalidOperationException("ActiveTabViewModel is null. Cannot determine active mock source.");
         }
 
-        if (_tabViewModel.LogSourceExposeDeprecated == _mockSimulatorSource)
+        if (activeTab.LogSourceExposeDeprecated == _mockSimulatorSource)
         {
             return _mockSimulatorSource;
         }
-        if (_tabViewModel.LogSourceExposeDeprecated == _mockFileLogSource)
+        if (activeTab.LogSourceExposeDeprecated == _mockFileLogSource)
         {
             return _mockFileLogSource;
         }
-        // Fallback or if using NullLogSource etc.
-        return _mockFileLogSource; // Default to file source if no specific simulator is active
+        
+        // This case can happen if the active tab is a 'Pasted' or 'Welcome' tab with a NullLogSource.
+        // The calling test needs to handle this. For many tests, we can fall back to the default file source.
+        return _mockFileLogSource;
     }
 
     /**
@@ -218,20 +182,21 @@ namespace Logonaut.TestUtils;
      */
     protected int CalculateExpectedOffset(int targetLineIndex, string searchTerm)
     {
-        if (_tabViewModel == null)
-             throw new InvalidOperationException("_tabViewModel is not initialized. Cannot calculate offset.");
+        var activeTab = _viewModel.ActiveTabViewModel;
+        if (activeTab == null)
+             throw new InvalidOperationException("ActiveTabViewModel is null. Cannot calculate offset.");
 
-        if (targetLineIndex < 0 || targetLineIndex >= _tabViewModel.FilteredLogLines.Count)
+        if (targetLineIndex < 0 || targetLineIndex >= activeTab.FilteredLogLines.Count)
         {
-            throw new ArgumentOutOfRangeException(nameof(targetLineIndex), $"Target line index {targetLineIndex} is out of bounds for FilteredLogLines count {_tabViewModel.FilteredLogLines.Count}.");
+            throw new ArgumentOutOfRangeException(nameof(targetLineIndex), $"Target line index {targetLineIndex} is out of bounds for FilteredLogLines count {activeTab.FilteredLogLines.Count}.");
         }
 
         int offset = 0;
         for (int i = 0; i < targetLineIndex; i++)
         {
-            offset += _tabViewModel.FilteredLogLines[i].Text.Length + Environment.NewLine.Length;
+            offset += activeTab.FilteredLogLines[i].Text.Length + Environment.NewLine.Length;
         }
-        int indexInLine = _tabViewModel.FilteredLogLines[targetLineIndex].Text.IndexOf(searchTerm, _tabViewModel.IsCaseSensitiveSearch ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase);
+        int indexInLine = activeTab.FilteredLogLines[targetLineIndex].Text.IndexOf(searchTerm, activeTab.IsCaseSensitiveSearch ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase);
 
         return indexInLine == -1 ? -1 : offset + indexInLine;
     }
@@ -263,10 +228,11 @@ namespace Logonaut.TestUtils;
      */
     protected void InjectTriggerFilterUpdate()
     {
-        if (_tabViewModel == null)
-             throw new InvalidOperationException("_tabViewModel is not initialized. Cannot inject filter update.");
+        var activeTab = _viewModel.ActiveTabViewModel;
+        if (activeTab == null)
+             throw new InvalidOperationException("ActiveTabViewModel is null. Cannot inject filter update.");
 
-        _tabViewModel.ApplyFiltersFromProfile(_viewModel.AvailableProfiles, _viewModel.ContextLines);
+        activeTab.ApplyFiltersFromProfile(_viewModel.AvailableProfiles, _viewModel.ContextLines);
         _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(350).Ticks);
     }
 
