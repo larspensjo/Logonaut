@@ -196,141 +196,47 @@
         <!-- You could add a Setter for Property="Template" here, similar to what was shown for light theme if desired -->
     </Style>
 
-    <Style x:Key="SimulatorToggleButtonStyle" TargetType="ToggleButton">
-        <!-- Set default visual properties using DynamicResource - MIMIC BUTTON -->
-        <Setter Property="Background" Value="{StaticResource ButtonRestingGradientBrush}"/>
-        <Setter Property="Foreground" Value="{DynamicResource TextForegroundBrush}"/>
-        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+    <Style x:Key="PowerToggleButtonStyle" TargetType="ToggleButton">
+        <Setter Property="Background" Value="Transparent"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="Padding" Value="10,5"/>
-        <Setter Property="HorizontalContentAlignment" Value="Center"/>
-        <Setter Property="VerticalContentAlignment" Value="Center"/>
-        <!-- Resting Shadow Effect is set via Template now -->
-
-        <!-- *** ADD EXPLICIT ControlTemplate *** -->
+        <Setter Property="Width" Value="22"/>
+        <Setter Property="Height" Value="22"/>
+        <Setter Property="Focusable" Value="False"/>
         <Setter Property="Template">
             <Setter.Value>
-            <ControlTemplate TargetType="ToggleButton">
-                <Border x:Name="templateRoot"
-                        Background="{TemplateBinding Background}"
-                        BorderBrush="{TemplateBinding BorderBrush}"
-                        BorderThickness="{TemplateBinding BorderThickness}"
-                        CornerRadius="4"
-                        SnapsToDevicePixels="True">
-                    <Border.Effect>
-                        <StaticResource ResourceKey="ButtonRestingShadowEffect"/>
-                    </Border.Effect>
-                    <ContentPresenter x:Name="contentPresenter"
-                                      ContentSource="Content"
-                                      HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                      VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-                                      RecognizesAccessKey="True">
-
-                        <!-- *** ADD LOCAL STYLE FOR TEXTBLOCK *** -->
-                        <ContentPresenter.Resources>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="Foreground" Value="{Binding Path=(TextElement.Foreground), RelativeSource={RelativeSource AncestorType=ToggleButton}}" />
-                                <Setter Property="FontSize" Value="{Binding Path=FontSize, RelativeSource={RelativeSource AncestorType=ToggleButton}}"/>
-                                <Setter Property="VerticalAlignment" Value="Center"/>
-                            </Style>
-                        </ContentPresenter.Resources>
-                        <!-- *** END OF LOCAL STYLE *** -->
-
-                    </ContentPresenter>
-                </Border>
-            </ControlTemplate>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border Background="{TemplateBinding Background}" BorderBrush="Transparent" CornerRadius="3">
+                        <Path x:Name="PowerIcon" 
+                              Data="M 8 3 A 5 5 0 1 1 7.9 3.05 M 10.189 5.016 V 10"
+                              Stroke="{DynamicResource SecondaryTextBrush}"
+                              StrokeThickness="1.5"
+                              Stretch="Uniform"
+                              Width="14" Height="14"
+                              VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <!-- Hover when OFF -->
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsMouseOver" Value="True"/>
+                                <Condition Property="IsChecked" Value="False"/>
+                            </MultiTrigger.Conditions>
+                            <Setter TargetName="PowerIcon" Property="Stroke" Value="{DynamicResource TextForegroundBrush}"/>
+                            <Setter TargetName="PowerIcon" Property="Effect" Value="{DynamicResource FocusGlowEffect}"/>
+                        </MultiTrigger>
+                        <!-- Checked (ON) state -->
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="PowerIcon" Property="Stroke" Value="{DynamicResource AccentBrush}"/>
+                            <Setter TargetName="PowerIcon" Property="Effect" Value="{DynamicResource FocusGlowEffect}"/>
+                        </Trigger>
+                        <!-- Disabled state -->
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
             </Setter.Value>
         </Setter>
-
-        <!-- Default Content/ToolTip (Start state) -->
-        <Setter Property="Content" Value="Simulator"/>
-        <Setter Property="ToolTip" Value="Toggle the log simulator On/Off"/>
-
-        <Style.Triggers>
-            <!-- Trigger for the "Stop" state (IsChecked=True) -->
-            <Trigger Property="IsChecked" Value="True">
-                <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
-                <Setter Property="Foreground" Value="{DynamicResource WindowBackgroundBrush}"/>
-                <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
-                <Setter Property="Effect" Value="{DynamicResource FocusGlowEffect}"/>
-            </Trigger>
-
-            <!-- Hover Trigger (when NOT checked) - Mimic Button Hover -->
-            <MultiTrigger>
-                <MultiTrigger.Conditions>
-                    <Condition Property="IsMouseOver" Value="True"/>
-                    <Condition Property="IsChecked" Value="False"/>
-                </MultiTrigger.Conditions>
-                <!-- Set properties on the ToggleButton -->
-                <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
-                <Setter Property="Effect" Value="{DynamicResource FocusGlowEffect}"/>
-                <!-- Keep resting Background -->
-                <Setter Property="Background" Value="{StaticResource ButtonRestingGradientBrush}"/>
-            </MultiTrigger>
-
-            <!-- Pressed Trigger (when NOT checked) - Mimic Button Press -->
-            <MultiTrigger>
-                <MultiTrigger.Conditions>
-                    <Condition Property="IsPressed" Value="True"/>
-                    <Condition Property="IsChecked" Value="False"/>
-                </MultiTrigger.Conditions>
-                <!-- Set properties on the ToggleButton -->
-                <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}" />
-                <Setter Property="Effect" Value="{DynamicResource FocusGlowEffect}" />
-                <!-- Optional: TranslateTransform like button -->
-                <!-- <Setter Property="RenderTransform"> ... </Setter> -->
-            </MultiTrigger>
-
-            <!-- Hover/Pressed triggers WHEN CHECKED (Optional Refinements) -->
-            <MultiTrigger>
-                <MultiTrigger.Conditions>
-                    <Condition Property="IsMouseOver" Value="True"/>
-                    <Condition Property="IsChecked" Value="True"/>
-                </MultiTrigger.Conditions>
-                <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
-                <Setter Property="Foreground" Value="{DynamicResource WindowBackgroundBrush}"/>
-                <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
-                <Setter Property="Effect" Value="{DynamicResource FocusGlowEffect}"/>
-                <Setter Property="Opacity" Value="0.9" />
-            </MultiTrigger>
-
-            <MultiTrigger>
-                <MultiTrigger.Conditions>
-                    <Condition Property="IsPressed" Value="True"/>
-                    <Condition Property="IsChecked" Value="True"/>
-                </MultiTrigger.Conditions>
-                <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
-                <Setter Property="Foreground" Value="{DynamicResource WindowBackgroundBrush}"/>
-                <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
-                <Setter Property="Effect" Value="{DynamicResource FocusGlowEffect}"/>
-                <Setter Property="Opacity" Value="0.8"/>
-            </MultiTrigger>
-
-            <!-- Disabled State -->
-            <Trigger Property="IsEnabled" Value="False">
-                <Setter Property="Opacity" Value="0.5" />
-                <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}"/>
-                <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}"/>
-                <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
-                <Setter Property="Effect" Value="{x:Null}" />
-            </Trigger>
-
-            <!-- Ensure resting shadow applied when NOT hovered/pressed/checked -->
-            <MultiTrigger>
-                <MultiTrigger.Conditions>
-                    <Condition Property="IsMouseOver" Value="False"/>
-                    <Condition Property="IsPressed" Value="False"/>
-                    <Condition Property="IsChecked" Value="False"/>
-                    <Condition Property="IsEnabled" Value="True"/>
-                </MultiTrigger.Conditions>
-                <Setter Property="Background" Value="{StaticResource ButtonRestingGradientBrush}"/>
-                <Setter Property="Foreground" Value="{DynamicResource TextForegroundBrush}"/>
-                <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
-                <Setter Property="Effect" Value="{StaticResource ButtonRestingShadowEffect}"/>
-                <Setter Property="Opacity" Value="1.0"/>
-            </MultiTrigger>
-
-        </Style.Triggers>
     </Style>
 
     <Style x:Key="OverlayCloseButtonStyle" TargetType="Button">
