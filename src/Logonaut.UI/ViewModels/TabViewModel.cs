@@ -3,7 +3,8 @@ using CommunityToolkit.Mvvm.Input;
 using Logonaut.Common;
 using Logonaut.Core;
 using Logonaut.Filters;
-using Logonaut.Core.Commands; 
+using Logonaut.Core.Commands;
+using Logonaut.UI.Commands;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -101,6 +102,7 @@ public partial class TabViewModel : ObservableObject, IDisposable
     // --- Header Editing State ---
     [ObservableProperty] private bool _isEditingHeader;
     [ObservableProperty] private string _editingHeaderName = string.Empty;
+    private string? _headerBeforeEdit;
 
     // --- Header Editing Commands ---
     public IRelayCommand BeginEditHeaderCommand { get; }
@@ -577,6 +579,7 @@ public partial class TabViewModel : ObservableObject, IDisposable
     {
         Debug.WriteLine($"--> BeginEditHeader for '{Header}'");
         EditingHeaderName = Header;
+        _headerBeforeEdit = Header;
         IsEditingHeader = true;
     }
 
@@ -586,7 +589,8 @@ public partial class TabViewModel : ObservableObject, IDisposable
         {
             if (!string.IsNullOrWhiteSpace(EditingHeaderName) && Header != EditingHeaderName)
             {
-                Header = EditingHeaderName; // This will trigger OnHeaderChanged
+                var action = new ChangeTabHeaderAction(this, _headerBeforeEdit ?? Header, EditingHeaderName);
+                _globalCommandExecutor.Execute(action);
             }
             IsEditingHeader = false;
         }
@@ -595,6 +599,7 @@ public partial class TabViewModel : ObservableObject, IDisposable
     private void ExecuteCancelEditHeader()
     {
         IsEditingHeader = false;
+        EditingHeaderName = Header; // Revert any changes in the editing textbox
     }
 
     public void ApplyFiltersFromProfile(IEnumerable<FilterProfileViewModel> availableProfiles, int globalContextLines)
