@@ -166,8 +166,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         Debug.WriteLine($"---> StopSimulatorInActiveTab: Exit.");
     }
 
-    [RelayCommand(CanExecute = nameof(CanPerformActionWhileNotLoading))]
-    private async Task ToggleSimulator()
+    [RelayCommand] private async Task ToggleSimulator()
     {
         Debug.WriteLine($"---> ToggleSimulatorCommand: Entry. IsSimulatorRunning (before action): {IsSimulatorRunning}");
         if (IsSimulatorRunning)

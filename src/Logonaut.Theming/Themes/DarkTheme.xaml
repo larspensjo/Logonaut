@@ -243,14 +243,12 @@
         </Setter>
 
         <!-- Default Content/ToolTip (Start state) -->
-        <Setter Property="Content" Value="Start"/>
-        <Setter Property="ToolTip" Value="Start the log simulator"/>
+        <Setter Property="Content" Value="Simulator"/>
+        <Setter Property="ToolTip" Value="Toggle the log simulator On/Off"/>
 
         <Style.Triggers>
             <!-- Trigger for the "Stop" state (IsChecked=True) -->
             <Trigger Property="IsChecked" Value="True">
-                <Setter Property="Content" Value="Stop"/>
-                <Setter Property="ToolTip" Value="Stop the log simulator"/>
                 <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
                 <Setter Property="Foreground" Value="{DynamicResource WindowBackgroundBrush}"/>
                 <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
