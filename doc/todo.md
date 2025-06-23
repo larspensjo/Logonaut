@@ -2,13 +2,7 @@
 
 This document has a list of ideas. and problems. Some might be out-of-date.
 
-* Extend the list of default highlights. For example, the date/time is automatically highlighted.
-    * Highlight file paths.
-    * Highlight for http/https links.
-    * Enable timestamp highlighting of: '2025-06-18 08:59:14.892'
-    * Create an option dialog where you can control what highlights to enable.
 * Theming for Adorners: EmptyDropTargetAdorner creates brushes in code-behind. Consider moving these to theme resource dictionaries for better maintainability, similar to other controls.
-* Error Handling for ScrollToSelectedLine: The current ScrollToSelectedLine has try-catch blocks but mainly logs to Debug. More user-visible feedback or robust recovery could be considered if scrolling errors become common.
 * Bulk Color Assignment: For composite filters, changing the color should affect all children.
 * Color-Based Quick Filters/Toggles: Above the log view or in the filter panel, show a row of small colored swatches representing all currently used highlight colors in the active filter profile.
 * Refactor AnimatedSpinner into a flexible BusyIndicator (see [Plan.BusyIndicator.md](Busy Indicator Plan)).
@@ -27,9 +21,7 @@ This document has a list of ideas. and problems. Some might be out-of-date.
     * When a simulator token is active, use a special animation.
 * It seems as if settings are saved frequently, also during startup.
 * The treeview of filters should have some visual indicator for what patterns are currently used for matching.
-* The Jump-to-line should have a button beside it, which you can click to activate the jump-to-line.
 * The Anchor button is now automatically when new lines are added to the log window.
-* If I select a line and then disable the filter, I want the log window to keep the selected line visible.
 * When dragging the separator between the filter view and the log view, I want the windows to update as I drag.
 * Implement drag and drop of filters to other composite nodes.
 * Switching themes did not update the highlights used by filters.
@@ -40,6 +32,19 @@ This document has a list of ideas. and problems. Some might be out-of-date.
 * ViewModel Specialization: As MainViewModel grows, consider if parts of its logic could be extracted into more specialized ViewModels that these new UserControls might bind to, rather than everything binding directly to the main MainViewModel. This would be a larger refactoring. For instance, a FilterPanelViewModel could be created and exposed as a property on MainViewModel.
 * Use CTR+ mouse wheel to increase and decrease font size.
 * Implement ideas [IdeasUsingTimeStamps.md](how to use time stamps).
+
+## Default highlights
+    * Extend the list of default highlights. For example, the date/time is automatically highlighted.
+    * Highlight file paths.
+    * Highlight for http/https links.
+    * Enable timestamp highlighting of: '2025-06-18 08:59:14.892'
+    * Create an option dialog where you can control what highlights to enable.
+
+## Jump-to-line
+    * Doesn't work.
+    * If I select a line and then disable the filter, I want the log window to keep the selected line visible.
+    * The Jump-to-line should have a button beside it, which you can click to activate the jump-to-line.
+    * Error Handling for ScrollToSelectedLine: The current ScrollToSelectedLine has try-catch blocks but mainly logs to Debug. More user-visible feedback or robust recovery could be considered if scrolling errors become common.
 
 ## Animations for UI changes:
     * When Auto Scroll is automatically disabled, use an animation on top of the checkbox.
@@ -52,11 +57,11 @@ This document has a list of ideas. and problems. Some might be out-of-date.
     * The markings on the scrollbar should update live (with a debounce), not wait until the user clicks "next".
 
 ## Performance
-* Using scrollbar for big files is really slow.
+    * Using scrollbar for big files is really slow, especially with search active
 
 ## SimulatorLogSource UI overlay
-*   6. Sliders or percentage inputs for INFO, WARN, ERROR, DEBUG, TRACE (could enforce sum=100%).
-*   7. TextBox for keywords (comma-separated?), Checkbox "Inject Keywords Randomly". Slider for injection probability. Randomly inserts specified keywords into generated messages. Useful for testing filters.
+    *   6. Sliders or percentage inputs for INFO, WARN, ERROR, DEBUG, TRACE (could enforce sum=100%).
+    *   7. TextBox for keywords (comma-separated?), Checkbox "Inject Keywords Randomly". Slider for injection probability. Randomly inserts specified keywords into generated messages. Useful for testing filters.
 
 * Enhanced dynamic substring
     * A quick, subtle animation (e.g., a brief pulse or a quick color fade-in) when it enables could make the transition more engaging.
