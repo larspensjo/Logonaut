@@ -72,6 +72,7 @@ This plan outlines the incremental steps to transition Logonaut from a single-vi
         *   Call a method on the new `TabViewModel` (e.g., `LoadPastedContent(text)`) to populate its `LogDataProcessor`'s internal `LogDocument`.
         *   Add the tab to `TabViewModels` and make it active.
         *   Its `ActivateAsync` method will then apply the current filters to the already-loaded content.
+        *   The name of the pasted content should include the date and time.
 
 ### Step 2.4: Implement Close Tab Functionality
 
