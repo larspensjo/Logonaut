@@ -1,148 +1,80 @@
-# Logonaut Tabbed Interface Implementation Plan (Updated)
+# Logonaut Tabbed Interface Implementation Plan
 
-This plan outlines the incremental steps to transition Logonaut from a single-view application to a full multi-tab interface.
-
-**Analysis Summary:** Phase 0 (Foundation & Refactoring) is **complete** based on the current source code. The introduction of `TabViewModel` and `LogDataProcessor`, along with the logic for a file source to become a "snapshot" and notify its host, has been successfully implemented. The next steps involve building the UI and application logic to manage a collection of these tabs.
+This document outlines the incremental steps to transition Logonaut from a single-view application to a full multi-tab interface. **This version has been updated to reflect the current implementation status.**
 
 ## Phase 0: Foundation & Refactoring (Internal Changes)
 
-**Goal:** Prepare the `MainViewModel` and core components to support multiple log contexts without immediately showing a tabbed UI.
-
 *   **Status:** **[COMPLETED]**
-*   **Evidence:** The codebase already contains `TabViewModel` and `LogDataProcessor`. `MainViewModel` instantiates and uses a single `_internalTabViewModel`, delegating many properties and commands to it. The file reset/snapshot mechanism is fully implemented.
-
-### Step 0.1: `TabViewModel` Enhancements (File Reset Logic)
-
-*   **Status:** **[COMPLETED]**
-*   **Details:** `TabViewModel.cs` contains the `HandleSourceFileRestarted()` method, which is passed as a callback to `LogDataProcessor` and invoked by `FileLogSource`. This method correctly transitions the `TabViewModel` into a `Snapshot` source type, updates its header, and raises the `SourceRestartDetected` event.
-
-### Step 0.2: `MainViewModel` Responding to `TabViewModel`'s `SourceRestartDetected` (Single-Tab Context)
-
-*   **Status:** **[COMPLETED]**
-*   **Details:** `MainViewModel.cs` subscribes to `_internalTabViewModel.SourceRestartDetected` and its handler, `HandleInternalTabSourceRestart`, correctly calls `LoadLogFileCoreAsync` to reload the file in the existing internal tab.
+*   **Summary:** The foundational refactoring is complete. The codebase includes `TabViewModel` and `LogDataProcessor`. The `MainViewModel` has been adapted to manage a collection of tabs. The mechanism for a file source to become a "snapshot" and notify its host via the `SourceRestartDetected` event is fully implemented in `TabViewModel`.
 
 ---
 
 ## Phase 1: Basic Tabbed UI and Multiple Tab Management
 
-**Goal:** Introduce the `TabControl` UI and allow opening multiple file-based tabs.
-
 ### Step 1.1: Create `TabView` UserControl and Integrate `TabControl`
+
 *   **Status:** **[COMPLETED]**
+*   **Summary:** The `TabView.xaml` UserControl has been created. The `MainWindow.xaml` has been updated with a `TabControl` correctly bound to the `TabViewModels` collection and `ActiveTabViewModel` property in the `MainViewModel`, successfully rendering the tabbed UI.
 
 ### Step 1.2: Opening New File-Based Tabs
-*   **Status:** **[COMPLETED]**
 
-### Step 1.3: Tab Renaming/Notes
-
-*   **Action:** Allow users to rename tab headers for better organization.
 *   **Status:** **[COMPLETED]**
+*   **Summary:** The `OpenLogFile` command logic has been successfully refactored. It now correctly creates a new `TabViewModel` for each new file, adds it to the collection, and sets it as the active tab. It also correctly focuses an existing tab if the same file is opened again.
+
+### Step 1.3: Tab Renaming
+
+*   **Status:** **[COMPLETED]**
+*   **Summary:** Inline tab renaming is fully implemented. The `TabViewModel` contains the necessary properties and commands (`IsEditingHeader`, `BeginEditHeaderCommand`, etc.), and the UI correctly switches between a `TextBlock` and a `TextBox` for editing.
 
 ---
 
 ## Phase 2: Active/Inactive Tab Logic & Simulator/Pasted Tabs
 
-**Goal:** Properly manage resources for active vs. inactive tabs and integrate simulator and pasted content into the new tabbed structure.
-
 ### Step 2.1: Implement Active/Inactive Tab Logic
 
-*   **Action:** Implement robust activation/deactivation logic in `MainViewModel` that fires when `ActiveTabViewModel` changes.
-*   **Details:**
-    *   Create an `OnActiveTabViewModelChanged` method in `MainViewModel`.
-    *   When the active tab changes from `oldValue` to `newValue`:
-        *   If `oldValue` is not null, call `oldValue.DeactivateLogProcessing()`. This will stop its `LogSource` monitoring and set its `LastActivityTimestamp`.
-        *   If `newValue` is not null, call `newValue.ActivateAsync(...)`. This will initialize and start its `LogSource` and apply its associated filters.
-    *   This ensures only the visible tab consumes resources for live monitoring.
+*   **Status:** **[PARTIALLY IMPLEMENTED]**
+*   **Plan:** Implement robust activation/deactivation logic in `MainViewModel`'s `OnActiveTabViewModelChanged` method. When a tab becomes inactive, its background monitoring (`LogSource`) should be stopped. When a tab becomes active, its `LogSource` should be started.
+*   **Current State:** The `OnActiveTabViewModelChanged` method correctly sets the `IsActive` flag on the `TabViewModel`, which updates the UI (e.g., hiding/showing the `TabView`). However, it **does not** call `DeactivateLogProcessing()` on the old tab or `ActivateAsync()` on the new tab. This means that currently, **all file-based tabs continue to monitor their files in the background**, even when they are not visible.
 
 ### Step 2.2: Implement Simulator Tabs
 
-*   **Action:** Adapt the existing simulator logic in `MainViewModel` to create and manage a dedicated simulator tab.
-*   **Details:**
-    *   When the "Start Simulator" command is invoked, create a new `TabViewModel` with `SourceType.Simulator`.
-    *   Add it to the `TabViewModels` collection and set it as the `ActiveTabViewModel`.
-    *   The `ActivateAsync` method of this new tab will correctly set up its `LogDataProcessor` to use an `ISimulatorLogSource`.
-    *   The simulator UI controls (LPS, Error Freq, etc.) in `MainViewModel` will now operate on the `ActiveTabViewModel`'s log source (after casting to `ISimulatorLogSource`).
+*   **Status:** **[PARTIALLY IMPLEMENTED]**
+*   **Plan:** Adapt the simulator logic to create and manage a dedicated, new simulator tab when the "Start Simulator" command is invoked.
+*   **Current State:** The implementation does not create a new tab. Instead, it **re-purposes the currently active tab**, changing its `SourceType` to `Simulator` and activating the `SimulatorLogSource` within it.
 
 ### Step 2.3: Implement Pasted Content Tabs
 
-*   **Action:** Refactor the `Ctrl+V` (paste) logic to create a new tab for the pasted content.
-*   **Details:**
-    *   When `MainViewModel.LoadLogFromText(string text)` is called:
-        *   Create a new `TabViewModel` with `SourceType.Pasted` and a unique `SourceIdentifier` (e.g., a GUID).
-        *   Call a method on the new `TabViewModel` (e.g., `LoadPastedContent(text)`) to populate its `LogDataProcessor`'s internal `LogDocument`.
-        *   Add the tab to `TabViewModels` and make it active.
-        *   Its `ActivateAsync` method will then apply the current filters to the already-loaded content.
-        *   The name of the pasted content should include the date and time.
+*   **Status:** **[COMPLETED]**
+*   **Summary:** The paste logic has been successfully refactored. Pasting content now correctly creates a new `TabViewModel` with `SourceType.Pasted`, adds it to the collection, and activates it, showing the pasted content.
 
 ### Step 2.4: Implement Close Tab Functionality
 
-*   **Action:** Add the ability for users to close tabs.
-*   **Details:**
-    *   Add a `CloseTabCommand` to `TabViewModel`. The 'X' button in the `TabItem.Header` template will bind to this command.
-    *   The command will raise an event or call a method on `MainViewModel`, requesting its own closure.
-    *   `MainViewModel` will handle this request by:
-        1.  Unsubscribing from any events on the closing tab.
-        2.  Calling `Dispose()` on the `TabViewModel` to release its resources.
-        3.  Removing the `TabViewModel` from the `TabViewModels` collection.
-        4.  Selecting a new `ActiveTabViewModel` (e.g., the previous one, or the next one).
-        5.  If the last tab is closed, create a new, empty default tab.
+*   **Status:** **[COMPLETED]**
+*   **Summary:** The ability to close tabs is fully implemented. The 'X' button on the tab header correctly invokes a command that removes the `TabViewModel` from the `MainViewModel`, disposes its resources, and selects a new active tab. Closing the last tab correctly creates a new, empty tab.
 
 ### Step 2.5: File Reset Handling in Tabs
 
-*   **Action:** Implement the multi-tab behavior for log file restarts: inactivate the current tab (making it a snapshot) and create a new tab for the restarted file.
-*   **Details:**
-    *   This step now primarily involves the `MainViewModel.HandleTabSourceRestart` method. The `TabViewModel` already handles transitioning itself into a snapshot and raising the `SourceRestartDetected` event (**COMPLETED**).
-    *   Modify `MainViewModel.HandleTabSourceRestart(TabViewModel snapshotTab, string restartedFilePath)`:
-        *   This handler will no longer re-purpose the existing tab.
-        *   Instead, it will create a *new* `TabViewModel` configured to monitor the `restartedFilePath`.
-        *   It will add this new tab to the `TabViewModels` collection and set it as the `ActiveTabViewModel`.
-        *   The original tab (`snapshotTab`) remains in the collection as an inactive snapshot of the pre-reset content.
+*   **Status:** **[IN PROGRESS - CRITICAL LOGIC MISSING]**
+*   **Plan:** When a monitored log file is reset, the `MainViewModel.HandleTabSourceRestart` method should be called. This handler is responsible for creating a *new* tab to monitor the restarted file, while leaving the original tab as an inactive snapshot.
+*   **Current State:** The detection and snapshot creation work correctly. `LogTailer` detects the reset, and `TabViewModel.HandleSourceFileRestarted` successfully transitions the tab to a `Snapshot` state and raises the `SourceRestartDetected` event. However, the `MainViewModel.HandleTabSourceRestart` method that receives this event is **currently a placeholder and contains no logic to create the new tab**. This is the source of the file reset issue.
 
 ### Step 2.6: Unique filters for each tab
 
-*   Each tab shall have its own filter profile.
-*   When switching TABs, you also switch filter profile.
-*   Starting a new TAB will use the same profile as the last TAB.
+*   **Status:** **[PARTIALLY IMPLEMENTED]**
+*   **Plan:** Each tab should have its own associated filter profile. Switching tabs should restore the view for that tab's specific profile.
+*   **Current State:** When a new tab is created, it correctly inherits the filter profile that was active at the time of its creation. However, the system does not maintain a persistent, unique profile for each tab. Instead, when you switch to a tab, its filter configuration is **overwritten by the currently selected global filter profile**.
+
 ---
 
 ## Phase 3: Persistence
 
-**Goal:** Save and restore tab sessions and their states across application restarts.
-
-### Step 3.1: Define `TabSessionInfo`
-
-*   **Action:** Create a `TabSessionInfo` class in `Logonaut.Common` to hold the serializable state of a tab.
-*   **Details:** Properties should include: `Header`, `AssociatedFilterProfileName`, `SourceType`, `SourceIdentifier`, `PastedContentStoragePath` (for pasted/snapshot tabs), scroll position, etc.
-
-### Step 3.2: Modify `LogonautSettings`
-
-*   **Action:** Add a `List<TabSessionInfo> OpenTabs` property to the `LogonautSettings` class.
-
-### Step 3.3: Implement Save Tab State
-
-*   **Action:** In `MainViewModel.SaveCurrentSettings`, iterate through the `TabViewModels` collection and persist their state.
-*   **Details:**
-    *   For each `TabViewModel` (excluding simulator tabs), create a `TabSessionInfo` object.
-    *   For `Pasted` or `Snapshot` tabs, save the content of their `LogDocument` to a unique file in a local app data folder (e.g., `AppData/Logonaut/PastedLogs/`). Store this file path in `TabSessionInfo.PastedContentStoragePath`.
-    *   Populate the `LogonautSettings.OpenTabs` list with these `TabSessionInfo` objects before saving.
-
-### Step 3.4: Implement Restore Tab State
-
-*   **Action:** In `MainViewModel`'s startup logic (after settings are loaded), restore the saved tabs.
-*   **Details:**
-    *   Iterate through the loaded `LogonautSettings.OpenTabs` list.
-    *   For each `TabSessionInfo`, create a corresponding `TabViewModel`.
-    *   If it's a `Pasted` or `Snapshot` tab, load its content from the file specified in `PastedContentStoragePath`.
-    *   Add the restored `TabViewModel` to the `TabViewModels` collection. All restored tabs should start as inactive.
-    *   Select a tab to be active (e.g., the first one, or a saved "last active" tab).
+*   **Status:** **[NOT STARTED]**
+*   **Action:** Save and restore tab sessions (including file paths, pasted content, and associated filter profiles) across application restarts.
+*   **Details:** This will involve creating a serializable `TabSessionInfo` class, adding a list of these to `LogonautSettings`, and implementing the save/restore logic in `MainViewModel`. Content from pasted/snapshot tabs will need to be saved to temporary files.
 
 ---
 
 ## Phase 4 & 5: Polish, UX Enhancements, and Future Ideas
 
-These phases remain as future work and their plans are still valid. They include:
-*   Refining how filter profile changes affect tabs.
-*   Deleting saved pasted content when a tab is closed.
-*   Adding a tab context menu (Close, Close Others, etc.).
-*   Visual indicators for changes in inactive tabs.
-*   Tab "pinning" or color-coding for better organization.
+*   **Status:** **[NOT STARTED]**
+*   **Actions:** These phases include future work such as refining filter profile interactions, adding a tab context menu, showing visual indicators for changes in inactive tabs, and tab "pinning".

@@ -273,10 +273,10 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
 
     private void HandleTabSourceRestart(TabViewModel snapshotTab, string restartedFilePath)
     {
-        // This is the handler for Step 2.5
-        // For now, we'll just log it. The logic will be implemented later.
-        Debug.WriteLine($"---> MainViewModel: Received SourceRestartDetected from tab '{snapshotTab.Header}' for file '{restartedFilePath}'.");
-        // Future logic: Create and open a new tab for restartedFilePath.
+        _uiContext.Post(async _ =>
+        {
+            await LoadLogFileCoreAsync(restartedFilePath);
+        }, null);
     }
 
     /*
