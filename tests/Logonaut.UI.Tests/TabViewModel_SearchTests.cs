@@ -23,6 +23,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         var activeTab = _viewModel.ActiveTabViewModel;
         Assert.IsNotNull(activeTab, "ActiveTabViewModel should not be null after setup.");
         _tabViewModel = activeTab; // Get the active tab for this test class.
+        _tabViewModel.DeactivateLogProcessing(); // Stop background processor so it doesn't overwrite test data.
         _tabViewModel.FilteredLogLines.Clear();
     }
 
