@@ -88,7 +88,7 @@ namespace Logonaut.UI.Tests.ViewModels;
         RunOnSta(() => Clipboard.SetText(pastedContent)); // Clipboard access requires STA thread
 
         // Act
-        _viewModel.PasteCommand.Execute(null);
+        RunOnSta(() => _viewModel.PasteCommand.Execute(null)); // Clipboard.GetText also requires STA
         _backgroundScheduler.AdvanceBy(TimeSpan.FromMilliseconds(500).Ticks);
         
         // Assert
