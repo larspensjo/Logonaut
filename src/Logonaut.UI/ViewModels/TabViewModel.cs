@@ -615,6 +615,15 @@ public partial class TabViewModel : ObservableObject, IDisposable
             return;
         }
 
+        // Check if the reactive stream is actually alive. 
+        // Snapshot tabs (after file reset) have been deactivated, so the stream is null.
+        // We cannot apply filters, so we must not set the busy token.
+        if (_processor.ReactiveFilteredLogStream == null)
+        {
+            Debug.WriteLine($"---> TabViewModel '{Header}': ApplyFiltersFromProfile called but ReactiveFilteredLogStream is null (Tab Deactivated/Snapshot?). Skipping.");
+            return;
+        }
+
         var profileVM = availableProfiles.FirstOrDefault(p => p.Name == AssociatedFilterProfileName);
         IFilter? filterToApply = profileVM?.Model?.RootFilter ?? new TrueFilter();
 
