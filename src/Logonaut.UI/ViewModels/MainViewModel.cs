@@ -284,11 +284,19 @@ public partial class MainViewModel : ObservableObject, IDisposable, ICommandExec
         {
             try 
             {
+                // Optional: Short delay to allow the file system to settle (e.g. if rotation involves delete-create cycle)
+                if (!File.Exists(restartedFilePath))
+                {
+                    Debug.WriteLine($"---> MainViewModel: Restarted file '{restartedFilePath}' not found immediately. Waiting...");
+                    await Task.Delay(500);
+                }
+
                 await LoadLogFileCoreAsync(restartedFilePath);
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"!!! MainViewModel: Failed to auto-open restarted file '{restartedFilePath}': {ex.Message}");
+                MessageBox.Show($"Unable to reopen restarted log file '{Path.GetFileName(restartedFilePath)}'.\nDetails: {ex.Message}", "Log Restart Error", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }, null);
     }
